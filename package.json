@@ -1,0 +1,20 @@
+{
+  "name": "marble-tournament-server",
+  "version": "1.0.0",
+  "description": "Deterministic marble-racing tournament server: schedules 100 marbles through brackets of 5, broadcasts race seeds over WebSocket, records results in SQLite, and serves a viewer that replays each race locally.",
+  "type": "commonjs",
+  "bin": { "marble-tournament": "src/server.js" },
+  "scripts": {
+    "start": "node src/server.js",
+    "headless": "node headless_test.js",
+    "test": "node test/determinism.test.js"
+  },
+  "engines": { "node": ">=22.5.0" },
+  "comments": {
+    "dependencies": "No installable runtime deps — SQLite is node:sqlite (built in) and the WebSocket server is hand-rolled in src/ws.js. The headless simulator uses Playwright's Chromium, provided by the environment (globally installed)."
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "playwright": ">=1.40.0"
+  }
+}

@@ -1,0 +1,334 @@
+:root {
+  --bg: #0e1117;
+  --panel: #161b25;
+  --panel2: #1d2432;
+  --line: #2a3243;
+  --text: #e7ecf3;
+  --muted: #8b97a9;
+  --accent: #ffcf5c;
+  --alive: #45c07a;
+  --out: #55617a;
+  --champ: #ffcf5c;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  background: linear-gradient(180deg, #141a24, #0e1117);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.brand {
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.brand .sub {
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.brand .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+}
+.conn {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.conn.live {
+  color: var(--alive);
+  border-color: #234;
+}
+.conn.live::before {
+  content: '● ';
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  padding: 16px;
+}
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stage {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.race-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+.race-title .rnd {
+  color: var(--accent);
+}
+.countdown {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  font-size: 20px;
+  color: var(--accent);
+  min-width: 64px;
+  text-align: right;
+}
+.countdown.live {
+  color: var(--alive);
+}
+.iframe-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: #0a0d13;
+}
+.iframe-wrap iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+.stage-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 42px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 20px #000;
+}
+.seedline {
+  padding: 8px 16px;
+  color: var(--muted);
+  font-size: 12px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  border-top: 1px solid var(--line);
+}
+.roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px 16px;
+}
+.roster .lane {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.roster .lane .swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.roster .lane.win {
+  outline: 2px solid var(--accent);
+}
+.roster .lane .rank {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.card h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.champion-card {
+  text-align: center;
+  background: linear-gradient(160deg, #2a2410, #161b25);
+  border-color: #4a3d18;
+}
+.champ-label {
+  color: var(--champ);
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+.champ-name {
+  font-size: 22px;
+  font-weight: 800;
+  margin-top: 4px;
+}
+.legend {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.legend .pill,
+.pill {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.pill.alive {
+  background: var(--alive);
+}
+.pill.eliminated {
+  background: var(--out);
+}
+.pill.champion {
+  background: var(--champ);
+}
+.standings {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 4px;
+  max-height: 260px;
+  overflow: auto;
+}
+.standings .m {
+  font-size: 11px;
+  text-align: center;
+  padding: 3px 0;
+  border-radius: 6px;
+  background: var(--panel2);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.standings .m.alive {
+  color: var(--alive);
+}
+.standings .m.eliminated {
+  opacity: 0.45;
+}
+.standings .m.champion {
+  background: var(--champ);
+  color: #201a06;
+  font-weight: 800;
+}
+
+.bracket-wrap {
+  padding: 0 16px 40px;
+}
+.bracket-wrap h2 {
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.bracket {
+  display: flex;
+  gap: 22px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+.round-col {
+  min-width: 190px;
+}
+.round-col h3 {
+  font-size: 12px;
+  color: var(--accent);
+  margin: 0 0 8px;
+  letter-spacing: 1px;
+}
+.race-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.race-card.current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.race-card .rc-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.race-card .rc-status {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.race-card .slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 0;
+}
+.race-card .slot .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.race-card .slot .nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.race-card .slot.win {
+  color: var(--accent);
+  font-weight: 700;
+}
+.race-card .slot .t {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

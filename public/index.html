@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marble Tournament — Live</title>
+    <link rel="stylesheet" href="viewer.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="dot"></span> MARBLE TOURNAMENT
+        <span class="sub">100 marbles · brackets of 5</span>
+      </div>
+      <div class="conn" id="conn">connecting…</div>
+    </header>
+
+    <main class="layout">
+      <section class="stage">
+        <div class="stage-head">
+          <div id="raceTitle" class="race-title">Waiting for the next race…</div>
+          <div id="countdown" class="countdown"></div>
+        </div>
+        <div class="iframe-wrap">
+          <iframe id="game" src="marble_run.html" title="marble run"></iframe>
+          <div id="stageOverlay" class="stage-overlay"></div>
+        </div>
+        <div class="seedline" id="seedline"></div>
+        <div class="roster" id="roster"></div>
+      </section>
+
+      <aside class="side">
+        <div class="card champion-card" id="championCard" hidden>
+          <div class="champ-label">🏆 CHAMPION</div>
+          <div class="champ-name" id="championName"></div>
+        </div>
+        <div class="card">
+          <h2>Standings</h2>
+          <div class="legend">
+            <span><i class="pill alive"></i>alive</span>
+            <span><i class="pill eliminated"></i>out</span>
+            <span><i class="pill champion"></i>champion</span>
+          </div>
+          <div class="standings" id="standings"></div>
+        </div>
+      </aside>
+    </main>
+
+    <section class="bracket-wrap">
+      <h2>Bracket</h2>
+      <div class="bracket" id="bracket"></div>
+    </section>
+
+    <script src="viewer.js"></script>
+  </body>
+</html>
