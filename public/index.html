@@ -9,21 +9,46 @@
   <body>
     <header class="topbar">
       <div class="brand">
-        <span class="dot"></span> MARBLE TOURNAMENT
-        <span class="sub">100 marbles · brackets of 5</span>
+        <span class="dot"></span>
+        <span class="brand-name">MARBLE&nbsp;TOURNAMENT</span>
+      </div>
+      <div class="progress" id="progress">
+        <div class="progress-meta">
+          <span id="progressRound">—</span>
+          <span class="progress-count" id="progressCount">Race 0 / 25</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
       </div>
       <div class="conn" id="conn">connecting…</div>
     </header>
 
+    <!-- Funnel: how many marbles remain at each stage -->
+    <div class="funnel" id="funnel">
+      <div class="funnel-stage" data-stage="heats"><b>100</b><span>marbles</span></div>
+      <div class="funnel-arrow">→</div>
+      <div class="funnel-stage" data-stage="semis"><b>20</b><span>heat winners</span></div>
+      <div class="funnel-arrow">→</div>
+      <div class="funnel-stage" data-stage="final"><b>5</b><span>finalists</span></div>
+      <div class="funnel-arrow">→</div>
+      <div class="funnel-stage" data-stage="champion"><b>1</b><span>champion</span></div>
+    </div>
+
     <main class="layout">
       <section class="stage">
         <div class="stage-head">
-          <div id="raceTitle" class="race-title">Waiting for the next race…</div>
-          <div id="countdown" class="countdown"></div>
+          <div class="race-title" id="raceTitle">Waiting for the next race…</div>
+          <div class="cd" id="cd">
+            <svg viewBox="0 0 64 64" class="cd-ring">
+              <circle class="cd-bg" cx="32" cy="32" r="28" />
+              <circle class="cd-fg" id="cdArc" cx="32" cy="32" r="28" />
+            </svg>
+            <div class="cd-num" id="countdown">—</div>
+          </div>
         </div>
         <div class="iframe-wrap">
           <iframe id="game" src="marble_run.html" title="marble run"></iframe>
-          <div id="stageOverlay" class="stage-overlay"></div>
+          <div class="stage-overlay" id="stageOverlay"></div>
+          <div class="live-badge" id="liveBadge" hidden>● LIVE</div>
         </div>
         <div class="seedline" id="seedline"></div>
         <div class="roster" id="roster"></div>
@@ -31,11 +56,23 @@
 
       <aside class="side">
         <div class="card champion-card" id="championCard" hidden>
-          <div class="champ-label">🏆 CHAMPION</div>
+          <div class="champ-label">CHAMPION</div>
+          <div class="champ-trophy">🏆</div>
           <div class="champ-name" id="championName"></div>
         </div>
+
+        <div class="card upnext-card" id="upnextCard" hidden>
+          <h2>Up Next</h2>
+          <div class="upnext-body" id="upnextBody"></div>
+        </div>
+
+        <div class="card recent-card" id="recentCard" hidden>
+          <h2>Recent Results</h2>
+          <div class="recent" id="recent"></div>
+        </div>
+
         <div class="card">
-          <h2>Standings</h2>
+          <h2>Field <span class="count-badge" id="aliveCount"></span></h2>
           <div class="legend">
             <span><i class="pill alive"></i>alive</span>
             <span><i class="pill eliminated"></i>out</span>
@@ -47,7 +84,10 @@
     </main>
 
     <section class="bracket-wrap">
-      <h2>Bracket</h2>
+      <div class="bracket-head">
+        <h2>Bracket</h2>
+        <div class="bracket-hint">live · winners advance right →</div>
+      </div>
       <div class="bracket" id="bracket"></div>
     </section>
 

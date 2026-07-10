@@ -3,12 +3,15 @@
 // =========================================================
 // Tournament viewer — replays each race LOCALLY from broadcast seeds
 // =========================================================
-// The server never streams video or marble positions. It only broadcasts
+// The server never streams video or marble positions. It broadcasts
 // (trackSeed, raceSeed) ~30 s ahead of each race plus a scheduled start time.
 // This page loads the identical deterministic game in an <iframe> and, at the
 // agreed instant, calls marbleAPI.newCourse(trackSeed) + startRace(raceSeed).
 // Because the sim is deterministic, every viewer sees the same race — matching
 // the result the server independently recorded.
+
+const TOTAL_RACES = 25; // 20 heats + 4 semis + 1 final
+const RING_C = 2 * Math.PI * 28; // countdown ring circumference
 
 const gameFrame = document.getElementById('game');
 const el = (id) => document.getElementById(id);
@@ -27,6 +30,8 @@ let builtTrack = null; // trackSeed currently built in the iframe
 let startedRaces = new Set(); // race keys we've already kicked off locally
 let startTimer = null;
 let countdownTimer = null;
+let leadMs = 30000; // announce lead, for the countdown ring
+let justRevealed = null; // race key to flash on next render
 
 // ---- iframe game API access ---------------------------------------------
 
@@ -71,15 +76,20 @@ async function startReplay(race) {
     builtTrack = race.trackSeed;
     a.startRace(race.raceSeed);
   }
+
   // Replay audit: record that this race was started with its broadcast seed,
   // and that the game actually applied it. `want` should always equal `got`.
   window.__replayAudit = window.__replayAudit || [];
   window.__replayAudit.push({ key: race.key, want: race.raceSeed, got: a.getSeeds().race });
 
-  const cd = el('countdown');
-  cd.textContent = 'LIVE';
+  race.status = 'running';
+  const cd = el('cd');
   cd.classList.add('live');
+  el('countdown').textContent = 'LIVE';
+  el('cdArc').style.strokeDashoffset = '0';
+  el('liveBadge').hidden = false;
   flashOverlay('GO!');
+  if (race.key === model.currentKey) renderCurrent(race);
 }
 
 function flashOverlay(text) {
@@ -99,8 +109,8 @@ function scheduleStart(race) {
   clearTimeout(startTimer);
   const localStart = toLocal(race.scheduledStart);
   const delay = localStart - Date.now();
-  // Pre-build the course during the countdown so the start is instant.
-  ensureCourse(race.trackSeed);
+  ensureCourse(race.trackSeed); // pre-build during the countdown
+  el('liveBadge').hidden = true;
   if (delay <= 0) {
     startReplay(race);
   } else {
@@ -111,17 +121,25 @@ function scheduleStart(race) {
 
 function runCountdown(race) {
   clearInterval(countdownTimer);
-  const cd = el('countdown');
+  const cd = el('cd');
+  const num = el('countdown');
+  const arc = el('cdArc');
   cd.classList.remove('live');
   const tick = () => {
-    const remaining = toLocal(race.scheduledStart) - Date.now();
-    if (remaining <= 0) {
-      cd.textContent = startedRaces.has(race.key) ? 'LIVE' : '0.0s';
-      if (startedRaces.has(race.key)) cd.classList.add('live');
+    if (startedRaces.has(race.key)) {
       clearInterval(countdownTimer);
       return;
     }
-    cd.textContent = (remaining / 1000).toFixed(1) + 's';
+    const remaining = toLocal(race.scheduledStart) - Date.now();
+    if (remaining <= 0) {
+      num.textContent = '0.0';
+      arc.style.strokeDashoffset = String(RING_C);
+      clearInterval(countdownTimer);
+      return;
+    }
+    num.textContent = (remaining / 1000).toFixed(1);
+    const frac = Math.max(0, Math.min(1, remaining / leadMs));
+    arc.style.strokeDashoffset = String(RING_C * (1 - frac));
   };
   tick();
   countdownTimer = setInterval(tick, 100);
@@ -130,49 +148,132 @@ function runCountdown(race) {
 // ---- rendering -----------------------------------------------------------
 
 const roundName = { heats: 'Heat', semis: 'Semifinal', final: 'Final' };
+const orderedRaces = () => model.rounds.flatMap((r) => r.races);
 
 function renderCurrent(race) {
-  const label =
-    race.roundKey === 'final'
-      ? 'THE FINAL'
-      : `${roundName[race.roundKey] || race.roundKey} ${race.indexInRound + 1}`;
-  el('raceTitle').innerHTML = `<span class="rnd">${race.roundTitle}</span> — ${label}`;
-  el('seedline').textContent = `track=${race.trackSeed}  ·  race=${race.raceSeed}`;
+  const title = el('raceTitle');
+  const isFinal = race.roundKey === 'final';
+  title.classList.toggle('final', isFinal);
+  const label = isFinal
+    ? 'THE FINAL'
+    : `${roundName[race.roundKey] || race.roundKey} ${race.indexInRound + 1}`;
+  title.innerHTML = `<span class="rnd">${race.roundTitle}</span>${label}`;
+  el('seedline').textContent = `track ${race.trackSeed}  ·  race ${race.raceSeed}`;
   renderRoster(race);
-}
-
-function winnerSlotOf(race) {
-  if (!race.result) return null;
-  return race.result[0].slot;
+  el('liveBadge').hidden = race.status !== 'running';
 }
 
 function renderRoster(race) {
   const wrap = el('roster');
+  wrap.className = 'roster' + (race.status === 'running' ? ' racing' : '');
   wrap.innerHTML = '';
   const rankBySlot = {};
   if (race.result) race.result.forEach((r) => (rankBySlot[r.slot] = r.rank));
-  for (const s of race.roster) {
-    const div = document.createElement('div');
-    div.className = 'lane' + (rankBySlot[s.slot] === 1 ? ' win' : '');
+  const rows = race.result
+    ? race.result.map((r) => race.roster.find((s) => s.slot === r.slot))
+    : race.roster;
+  for (const s of rows) {
     const rank = rankBySlot[s.slot];
+    const div = document.createElement('div');
+    div.className = 'lane' + (rank === 1 ? ' win' : '');
     div.innerHTML =
       `<span class="swatch" style="background:${s.color}"></span>` +
-      `<span>${s.marbleName}</span>` +
-      (rank ? `<span class="rank">#${rank}</span>` : `<span class="rank" style="color:var(--muted)">${s.lane}</span>`);
+      `<span class="lane-name">${s.marbleName}</span>` +
+      (rank ? `<span class="rank">#${rank}</span>` : '');
     wrap.appendChild(div);
   }
+}
+
+function renderProgress() {
+  const done = orderedRaces().filter((r) => r.result).length;
+  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+  const shown = model.champion ? TOTAL_RACES : Math.min(TOTAL_RACES, done + (cur && !cur.result ? 1 : 0));
+  el('progressCount').textContent = `Race ${shown} / ${TOTAL_RACES}`;
+  el('progressFill').style.width = (100 * done) / TOTAL_RACES + '%';
+  const roundLabel = model.champion
+    ? 'Complete'
+    : cur
+      ? cur.roundTitle
+      : model.rounds.length
+        ? model.rounds[model.rounds.length - 1].title
+        : 'Starting';
+  el('progressRound').textContent = roundLabel;
+}
+
+function renderFunnel() {
+  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+  const order = ['heats', 'semis', 'final', 'champion'];
+  const activeKey = model.champion ? 'champion' : cur ? cur.roundKey : 'heats';
+  const activeIdx = order.indexOf(activeKey);
+  document.querySelectorAll('.funnel-stage').forEach((node) => {
+    const idx = order.indexOf(node.dataset.stage);
+    node.classList.toggle('active', idx === activeIdx);
+    node.classList.toggle('done', idx < activeIdx);
+  });
+}
+
+function renderUpNext() {
+  const card = el('upnextCard');
+  const order = orderedRaces();
+  const curIdx = model.currentKey ? order.findIndex((r) => r.key === model.currentKey) : -1;
+  const next = order.slice(curIdx + 1).find((r) => !r.result);
+  if (!next || model.champion) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  const isFinal = next.roundKey === 'final';
+  const label = isFinal ? 'The Final' : `${roundName[next.roundKey]} ${next.indexInRound + 1}`;
+  el('upnextBody').innerHTML =
+    `<div class="upnext-round">${next.roundTitle} · ${label}</div>` +
+    `<div class="upnext-marbles">` +
+    next.roster
+      .map(
+        (s) =>
+          `<span class="um"><span class="swatch" style="background:${s.color}"></span>${s.marbleName}</span>`
+      )
+      .join('') +
+    `</div>`;
+}
+
+function renderRecent() {
+  const done = orderedRaces().filter((r) => r.result);
+  const card = el('recentCard');
+  if (!done.length) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  el('recent').innerHTML = done
+    .slice(-6)
+    .reverse()
+    .map((r) => {
+      const w = r.result[0];
+      const label = r.roundKey === 'final' ? 'Final' : `${roundName[r.roundKey]} ${r.indexInRound + 1}`;
+      const t = w.timeSec != null ? w.timeSec.toFixed(1) + 's' : 'DNF';
+      return (
+        `<div class="recent-item"><span class="swatch" style="background:${w.color}"></span>` +
+        `<span class="ri-label">${label}</span>` +
+        `<span class="ri-win">${w.marbleName}</span>` +
+        `<span class="ri-t">${t}</span></div>`
+      );
+    })
+    .join('');
 }
 
 function renderStandings() {
   const wrap = el('standings');
   wrap.innerHTML = '';
+  let alive = 0;
   for (const m of model.standings) {
+    if (m.status === 'alive') alive++;
     const d = document.createElement('div');
     d.className = 'm ' + m.status;
     d.textContent = String(m.id).padStart(3, '0');
     d.title = `${m.name} — ${m.status}`;
     wrap.appendChild(d);
   }
+  el('aliveCount').textContent = model.champion ? '' : alive + ' left';
 }
 
 function renderBracket() {
@@ -180,22 +281,23 @@ function renderBracket() {
   wrap.innerHTML = '';
   for (const round of model.rounds) {
     const col = document.createElement('div');
-    col.className = 'round-col';
-    col.innerHTML = `<h3>${round.title} · ${round.races.length}</h3>`;
-    for (const race of round.races) {
-      col.appendChild(renderRaceCard(race));
-    }
+    col.className = 'round-col' + (round.key === 'final' ? ' final-col' : '');
+    col.innerHTML = `<h3>${round.title}<span class="rc-n">${round.races.length}</span></h3>`;
+    for (const race of round.races) col.appendChild(renderRaceCard(race));
     wrap.appendChild(col);
   }
+  // Keep the current race in view.
+  const cur = wrap.querySelector('.race-card.current');
+  if (cur) cur.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
 function renderRaceCard(race) {
   const card = document.createElement('div');
-  card.className = 'race-card' + (race.key === model.currentKey ? ' current' : '');
-  const idxLabel =
-    race.roundKey === 'final' ? 'Final' : `#${race.indexInRound + 1}`;
   const status = race.result ? 'done' : race.status || 'pending';
-  card.innerHTML = `<div class="rc-head"><span>${idxLabel}</span><span class="rc-status">${status}</span></div>`;
+  card.className = 'race-card ' + status + (race.key === model.currentKey ? ' current' : '');
+  if (race.key === justRevealed) card.classList.add('just-in');
+  const idxLabel = race.roundKey === 'final' ? 'Final' : `#${race.indexInRound + 1}`;
+  card.innerHTML = `<div class="rc-head"><span>${idxLabel}</span><span class="rc-status ${status}">${status}</span></div>`;
 
   const rankBySlot = {};
   const timeBySlot = {};
@@ -204,20 +306,20 @@ function renderRaceCard(race) {
       rankBySlot[r.slot] = r.rank;
       timeBySlot[r.slot] = r.timeSec;
     });
-
-  // Show in finish order when known, else roster order.
   const rows = race.result
     ? race.result.map((r) => race.roster.find((s) => s.slot === r.slot))
     : race.roster;
 
   for (const s of rows) {
+    const rank = rankBySlot[s.slot];
     const slotDiv = document.createElement('div');
-    slotDiv.className = 'slot' + (rankBySlot[s.slot] === 1 ? ' win' : '');
-    const done = rankBySlot[s.slot] != null;
+    slotDiv.className = 'slot' + (rank === 1 ? ' win' : '');
+    const done = rank != null;
     const t = done
       ? `<span class="t">${timeBySlot[s.slot] != null ? timeBySlot[s.slot].toFixed(1) + 's' : 'DNF'}</span>`
       : '';
     slotDiv.innerHTML =
+      `<span class="pos">${done ? rank + '.' : ''}</span>` +
       `<span class="swatch" style="background:${s.color}"></span>` +
       `<span class="nm">${s.marbleName}</span>` +
       t;
@@ -230,10 +332,17 @@ function renderChampion() {
   if (!model.champion) return;
   el('championCard').hidden = false;
   el('championName').textContent = model.champion.name;
+  el('liveBadge').hidden = true;
+  el('cd').classList.remove('live');
+  el('countdown').textContent = '🏁';
   flashOverlay('🏆 ' + model.champion.name);
 }
 
 function renderAll() {
+  renderProgress();
+  renderFunnel();
+  renderUpNext();
+  renderRecent();
   renderBracket();
   renderStandings();
   renderChampion();
@@ -245,6 +354,7 @@ function renderAll() {
 
 function ingestSnapshot(msg) {
   clockOffset = msg.serverNow - Date.now();
+  leadMs = msg.announceLeadMs || leadMs;
   model.rounds = msg.rounds;
   model.marbles = msg.marbles;
   model.standings = msg.standings;
@@ -252,15 +362,12 @@ function ingestSnapshot(msg) {
   model.racesByKey.clear();
   for (const round of msg.rounds)
     for (const race of round.races) model.racesByKey.set(race.key, race);
-  // Which races have already run this session — don't re-kick them.
-  for (const race of model.racesByKey.values())
-    if (race.result) startedRaces.add(race.key);
+  for (const race of model.racesByKey.values()) if (race.result) startedRaces.add(race.key);
 
   const cur = msg.current;
   model.currentKey = cur ? cur.raceKey : null;
   renderAll();
 
-  // Resync an in-flight race for late joiners.
   if (cur && (cur.phase === 'announced' || cur.phase === 'running')) {
     const race = model.racesByKey.get(cur.raceKey);
     if (race && !race.result) scheduleStart(race);
@@ -273,7 +380,6 @@ function onMessage(msg) {
       ingestSnapshot(msg);
       break;
     case 'round_built':
-      // Fill the bracket with the whole new round at once.
       if (msg.round) {
         for (const race of msg.round.races) upsertRace(race);
         renderAll();
@@ -281,9 +387,8 @@ function onMessage(msg) {
       break;
     case 'race_announced': {
       clockOffset = msg.serverNow - Date.now();
+      leadMs = msg.announceLeadMs || leadMs;
       const race = msg.race;
-      // Insert/replace in the model (covers races from rounds built after
-      // our initial snapshot).
       upsertRace(race);
       model.currentKey = race.key;
       startedRaces.delete(race.key);
@@ -294,24 +399,27 @@ function onMessage(msg) {
     case 'race_start': {
       clockOffset = msg.serverNow - Date.now();
       const race = model.racesByKey.get(msg.raceKey);
-      if (race) startReplay(race); // guarded against double-start
+      if (race) startReplay(race);
       break;
     }
     case 'race_result': {
       const race = model.racesByKey.get(msg.raceKey);
       if (race) race.result = msg.result;
       model.standings = msg.standings;
+      justRevealed = msg.raceKey;
+      el('liveBadge').hidden = true;
       renderAll();
+      justRevealed = null;
       break;
     }
     case 'tournament_complete':
       model.champion = msg.champion;
-      renderChampion();
+      model.currentKey = null;
+      renderAll();
       break;
   }
 }
 
-// Insert a race into the model, creating its round bucket if needed.
 function upsertRace(race) {
   model.racesByKey.set(race.key, race);
   let round = model.rounds.find((r) => r.key === race.roundKey);
@@ -334,7 +442,7 @@ function connect() {
   const ws = new WebSocket(`${proto}://${location.host}/ws`);
   const conn = el('conn');
   ws.onopen = () => {
-    conn.textContent = 'live';
+    conn.textContent = '● live';
     conn.classList.add('live');
   };
   ws.onclose = () => {
