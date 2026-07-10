@@ -731,3 +731,48 @@ function connect() {
 }
 
 connect();
+
+// ---- live viewer presence -------------------------------------------------
+// Heartbeats /api/presence and shows a "👁 N watching" badge. If presence isn't
+// configured (no KV store), the endpoint replies { enabled:false } and we hide
+// the badge and stop — nothing else is affected.
+(function presence() {
+  let id = '';
+  try {
+    id = sessionStorage.getItem('mt-presence') || '';
+  } catch {}
+  if (!id) {
+    id = 'v-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    try {
+      sessionStorage.setItem('mt-presence', id);
+    } catch {}
+  }
+  const badge = el('watching');
+  const num = el('watchingN');
+  let dead = false;
+  async function beat() {
+    if (dead) return;
+    try {
+      const r = await fetch('/api/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const d = await r.json();
+      if (!d || !d.enabled) {
+        dead = true;
+        if (badge) badge.hidden = true;
+        return;
+      }
+      if (badge && num) {
+        num.textContent = d.count;
+        badge.hidden = d.count < 1;
+      }
+    } catch {
+      dead = true;
+      if (badge) badge.hidden = true;
+    }
+  }
+  beat();
+  setInterval(beat, 8000);
+})();
