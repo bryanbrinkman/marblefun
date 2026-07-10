@@ -50,6 +50,30 @@ those lanes in roster order; the deterministic sim decides which *color* wins, w
 maps back to the marble in that lane. The roster (lane → marble) is part of every
 broadcast so viewers can label the marbles.
 
+## Two ways to run
+
+The viewer works **with or without a server**:
+
+- **Server mode** — `node src/server.js` runs the authoritative tournament,
+  broadcasts seeds over WebSocket, and records everything in SQLite. Every
+  connected client stays in sync (all watching the same race at the same time)
+  and results are persisted. This is the full experience.
+- **Local / serverless mode** — if the viewer can't reach a WebSocket server
+  (e.g. it's served as **static files on Vercel/Netlify/GitHub Pages**), it
+  falls back to running the whole tournament **in the browser**: it builds the
+  bracket, announces each race, drives the real race in the iframe, reads the
+  finishing order back out of the game, records it, and advances — looping
+  forever with a fresh tournament after each champion. No backend required.
+  `public/tournament-core.js` is a browser copy of the bracket/seed logic and
+  is byte-for-byte consistent with the server, so a local tournament is just as
+  deterministic.
+
+Because the whole `public/` folder is self-sufficient in local mode, deploying
+to a static host is just "serve `public/`". Server mode additionally needs a
+host that can run a long-lived Node process + headless Chromium (Render,
+Railway, Fly.io, a VM) — that part does **not** run on Vercel's serverless
+platform.
+
 ## Requirements
 
 - **Node ≥ 22.5** (uses the built-in `node:sqlite`)

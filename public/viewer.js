@@ -435,23 +435,176 @@ function upsertRace(race) {
   }
 }
 
+// ---- local (serverless) mode --------------------------------------------
+// When there's no WebSocket server (e.g. a static host like Vercel), the
+// browser runs the whole tournament itself: it builds the bracket, announces
+// each race, drives the real race in the iframe, reads the finishing order
+// back out of the game, records it, and advances — looping forever with a
+// fresh tournament after each champion. Fully deterministic, no backend.
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// `?fast=1` shortens the between-race countdown/gap for demos and impatient
+// viewers (the races themselves still run at real time).
+const LOCAL_FAST = new URLSearchParams(location.search).has('fast');
+const LOCAL_LEAD_MS = LOCAL_FAST ? 800 : 6000;
+const LOCAL_GAP_MS = LOCAL_FAST ? 500 : 3000;
+const LOCAL_MAX_WATCH_MS = 300000; // safety cap if a marble gets stuck / tab is backgrounded
+
+function syncRounds(T) {
+  model.rounds = T.rounds.map((r) => ({ key: r.key, title: r.title, idx: r.idx, races: r.races }));
+  model.marbles = T.marbles;
+  model.racesByKey.clear();
+  for (const round of T.rounds) for (const race of round.races) model.racesByKey.set(race.key, race);
+}
+
+async function startLocalTournament() {
+  document.body.classList.add('local-mode');
+  const conn = el('conn');
+  conn.textContent = '● local';
+  conn.classList.add('live');
+  conn.title = 'Running standalone in your browser (no server)';
+  leadMs = LOCAL_LEAD_MS;
+  let n = 0;
+  for (;;) {
+    const seed = (Date.now() ^ (n++ * 0x9e3779b1) ^ (Math.floor(performance.now()) * 0x2545f4914f)) >>> 0;
+    await runLocalTournament(seed);
+    await sleep(14000); // hold on the champion, then start a fresh tournament
+  }
+}
+
+async function runLocalTournament(seed) {
+  const T = new window.TournamentCore.Tournament(seed);
+  model.champion = null;
+  el('championCard').hidden = true;
+  startedRaces = new Set();
+  builtTrack = null;
+  syncRounds(T);
+  model.standings = window.TournamentCore.standings(T);
+  model.currentKey = null;
+  renderAll();
+  await ensureCourse(T.trackSeed);
+
+  for (;;) {
+    const race = T.nextPendingRace();
+    if (!race) {
+      const nxt = T.advance();
+      if (nxt) {
+        syncRounds(T);
+        model.standings = window.TournamentCore.standings(T);
+        renderAll();
+        continue;
+      }
+      T.advance(); // sets champion once the final is done
+      break;
+    }
+    await runLocalRace(T, race);
+  }
+
+  model.champion = T.champion ? { id: T.champion, name: T.marbleName(T.champion) } : null;
+  model.currentKey = null;
+  renderAll();
+  renderChampion();
+}
+
+async function runLocalRace(T, race) {
+  race.status = 'announced';
+  race.scheduledStart = Date.now() + leadMs;
+  model.currentKey = race.key;
+  model.standings = window.TournamentCore.standings(T);
+  renderAll();
+  runCountdown(race);
+  await ensureCourse(race.trackSeed);
+  await sleep(Math.max(0, race.scheduledStart - Date.now()));
+  await startReplay(race);
+  const order = await watchForResult(race);
+  T.applyResult(race, order);
+  race.status = 'done';
+  model.standings = window.TournamentCore.standings(T);
+  justRevealed = race.key;
+  renderAll();
+  justRevealed = null;
+  await sleep(LOCAL_GAP_MS);
+}
+
+// Read the finishing order out of the running game, mapping color lanes back
+// to tournament marbles. Any marble still not finished when the cap hits is a DNF.
+async function watchForResult(race) {
+  const a = await whenApiReady();
+  const byLane = new Map(race.roster.map((s) => [s.lane, s]));
+  const start = Date.now();
+  for (;;) {
+    let res = [];
+    try {
+      res = a.getResults() || [];
+    } catch {}
+    if (res.length >= race.roster.length || Date.now() - start > LOCAL_MAX_WATCH_MS) {
+      const order = res.map((o) => {
+        const s = byLane.get(o.name);
+        return { slot: s.slot, marbleId: s.marbleId, marbleName: s.marbleName, lane: o.name, color: o.color, timeSec: o.timeSec };
+      });
+      const finished = new Set(order.map((o) => o.slot));
+      for (const s of race.roster)
+        if (!finished.has(s.slot))
+          order.push({ slot: s.slot, marbleId: s.marbleId, marbleName: s.marbleName, lane: s.lane, color: s.color, timeSec: null });
+      return order;
+    }
+    await sleep(500);
+  }
+}
+
 // ---- websocket -----------------------------------------------------------
+// Try a server first; if none answers (static hosting), fall back to local mode.
+
+let mode = 'connecting'; // 'connecting' | 'server' | 'local'
+
+function goLocal() {
+  if (mode === 'local') return;
+  mode = 'local';
+  startLocalTournament();
+}
 
 function connect() {
+  if (mode === 'local') return;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/ws`);
   const conn = el('conn');
+  let ws;
+  try {
+    ws = new WebSocket(`${proto}://${location.host}/ws`);
+  } catch {
+    goLocal();
+    return;
+  }
+  const fallback = setTimeout(() => {
+    if (mode === 'connecting') {
+      try {
+        ws.close();
+      } catch {}
+      goLocal();
+    }
+  }, 3000);
   ws.onopen = () => {
+    mode = 'server';
+    clearTimeout(fallback);
     conn.textContent = '● live';
     conn.classList.add('live');
   };
   ws.onclose = () => {
-    conn.textContent = 'reconnecting…';
-    conn.classList.remove('live');
-    setTimeout(connect, 1500);
+    clearTimeout(fallback);
+    if (mode === 'server') {
+      conn.textContent = 'reconnecting…';
+      conn.classList.remove('live');
+      setTimeout(connect, 1500);
+    } else if (mode === 'connecting') {
+      goLocal();
+    }
   };
-  ws.onerror = () => ws.close();
+  ws.onerror = () => {
+    try {
+      ws.close();
+    } catch {}
+  };
   ws.onmessage = (ev) => {
+    if (mode !== 'server') mode = 'server';
     try {
       onMessage(JSON.parse(ev.data));
     } catch (e) {
