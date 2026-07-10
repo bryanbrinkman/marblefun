@@ -5487,6 +5487,13 @@ const finishOrder = [];
 // row order) changes slowly. Throttled to ~160ms which still feels responsive but
 // drops the per-frame cost of regenerating the row HTML and reflowing the panel.
 let _leaderboardLastUpdate = 0;
+// Optional map from a marble's color-name (RED/BLUE/…) to a display label, set
+// by a tournament host via marbleAPI.setDisplayNames so the in-race leaderboard
+// can show the actual competitor names instead of the raw colors.
+let _displayNames = null;
+function _labelFor(m) {
+  return (_displayNames && _displayNames[m.name]) || m.name;
+}
 function updateLeaderboard() {
   // Hide the leaderboard until the user hits Release — pre-race, scores would all just
   // be 0% and the panel doesn't add anything.
@@ -5517,7 +5524,7 @@ function updateLeaderboard() {
     return `
       <div class="row${isWinner ? ' winner-row' : ''}">
         <div class="dot" style="background:${m.color}"></div>
-        <div>${idx + 1}. ${m.name}${ribbon}<span class="pct">${(m.progress * 100).toFixed(0)}%</span></div>
+        <div>${idx + 1}. ${_labelFor(m)}${ribbon}<span class="pct">${(m.progress * 100).toFixed(0)}%</span></div>
       </div>
     `;
   }).join('');
@@ -5741,6 +5748,18 @@ restartBtn.addEventListener('click', () => {
 // Every race is then reproducible by any client via ?track=...&race=...
 window.marbleAPI = {
   getSeeds: () => ({ track: SEEDS.track, race: SEEDS.race }),
+  // Camera control for a tournament host. mode: 'overview' | 'action' | 'chase'
+  // | 'top'. 'action' is the first tracking (follow) camera. Purely visual —
+  // does not affect the deterministic sim.
+  setCamera(mode) {
+    if (typeof setCamMode === 'function') setCamMode(mode);
+  },
+  // Label the marbles in the in-race leaderboard by competitor name instead of
+  // color. Pass a map keyed by color-name, e.g. { RED: 'Marble 012', ... }, or
+  // null to fall back to the raw colors.
+  setDisplayNames(map) {
+    _displayNames = map || null;
+  },
   newCourse(trackSeed) {
     if (trackSeed !== undefined) {
       SEEDS.track = trackSeed >>> 0;

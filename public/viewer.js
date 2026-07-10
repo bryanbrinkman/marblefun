@@ -77,6 +77,14 @@ async function startReplay(race) {
     a.startRace(race.raceSeed);
   }
 
+  // Label the game's in-race leaderboard with the competitor names, and cut to
+  // the tracking (action) camera now that the race is live.
+  try {
+    if (a.setDisplayNames)
+      a.setDisplayNames(Object.fromEntries(race.roster.map((s) => [s.lane, s.marbleName])));
+    if (a.setCamera) a.setCamera('action');
+  } catch {}
+
   // Replay audit: record that this race was started with its broadcast seed,
   // and that the game actually applied it. `want` should always equal `got`.
   window.__replayAudit = window.__replayAudit || [];
