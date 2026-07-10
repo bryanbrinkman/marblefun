@@ -299,28 +299,6 @@ body {
   opacity: 0;
   transition: opacity 0.3s;
 }
-.live-badge {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(53, 208, 127, 0.16);
-  color: var(--live);
-  border: 1px solid rgba(53, 208, 127, 0.5);
-  padding: 5px 14px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 1.5px;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
-  animation: livepulse 1.6s ease-in-out infinite;
-}
-/* opacity-only pulse so it doesn't fight the translateX centering */
-@keyframes livepulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
-}
 .paused-badge {
   position: absolute;
   top: 12px;
@@ -336,9 +314,6 @@ body {
   letter-spacing: 1.5px;
   backdrop-filter: blur(4px);
   z-index: 3;
-}
-body.paused .live-badge {
-  display: none;
 }
 body.paused .iframe-wrap::after {
   content: '';

@@ -95,7 +95,6 @@ async function startReplay(race) {
   cd.classList.add('live');
   el('countdown').textContent = 'LIVE';
   el('cdArc').style.strokeDashoffset = '0';
-  el('liveBadge').hidden = false;
   flashOverlay('GO!');
   if (race.key === model.currentKey) renderCurrent(race);
 }
@@ -118,7 +117,6 @@ function scheduleStart(race) {
   const localStart = toLocal(race.scheduledStart);
   const delay = localStart - Date.now();
   ensureCourse(race.trackSeed); // pre-build during the countdown
-  el('liveBadge').hidden = true;
   if (delay <= 0) {
     startReplay(race);
   } else {
@@ -168,7 +166,6 @@ function renderCurrent(race) {
   title.innerHTML = `<span class="rnd">${race.roundTitle}</span>${label}`;
   el('seedline').textContent = `track ${race.trackSeed}  ·  race ${race.raceSeed}`;
   renderRoster(race);
-  el('liveBadge').hidden = race.status !== 'running';
 }
 
 function renderRoster(race) {
@@ -340,7 +337,6 @@ function renderChampion() {
   if (!model.champion) return;
   el('championCard').hidden = false;
   el('championName').textContent = model.champion.name;
-  el('liveBadge').hidden = true;
   el('cd').classList.remove('live');
   el('countdown').textContent = '🏁';
   flashOverlay('🏆 ' + model.champion.name);
@@ -415,7 +411,6 @@ function onMessage(msg) {
       if (race) race.result = msg.result;
       model.standings = msg.standings;
       justRevealed = msg.raceKey;
-      el('liveBadge').hidden = true;
       renderAll();
       justRevealed = null;
       break;
