@@ -456,13 +456,79 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const LOCAL_FAST = new URLSearchParams(location.search).has('fast');
 const LOCAL_LEAD_MS = LOCAL_FAST ? 800 : 6000;
 const LOCAL_GAP_MS = LOCAL_FAST ? 500 : 3000;
-const LOCAL_MAX_WATCH_MS = 300000; // safety cap if a marble gets stuck / tab is backgrounded
 
 function syncRounds(T) {
   model.rounds = T.rounds.map((r) => ({ key: r.key, title: r.title, idx: r.idx, races: r.races }));
   model.marbles = T.marbles;
   model.racesByKey.clear();
   for (const round of T.rounds) for (const race of round.races) model.racesByKey.set(race.key, race);
+}
+
+// ---- admin control (pause / reset) — driven by /admin.html ----------------
+// Local mode runs entirely in the browser, so admin commands are delivered over
+// a same-origin BroadcastChannel and the paused flag is persisted in
+// localStorage. They control the tournament running in THIS browser (each
+// visitor runs their own independent tournament).
+const adminChannel = 'BroadcastChannel' in window ? new BroadcastChannel('marble-admin') : null;
+let localPaused = false;
+let localResetToken = 0;
+let localForcedSeed = null;
+
+function loadAdminState() {
+  try {
+    localPaused = !!JSON.parse(localStorage.getItem('marble-admin') || '{}').paused;
+  } catch {}
+}
+function persistPaused() {
+  try {
+    localStorage.setItem('marble-admin', JSON.stringify({ paused: localPaused }));
+  } catch {}
+}
+function reflectPaused() {
+  document.body.classList.toggle('paused', localPaused);
+  const badge = el('pausedBadge');
+  if (badge) badge.hidden = !localPaused;
+}
+function broadcastStatus() {
+  if (!adminChannel) return;
+  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+  adminChannel.postMessage({
+    type: 'status',
+    paused: localPaused,
+    mode,
+    current: cur
+      ? cur.roundKey === 'final'
+        ? 'The Final'
+        : `${cur.roundTitle} · ${roundName[cur.roundKey]} ${cur.indexInRound + 1}`
+      : null,
+    champion: model.champion ? model.champion.name : null,
+    done: orderedRaces().filter((r) => r.result).length,
+    total: TOTAL_RACES,
+  });
+}
+function handleAdminCommand(cmd) {
+  if (!cmd || !cmd.type) return;
+  if (cmd.type === 'pause') localPaused = true;
+  else if (cmd.type === 'resume') localPaused = false;
+  else if (cmd.type === 'reset') {
+    localForcedSeed = cmd.seed != null ? cmd.seed >>> 0 : null;
+    localResetToken++;
+    localPaused = false;
+  } else if (cmd.type === 'request-status') {
+    broadcastStatus();
+    return;
+  } else return;
+  persistPaused();
+  reflectPaused();
+  broadcastStatus();
+}
+if (adminChannel) adminChannel.onmessage = (e) => handleAdminCommand(e.data);
+
+// Hold here while paused (checked between races).
+async function gatePause(aborted) {
+  if (!localPaused) return;
+  broadcastStatus();
+  while (localPaused && !(aborted && aborted())) await sleep(300);
 }
 
 async function startLocalTournament() {
@@ -472,15 +538,24 @@ async function startLocalTournament() {
   conn.classList.add('live');
   conn.title = 'Running standalone in your browser (no server)';
   leadMs = LOCAL_LEAD_MS;
+  loadAdminState();
+  reflectPaused();
+  broadcastStatus();
   let n = 0;
   for (;;) {
-    const seed = (Date.now() ^ (n++ * 0x9e3779b1) ^ (Math.floor(performance.now()) * 0x2545f4914f)) >>> 0;
-    await runLocalTournament(seed);
-    await sleep(14000); // hold on the champion, then start a fresh tournament
+    const myToken = localResetToken;
+    const seed =
+      localForcedSeed != null
+        ? localForcedSeed
+        : (Date.now() ^ (n++ * 0x9e3779b1) ^ (Math.floor(performance.now()) * 0x2545f4914f)) >>> 0;
+    localForcedSeed = null;
+    const completed = await runLocalTournament(seed, () => localResetToken !== myToken);
+    // Only pause on the champion if the run finished naturally (not reset).
+    if (localResetToken === myToken && completed) await sleep(14000);
   }
 }
 
-async function runLocalTournament(seed) {
+async function runLocalTournament(seed, aborted) {
   const T = new window.TournamentCore.Tournament(seed);
   model.champion = null;
   el('championCard').hidden = true;
@@ -490,9 +565,13 @@ async function runLocalTournament(seed) {
   model.standings = window.TournamentCore.standings(T);
   model.currentKey = null;
   renderAll();
+  broadcastStatus();
   await ensureCourse(T.trackSeed);
 
   for (;;) {
+    if (aborted && aborted()) return false;
+    await gatePause(aborted);
+    if (aborted && aborted()) return false;
     const race = T.nextPendingRace();
     if (!race) {
       const nxt = T.advance();
@@ -505,16 +584,70 @@ async function runLocalTournament(seed) {
       T.advance(); // sets champion once the final is done
       break;
     }
-    await runLocalRace(T, race);
+    await runLocalRace(T, race, aborted);
+    broadcastStatus();
   }
 
   model.champion = T.champion ? { id: T.champion, name: T.marbleName(T.champion) } : null;
   model.currentKey = null;
   renderAll();
   renderChampion();
+  broadcastStatus();
+  return true;
 }
 
-async function runLocalRace(T, race) {
+// Map the game's color-lane results back to this race's tournament marbles.
+// Any marble missing from the results (never finished) is recorded as a DNF.
+function _mapOrder(race, results) {
+  const byLane = new Map(race.roster.map((s) => [s.lane, s]));
+  const order = (results || []).map((o) => {
+    const s = byLane.get(o.name);
+    return { slot: s.slot, marbleId: s.marbleId, marbleName: s.marbleName, lane: o.name, color: o.color, timeSec: o.timeSec };
+  });
+  const finished = new Set(order.map((o) => o.slot));
+  for (const s of race.roster)
+    if (!finished.has(s.slot))
+      order.push({ slot: s.slot, marbleId: s.marbleId, marbleName: s.marbleName, lane: s.lane, color: s.color, timeSec: null });
+  return order;
+}
+
+// The authoritative finishing order, computed via the game's deterministic
+// fast-forward. This never depends on the *visible* (rAF-driven) race actually
+// completing, so results are always correct — no false DNFs even if the tab is
+// throttled or the device is slow.
+async function computeResult(race) {
+  const a = await whenApiReady();
+  let sim = null;
+  try {
+    sim = a.simulateRace(race.raceSeed);
+  } catch (e) {
+    console.error('simulateRace failed', e);
+  }
+  return _mapOrder(race, sim && sim.results);
+}
+
+// Hold the reveal until the on-screen race would have finished: either the
+// visible marbles actually reach the line, or a cap based on the known finish
+// time elapses (covers throttled rendering). The result is already known.
+async function waitForVisualFinish(race, order, aborted) {
+  const a = await whenApiReady();
+  const maxFin = order.reduce((mx, o) => Math.max(mx, o.timeSec || 0), 0);
+  // In demo (fast) mode reveal quickly; otherwise hold the reveal until the
+  // marbles would actually reach the line, capped so a throttled tab still
+  // advances.
+  const cap = LOCAL_FAST ? 1500 : (maxFin + 8) * 1000;
+  const start = Date.now();
+  for (;;) {
+    let n = 0;
+    try {
+      n = (a.getResults() || []).length;
+    } catch {}
+    if (n >= race.roster.length || Date.now() - start > cap || (aborted && aborted())) return;
+    await sleep(400);
+  }
+}
+
+async function runLocalRace(T, race, aborted) {
   race.status = 'announced';
   race.scheduledStart = Date.now() + leadMs;
   model.currentKey = race.key;
@@ -522,9 +655,16 @@ async function runLocalRace(T, race) {
   renderAll();
   runCountdown(race);
   await ensureCourse(race.trackSeed);
+  // Compute the true result first (deterministic fast-forward), then reset the
+  // world to a clean pre-race view so the just-simulated podium isn't shown.
+  const order = await computeResult(race);
+  const a = await whenApiReady();
+  a.newCourse(race.trackSeed);
+  builtTrack = race.trackSeed;
   await sleep(Math.max(0, race.scheduledStart - Date.now()));
-  await startReplay(race);
-  const order = await watchForResult(race);
+  await startReplay(race); // play the visible race for viewers to watch
+  await waitForVisualFinish(race, order, aborted);
+  if (aborted && aborted()) return; // a reset fired mid-race; abandon this result
   T.applyResult(race, order);
   race.status = 'done';
   model.standings = window.TournamentCore.standings(T);
@@ -532,32 +672,6 @@ async function runLocalRace(T, race) {
   renderAll();
   justRevealed = null;
   await sleep(LOCAL_GAP_MS);
-}
-
-// Read the finishing order out of the running game, mapping color lanes back
-// to tournament marbles. Any marble still not finished when the cap hits is a DNF.
-async function watchForResult(race) {
-  const a = await whenApiReady();
-  const byLane = new Map(race.roster.map((s) => [s.lane, s]));
-  const start = Date.now();
-  for (;;) {
-    let res = [];
-    try {
-      res = a.getResults() || [];
-    } catch {}
-    if (res.length >= race.roster.length || Date.now() - start > LOCAL_MAX_WATCH_MS) {
-      const order = res.map((o) => {
-        const s = byLane.get(o.name);
-        return { slot: s.slot, marbleId: s.marbleId, marbleName: s.marbleName, lane: o.name, color: o.color, timeSec: o.timeSec };
-      });
-      const finished = new Set(order.map((o) => o.slot));
-      for (const s of race.roster)
-        if (!finished.has(s.slot))
-          order.push({ slot: s.slot, marbleId: s.marbleId, marbleName: s.marbleName, lane: s.lane, color: s.color, timeSec: null });
-      return order;
-    }
-    await sleep(500);
-  }
 }
 
 // ---- websocket -----------------------------------------------------------
