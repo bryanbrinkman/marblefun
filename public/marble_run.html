@@ -3523,6 +3523,12 @@ function updateFans(dt) {
 const marbles = [];
 
 function createMarbles() {
+  // Remove any existing marble meshes before rebuilding so repeated
+  // prepare/reset cycles (e.g. a tournament resetting the course between races)
+  // can't leave a ghost set of marbles stranded at the start line.
+  for (const m of marbles) {
+    if (m.mesh && m.mesh.parent) m.mesh.parent.remove(m.mesh);
+  }
   marbles.length = 0;
 
   // Marbles spawn in a row across the WIDTH of the start tile, just behind the gate.

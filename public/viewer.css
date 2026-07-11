@@ -50,7 +50,7 @@ body.stats-hidden .side { opacity: 0; pointer-events: none; }
   background: linear-gradient(180deg, rgba(10, 13, 20, 0.82), rgba(10, 13, 20, 0.4));
   border-bottom: 1px solid var(--line);
 }
-.brand { font-weight: 900; letter-spacing: 2px; display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.brand { font-weight: 900; letter-spacing: 0.5px; display: flex; align-items: center; gap: 10px; font-size: 15px; }
 .brand-name { background: linear-gradient(90deg, #fff, var(--accent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .brand .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px var(--accent); animation: pulse 2.4s ease-in-out infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.82); } }
