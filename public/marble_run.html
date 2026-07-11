@@ -5788,6 +5788,22 @@ window.marbleAPI = {
     }
     restartBtn.click();
   },
+  // Reset the marbles back to the start gate for the next race WITHOUT
+  // rebuilding the course. A tournament reuses one course across many races, so
+  // this avoids repeatedly rebuilding the world (which is wasteful and could
+  // leave duplicate base/table geometry behind). Clears the finished/podium
+  // state so a fresh countdown shows the marbles waiting at the gate.
+  resetForNextRace(raceSeed) {
+    finishOrder.length = 0;
+    STATE.podiumShown = false;
+    if (podiumGroup) podiumGroup.visible = false;
+    for (const m of marbles) {
+      if (m.mesh && m.mesh.parent) m.mesh.parent.remove(m.mesh);
+    }
+    prepareRace(raceSeed);   // places marbles at the gate (createMarbles clears old meshes)
+    STATE.raceStarted = false;
+    STATE.gateOpen = false;
+  },
   startRace(raceSeed) {
     if (STATE.raceStarted && !finishOrder.length) return false;  // race in progress
     if (startBtn.classList.contains('rerace') || finishOrder.length) {

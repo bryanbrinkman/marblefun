@@ -652,11 +652,13 @@ async function runLocalRace(T, race, aborted) {
   runCountdown(race);
   await ensureCourse(race.trackSeed);
   // Compute the true result first (deterministic fast-forward), then reset the
-  // world to a clean pre-race view so the just-simulated podium isn't shown.
+  // marbles to the gate for a clean pre-race view. We reset WITHOUT rebuilding
+  // the course (the tournament reuses one course all tournament) — rebuilding
+  // every race was wasteful and left duplicate base geometry behind.
   const order = await computeResult(race);
   const a = await whenApiReady();
-  a.newCourse(race.trackSeed);
-  builtTrack = race.trackSeed;
+  if (a.resetForNextRace) a.resetForNextRace(race.raceSeed);
+  else a.newCourse(race.trackSeed);
   await sleep(Math.max(0, race.scheduledStart - Date.now()));
   await startReplay(race); // play the visible race for viewers to watch
   await waitForVisualFinish(race, order, aborted);
