@@ -732,6 +732,12 @@ function connect() {
 
 connect();
 
+// Toggle the stat overlays for an unobstructed, bigger race view.
+{
+  const statsToggle = el('statsToggle');
+  if (statsToggle) statsToggle.addEventListener('click', () => document.body.classList.toggle('stats-hidden'));
+}
+
 // ---- live viewer presence -------------------------------------------------
 // Heartbeats /api/presence and shows a "👁 N watching" badge. If presence isn't
 // configured (no KV store), the endpoint replies { enabled:false } and we hide
