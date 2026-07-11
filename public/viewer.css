@@ -1,7 +1,7 @@
 :root {
   --bg: #0a0d14;
-  --panel: rgba(20, 26, 40, 0.78);
-  --panel2: rgba(27, 34, 51, 0.72);
+  --panel: rgba(20, 26, 40, 0.56);
+  --panel2: rgba(27, 34, 51, 0.64);
   --line: rgba(120, 140, 175, 0.22);
   --line2: #33405c;
   --text: #eaf0f8;
