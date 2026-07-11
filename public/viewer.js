@@ -749,31 +749,7 @@ document.querySelectorAll('.card.collapsible .card-head').forEach((head) => {
   head.addEventListener('click', () => head.closest('.card').classList.toggle('open'));
 });
 
-// Hide the embedded game's own control buttons (the tournament drives the race)
-// and nudge its live leaderboard clear of the top bar.
-(function injectGameChrome() {
-  const iframe = document.getElementById('game');
-  function inject() {
-    try {
-      const doc = iframe.contentDocument;
-      if (!doc || !doc.head) return false;
-      if (doc.getElementById('mt-chrome')) return true;
-      const s = doc.createElement('style');
-      s.id = 'mt-chrome';
-      s.textContent = '#topMenu{display:none!important} #ui{transform:translateY(50px)}';
-      doc.head.appendChild(s);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  if (!inject()) {
-    const t = setInterval(() => {
-      if (inject()) clearInterval(t);
-    }, 300);
-    setTimeout(() => clearInterval(t), 15000);
-  }
-})();
+// (The embedded game hides its own control bar via ?embed=1 — see marble_run.html.)
 
 // ---- live viewer presence -------------------------------------------------
 // Heartbeats /api/presence and shows a "👁 N watching" badge. If presence isn't
