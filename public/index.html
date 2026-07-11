@@ -50,51 +50,63 @@
       </div>
     </div>
 
-    <!-- Side stats: floating panel, right -->
-    <aside class="side ov" id="sidePanel">
+    <!-- Stats: collapsible windows, closed by default, stacked top-to-bottom -->
+    <aside class="side" id="sidePanel">
       <div class="card champion-card" id="championCard" hidden>
         <div class="champ-label">CHAMPION</div>
         <div class="champ-trophy">🏆</div>
         <div class="champ-name" id="championName"></div>
       </div>
 
-      <div class="card upnext-card" id="upnextCard" hidden>
-        <h2>Up Next</h2>
-        <div class="upnext-body" id="upnextBody"></div>
+      <div class="card collapsible" id="upnextCard" hidden>
+        <button class="card-head" type="button">
+          <span class="ch-title">Up Next</span><span class="caret">▾</span>
+        </button>
+        <div class="card-body"><div class="upnext-body" id="upnextBody"></div></div>
       </div>
 
-      <div class="card recent-card" id="recentCard" hidden>
-        <h2>Recent Results</h2>
-        <div class="recent" id="recent"></div>
+      <div class="card collapsible" id="recentCard" hidden>
+        <button class="card-head" type="button">
+          <span class="ch-title">Recent Results</span><span class="caret">▾</span>
+        </button>
+        <div class="card-body"><div class="recent" id="recent"></div></div>
       </div>
 
-      <div class="card">
-        <h2>Field <span class="count-badge" id="aliveCount"></span></h2>
-        <div class="legend">
-          <span><i class="pill alive"></i>alive</span>
-          <span><i class="pill eliminated"></i>out</span>
-          <span><i class="pill champion"></i>champion</span>
+      <div class="card collapsible" id="fieldCard">
+        <button class="card-head" type="button">
+          <span class="ch-title">Field</span><span class="count-badge" id="aliveCount"></span><span class="caret">▾</span>
+        </button>
+        <div class="card-body">
+          <div class="legend">
+            <span><i class="pill alive"></i>alive</span>
+            <span><i class="pill eliminated"></i>out</span>
+            <span><i class="pill champion"></i>champion</span>
+          </div>
+          <div class="standings" id="standings"></div>
         </div>
-        <div class="standings" id="standings"></div>
+      </div>
+
+      <div class="card collapsible" id="bracketCard">
+        <button class="card-head" type="button">
+          <span class="ch-title">Bracket</span><span class="caret">▾</span>
+        </button>
+        <div class="card-body">
+          <div class="funnel" id="funnel">
+            <div class="funnel-stage" data-stage="heats"><b>100</b><span>marbles</span></div>
+            <div class="funnel-arrow">→</div>
+            <div class="funnel-stage" data-stage="semis"><b>20</b><span>winners</span></div>
+            <div class="funnel-arrow">→</div>
+            <div class="funnel-stage" data-stage="final"><b>5</b><span>finalists</span></div>
+            <div class="funnel-arrow">→</div>
+            <div class="funnel-stage" data-stage="champion"><b>1</b><span>champ</span></div>
+          </div>
+          <div class="bracket" id="bracket"></div>
+        </div>
       </div>
     </aside>
 
     <!-- Kept for the renderer; the game draws its own live leaderboard. -->
     <div class="roster" id="roster" hidden></div>
-
-    <!-- Bracket + funnel: floating panel, bottom -->
-    <section class="bracket-wrap ov" id="bracketPanel">
-      <div class="funnel" id="funnel">
-        <div class="funnel-stage" data-stage="heats"><b>100</b><span>marbles</span></div>
-        <div class="funnel-arrow">→</div>
-        <div class="funnel-stage" data-stage="semis"><b>20</b><span>heat winners</span></div>
-        <div class="funnel-arrow">→</div>
-        <div class="funnel-stage" data-stage="final"><b>5</b><span>finalists</span></div>
-        <div class="funnel-arrow">→</div>
-        <div class="funnel-stage" data-stage="champion"><b>1</b><span>champion</span></div>
-      </div>
-      <div class="bracket" id="bracket"></div>
-    </section>
 
     <script src="tournament-core.js"></script>
     <script src="viewer.js"></script>

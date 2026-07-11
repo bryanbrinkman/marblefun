@@ -155,6 +155,7 @@ function runCountdown(race) {
 
 const roundName = { heats: 'Heat', semis: 'Semifinal', final: 'Final' };
 const orderedRaces = () => model.rounds.flatMap((r) => r.races);
+const shortName = (n) => (n || '').replace(/^Marble\s*/i, ''); // "Marble 083" -> "083"
 
 function renderCurrent(race) {
   const title = el('raceTitle');
@@ -235,7 +236,7 @@ function renderUpNext() {
     next.roster
       .map(
         (s) =>
-          `<span class="um"><span class="swatch" style="background:${s.color}"></span>${s.marbleName}</span>`
+          `<span class="um"><span class="swatch" style="background:${s.color}"></span>${shortName(s.marbleName)}</span>`
       )
       .join('') +
     `</div>`;
@@ -288,12 +289,17 @@ function renderBracket() {
     const col = document.createElement('div');
     col.className = 'round-col' + (round.key === 'final' ? ' final-col' : '');
     col.innerHTML = `<h3>${round.title}<span class="rc-n">${round.races.length}</span></h3>`;
-    for (const race of round.races) col.appendChild(renderRaceCard(race));
+    const races = document.createElement('div');
+    races.className = 'round-races';
+    for (const race of round.races) races.appendChild(renderRaceCard(race));
+    col.appendChild(races);
     wrap.appendChild(col);
   }
-  // Keep the current race in view.
+  // Keep the current race in view (only matters when the Bracket window is open).
   const cur = wrap.querySelector('.race-card.current');
-  if (cur) cur.scrollIntoView({ block: 'nearest', inline: 'center' });
+  if (cur && el('bracketCard').classList.contains('open')) {
+    cur.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 function renderRaceCard(race) {
@@ -326,7 +332,7 @@ function renderRaceCard(race) {
     slotDiv.innerHTML =
       `<span class="pos">${done ? rank + '.' : ''}</span>` +
       `<span class="swatch" style="background:${s.color}"></span>` +
-      `<span class="nm">${s.marbleName}</span>` +
+      `<span class="nm">${shortName(s.marbleName)}</span>` +
       t;
     card.appendChild(slotDiv);
   }
@@ -737,6 +743,37 @@ connect();
   const statsToggle = el('statsToggle');
   if (statsToggle) statsToggle.addEventListener('click', () => document.body.classList.toggle('stats-hidden'));
 }
+
+// Collapsible stat windows (closed by default; click a header to expand).
+document.querySelectorAll('.card.collapsible .card-head').forEach((head) => {
+  head.addEventListener('click', () => head.closest('.card').classList.toggle('open'));
+});
+
+// Hide the embedded game's own control buttons (the tournament drives the race)
+// and nudge its live leaderboard clear of the top bar.
+(function injectGameChrome() {
+  const iframe = document.getElementById('game');
+  function inject() {
+    try {
+      const doc = iframe.contentDocument;
+      if (!doc || !doc.head) return false;
+      if (doc.getElementById('mt-chrome')) return true;
+      const s = doc.createElement('style');
+      s.id = 'mt-chrome';
+      s.textContent = '#topMenu{display:none!important} #ui{transform:translateY(50px)}';
+      doc.head.appendChild(s);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (!inject()) {
+    const t = setInterval(() => {
+      if (inject()) clearInterval(t);
+    }, 300);
+    setTimeout(() => clearInterval(t), 15000);
+  }
+})();
 
 // ---- live viewer presence -------------------------------------------------
 // Heartbeats /api/presence and shows a "👁 N watching" badge. If presence isn't
