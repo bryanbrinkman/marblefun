@@ -162,10 +162,10 @@ function renderCurrent(race) {
   const isFinal = race.roundKey === 'final';
   title.classList.toggle('final', isFinal);
   const label = isFinal
-    ? 'THE FINAL'
+    ? 'The Final'
     : `${roundName[race.roundKey] || race.roundKey} ${race.indexInRound + 1}`;
-  title.innerHTML = `<span class="rnd">${race.roundTitle}</span>${label}`;
-  el('seedline').textContent = `track ${race.trackSeed}  ·  race ${race.raceSeed}`;
+  title.textContent = label;
+  el('seedline').textContent = `track ${race.trackSeed} · race ${race.raceSeed}`;
   renderRoster(race);
 }
 
@@ -196,14 +196,6 @@ function renderProgress() {
   const shown = model.champion ? TOTAL_RACES : Math.min(TOTAL_RACES, done + (cur && !cur.result ? 1 : 0));
   el('progressCount').textContent = `Race ${shown} / ${TOTAL_RACES}`;
   el('progressFill').style.width = (100 * done) / TOTAL_RACES + '%';
-  const roundLabel = model.champion
-    ? 'Complete'
-    : cur
-      ? cur.roundTitle
-      : model.rounds.length
-        ? model.rounds[model.rounds.length - 1].title
-        : 'Starting';
-  el('progressRound').textContent = roundLabel;
 }
 
 function renderFunnel() {
@@ -632,19 +624,22 @@ async function computeResult(race) {
 // time elapses (covers throttled rendering). The result is already known.
 async function waitForVisualFinish(race, order, aborted) {
   const a = await whenApiReady();
+  // How many marbles actually finish (a stuck marble never crosses the line).
+  const finishers = order.filter((o) => o.timeSec != null).length || race.roster.length;
   const maxFin = order.reduce((mx, o) => Math.max(mx, o.timeSec || 0), 0);
-  // In demo (fast) mode reveal quickly; otherwise hold the reveal until the
-  // marbles would actually reach the line, capped so a throttled tab still
-  // advances.
-  const cap = LOCAL_FAST ? 1500 : (maxFin + 8) * 1000;
+  // Fast/demo mode reveals quickly. Otherwise hold the reveal until those
+  // marbles have actually crossed the line on screen — so the next race never
+  // starts before this one visibly finishes — with a generous safety cap so a
+  // throttled or backgrounded tab still advances eventually.
+  const cap = LOCAL_FAST ? 1500 : (maxFin * 2 + 30) * 1000;
   const start = Date.now();
   for (;;) {
     let n = 0;
     try {
       n = (a.getResults() || []).length;
     } catch {}
-    if (n >= race.roster.length || Date.now() - start > cap || (aborted && aborted())) return;
-    await sleep(400);
+    if (n >= finishers || Date.now() - start > cap || (aborted && aborted())) return;
+    await sleep(300);
   }
 }
 

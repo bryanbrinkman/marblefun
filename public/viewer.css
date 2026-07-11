@@ -45,22 +45,23 @@ body.stats-hidden .side { opacity: 0; pointer-events: none; }
 /* ---------- top bar ---------- */
 .topbar {
   position: fixed; top: 0; left: 0; right: 0; z-index: 30;
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 20px;
-  padding: 8px 16px;
-  background: linear-gradient(180deg, rgba(10, 13, 20, 0.82), rgba(10, 13, 20, 0.4));
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px;
+  padding: 7px 16px;
+  background: linear-gradient(180deg, rgba(10, 13, 20, 0.86), rgba(10, 13, 20, 0.55));
   border-bottom: 1px solid var(--line);
 }
-.brand { font-weight: 900; letter-spacing: 0.5px; display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.brand { font-weight: 900; letter-spacing: 0.5px; display: flex; align-items: center; gap: 10px; font-size: 15px; flex: none; }
 .brand-name { background: linear-gradient(90deg, #fff, var(--accent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .brand .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px var(--accent); animation: pulse 2.4s ease-in-out infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.82); } }
 
-.progress { max-width: 460px; width: 100%; justify-self: center; }
-.progress-meta { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; margin-bottom: 4px; }
-#progressRound { font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: var(--accent); }
-.progress-count { color: var(--muted); font-variant-numeric: tabular-nums; }
-.progress-track { height: 6px; background: rgba(0,0,0,.4); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+/* current race, merged into the bar */
+.race-console { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.rc-info { display: flex; flex-direction: column; justify-content: center; min-width: 0; max-width: 240px; flex: none; }
+.rc-progress { flex: 1; min-width: 80px; display: flex; align-items: center; gap: 8px; }
+.rc-progress .progress-track { flex: 1; height: 6px; background: rgba(0,0,0,.4); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
 .progress-fill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, var(--accent2), var(--accent)); box-shadow: 0 0 12px rgba(255,207,92,.5); transition: width .6s cubic-bezier(.22,1,.36,1); }
+.progress-count { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11px; white-space: nowrap; }
 
 .topbar-right { display: flex; align-items: center; gap: 9px; justify-content: flex-end; }
 .conn, .watching { font-size: 11px; color: var(--muted); padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; white-space: nowrap; background: rgba(0,0,0,.25); }
@@ -71,26 +72,18 @@ body.stats-hidden .side { opacity: 0; pointer-events: none; }
 .stats-toggle:hover { border-color: var(--muted); }
 body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,207,92,.4); }
 
-/* ---------- current race pill (top-center) ---------- */
-.cur-pill {
-  position: fixed; top: 58px; left: 50%; transform: translateX(-50%); z-index: 20;
-  display: flex; align-items: center; gap: 14px; padding: 9px 12px 9px 18px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
-  box-shadow: var(--shadow); max-width: min(92vw, 500px);
-}
-.cur-info { min-width: 0; }
-.race-title { font-weight: 800; font-size: 16px; letter-spacing: .3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.race-title .rnd { color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; font-size: 11px; display: block; margin-bottom: 1px; }
-.race-title.final .rnd { color: var(--accent2); }
-.seedline { color: var(--muted); font-size: 10.5px; font-family: ui-monospace, Menlo, Consolas, monospace; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* ---------- current race title + countdown (in the bar) ---------- */
+.race-title { font-weight: 800; font-size: 15px; letter-spacing: .3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.race-title.final { color: var(--accent2); }
+.seedline { color: var(--muted); font-size: 10px; font-family: ui-monospace, Menlo, Consolas, monospace; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.cd { position: relative; width: 50px; height: 50px; flex: none; }
-.cd-ring { width: 50px; height: 50px; transform: rotate(-90deg); }
+.cd { position: relative; width: 40px; height: 40px; flex: none; }
+.cd-ring { width: 40px; height: 40px; transform: rotate(-90deg); }
 .cd-bg { fill: none; stroke: rgba(0,0,0,.4); stroke-width: 6; }
 .cd-fg { fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round; stroke-dasharray: 175.93; stroke-dashoffset: 175.93; transition: stroke-dashoffset .25s linear, stroke .3s; }
-.cd-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--accent); }
+.cd-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--accent); }
 .cd.live .cd-fg { stroke: var(--live); }
-.cd.live .cd-num { color: var(--live); font-size: 10px; }
+.cd.live .cd-num { color: var(--live); font-size: 9px; }
 
 /* ---------- side stats (collapsible accordion, right) ---------- */
 .side {
@@ -188,9 +181,14 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 
 /* ---------- responsive ---------- */
 @media (max-width: 720px) {
-  .topbar { grid-template-columns: auto auto; gap: 10px; padding: 8px 12px; }
-  .progress { order: 3; grid-column: 1 / -1; max-width: none; }
-  .cur-pill { top: 92px; }
-  .paused-badge { top: 92px; }
-  .side { top: 96px; width: 52vw; max-width: 240px; max-height: calc(100vh - 108px); }
+  .topbar { gap: 8px; padding: 6px 10px; }
+  .seedline { display: none; }
+  .rc-info { max-width: 130px; }
+  .side { top: 56px; width: 52vw; max-width: 240px; max-height: calc(100vh - 66px); }
+  .paused-badge { top: 58px; }
+}
+@media (max-width: 470px) {
+  .brand-name { display: none; }
+  .progress-count { display: none; }
+  .watching { display: none !important; }
 }

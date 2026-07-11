@@ -19,13 +19,26 @@
         <span class="dot"></span>
         <span class="brand-name">marblerun.fun</span>
       </div>
-      <div class="progress" id="progress">
-        <div class="progress-meta">
-          <span id="progressRound">—</span>
+
+      <!-- Current race console, merged into the bar -->
+      <div class="race-console">
+        <div class="cd" id="cd">
+          <svg viewBox="0 0 64 64" class="cd-ring">
+            <circle class="cd-bg" cx="32" cy="32" r="28" />
+            <circle class="cd-fg" id="cdArc" cx="32" cy="32" r="28" />
+          </svg>
+          <div class="cd-num" id="countdown">—</div>
+        </div>
+        <div class="rc-info">
+          <div class="race-title" id="raceTitle">Waiting for the next race…</div>
+          <div class="seedline" id="seedline"></div>
+        </div>
+        <div class="rc-progress">
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
           <span class="progress-count" id="progressCount">Race 0 / 25</span>
         </div>
-        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
       </div>
+
       <div class="topbar-right">
         <div class="watching" id="watching" hidden>
           <span class="eye">👁</span><span id="watchingN">0</span>&nbsp;watching
@@ -34,21 +47,6 @@
         <button class="stats-toggle" id="statsToggle" title="Show / hide stats" aria-label="Toggle stats">⤢</button>
       </div>
     </header>
-
-    <!-- Current race: floating pill, top-center -->
-    <div class="cur-pill ov" id="curPill">
-      <div class="cur-info">
-        <div class="race-title" id="raceTitle">Waiting for the next race…</div>
-        <div class="seedline" id="seedline"></div>
-      </div>
-      <div class="cd" id="cd">
-        <svg viewBox="0 0 64 64" class="cd-ring">
-          <circle class="cd-bg" cx="32" cy="32" r="28" />
-          <circle class="cd-fg" id="cdArc" cx="32" cy="32" r="28" />
-        </svg>
-        <div class="cd-num" id="countdown">—</div>
-      </div>
-    </div>
 
     <!-- Stats: collapsible windows, closed by default, stacked top-to-bottom -->
     <aside class="side" id="sidePanel">
