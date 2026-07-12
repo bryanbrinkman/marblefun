@@ -3835,7 +3835,13 @@ const BUILD_STEPS = [
 
 // Synchronous build — used by NEW COURSE rebuilds. Identical behavior to the
 // pre-staged monolithic function: all steps run back-to-back in one task.
+// Bumped every time a synchronous build (NEW COURSE / restart) runs, so the
+// staged async boot build can tell if it's been superseded and bail out mid-way
+// instead of laying a second overlapping course on top of the new one.
+let _buildSerial = 0;
+
 function buildWorld() {
+  _buildSerial++;
   for (const s of BUILD_STEPS) s.fn();
 }
 
@@ -3845,9 +3851,14 @@ function buildWorld() {
 // arrives AFTER it completes.
 async function buildWorldAsync(onProgress) {
   const nextFrame = () => new Promise(r => requestAnimationFrame(r));
+  const serial = _buildSerial;
   for (const s of BUILD_STEPS) {
     if (onProgress) onProgress(null, s.label);
     await nextFrame();   // paint the label + current pct before the sync chunk
+    // If a synchronous rebuild (e.g. a tournament calling newCourse) ran while
+    // we were awaiting a frame, it already built the real course — abort so we
+    // don't clear it and stack a second one on top.
+    if (_buildSerial !== serial) return;
     s.fn();
     if (onProgress) onProgress(s.pct, null);
   }
