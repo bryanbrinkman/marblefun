@@ -447,7 +447,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // `?fast=1` shortens the between-race countdown/gap for demos and impatient
 // viewers (the races themselves still run at real time).
 const LOCAL_FAST = new URLSearchParams(location.search).has('fast');
-const LOCAL_LEAD_MS = LOCAL_FAST ? 800 : 6000;
+const LOCAL_LEAD_MS = LOCAL_FAST ? 800 : 10000;
 const LOCAL_GAP_MS = LOCAL_FAST ? 500 : 3000;
 
 function syncRounds(T) {
@@ -659,8 +659,11 @@ async function runLocalRace(T, race, aborted) {
   const a = await whenApiReady();
   if (a.resetForNextRace) a.resetForNextRace(race.raceSeed);
   else a.newCourse(race.trackSeed);
+  // Show the far overview of the whole course during the countdown; the
+  // tracking camera then eases in and follows the leader when the race starts.
+  if (a.setCamera) a.setCamera('overview');
   await sleep(Math.max(0, race.scheduledStart - Date.now()));
-  await startReplay(race); // play the visible race for viewers to watch
+  await startReplay(race); // play the visible race for viewers to watch (cuts to the tracking cam)
   await waitForVisualFinish(race, order, aborted);
   if (aborted && aborted()) return; // a reset fired mid-race; abandon this result
   T.applyResult(race, order);
