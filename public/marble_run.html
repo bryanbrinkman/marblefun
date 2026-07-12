@@ -3587,14 +3587,66 @@ function applyMarbleSkin(m) {
   }
 }
 
+// A soft round contact shadow under each marble. The directional-light shadow
+// is low-res for something this small and normalBias pushes it off the surface,
+// which reads as "floating" — this blob keeps every marble grounded.
+let _shadowTex = null;
+let _shadowGeo = null;
+let _shadowMat = null;
+function _ensureShadowAssets() {
+  if (_shadowTex) return;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 1, 32, 32, 31);
+  grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+  grad.addColorStop(0.55, 'rgba(0,0,0,0.30)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  _shadowTex = new THREE.CanvasTexture(c);
+  _shadowGeo = new THREE.PlaneGeometry(CONFIG.marbleRadius * 2.8, CONFIG.marbleRadius * 2.8);
+  // Shared across all blobs (identical), so nothing to allocate/dispose per marble.
+  _shadowMat = new THREE.MeshBasicMaterial({ map: _shadowTex, transparent: true, depthWrite: false });
+}
+
+// Per-frame visual update: roll each marble by its velocity (so textures/models
+// actually tumble) and pin its contact shadow to the ground beneath it.
+const _spinUp = new THREE.Vector3(0, 1, 0);
+const _spinAxis = new THREE.Vector3();
+const _spinQuat = new THREE.Quaternion();
+function updateMarbleVisuals(dt) {
+  const r = CONFIG.marbleRadius;
+  for (const m of marbles) {
+    if (!m.mesh) continue;
+    const v = m.vel;
+    const speed = v ? v.length() : 0;
+    if (speed > 1e-4) {
+      // Rolling without slipping: angular velocity = (up × v) / radius.
+      _spinAxis.copy(_spinUp).cross(v);
+      if (_spinAxis.lengthSq() > 1e-9) {
+        _spinAxis.normalize();
+        _spinQuat.setFromAxisAngle(_spinAxis, (speed / r) * dt);
+        m.mesh.quaternion.premultiply(_spinQuat);
+      }
+    }
+    if (m.shadowBlob) {
+      m.shadowBlob.position.set(m.pos.x, m.pos.y - r + 0.02, m.pos.z);
+    }
+  }
+}
+
 function createMarbles() {
-  // Remove any existing marble meshes before rebuilding so repeated
-  // prepare/reset cycles (e.g. a tournament resetting the course between races)
-  // can't leave a ghost set of marbles stranded at the start line.
+  // Remove any existing marble meshes (and their contact shadows) before
+  // rebuilding so repeated prepare/reset cycles (e.g. a tournament resetting the
+  // course between races) can't leave a ghost set of marbles stranded at the
+  // start line.
   for (const m of marbles) {
     if (m.mesh && m.mesh.parent) m.mesh.parent.remove(m.mesh);
+    if (m.shadowBlob && m.shadowBlob.parent) m.shadowBlob.parent.remove(m.shadowBlob);
   }
   marbles.length = 0;
+  _ensureShadowAssets();
 
   // Marbles spawn in a row across the WIDTH of the start tile, just behind the gate.
   // The start tile uses the 'startFlare' wall shape which widens the channel at the
@@ -3636,7 +3688,10 @@ function createMarbles() {
     });
 
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.castShadow = true;
+    // No directional cast shadow for marbles — it's low-res at this size and
+    // normalBias detaches it, making them look like they float. A soft contact
+    // blob (below) grounds them instead.
+    mesh.castShadow = false;
     mesh.receiveShadow = true;
     mesh.visible = true;
     mesh.userData.isMarble = true;
@@ -3676,7 +3731,17 @@ function createMarbles() {
       // bounce" when the marble rolls off the end of a slope onto a flat tile.
       prevCellType: 'start',
     });
-    applyMarbleSkin(marbles[marbles.length - 1]);
+    const _m = marbles[marbles.length - 1];
+    applyMarbleSkin(_m);
+    // Soft contact shadow, added straight to the scene (not worldObjects) and
+    // cleaned up with the marbles above.
+    const blob = new THREE.Mesh(_shadowGeo, _shadowMat);
+    blob.rotation.x = -Math.PI / 2;
+    blob.renderOrder = 2;
+    blob.position.copy(pos);
+    blob.position.y -= CONFIG.marbleRadius - 0.02;
+    scene.add(blob);
+    _m.shadowBlob = blob;
   }
 }
 
@@ -7150,6 +7215,7 @@ function animate() {
     accumulator -= FIXED_DT;
   }
 
+  updateMarbleVisuals(frameTime);
   updateGateAnimation(frameTime);
   updateFans(frameTime);
   updateFlags(frameTime);
