@@ -67,6 +67,7 @@ async function startReplay(race) {
   if (startedRaces.has(race.key)) return;
   startedRaces.add(race.key);
   const a = await ensureCourse(race.trackSeed);
+  applyRaceSkins(a, race);
   // startRace refuses (returns false) if a previous replay is still on screen.
   // That happens when a client is catching up or running faster than real
   // time — hard-reset the course and start cleanly so no race is skipped.
@@ -657,6 +658,7 @@ async function runLocalRace(T, race, aborted) {
   // every race was wasteful and left duplicate base geometry behind.
   const order = await computeResult(race);
   const a = await whenApiReady();
+  applyRaceSkins(a, race);
   if (a.resetForNextRace) a.resetForNextRace(race.raceSeed);
   else a.newCourse(race.trackSeed);
   // Show the far overview of the whole course during the countdown; the
@@ -795,3 +797,25 @@ document.querySelectorAll('.card.collapsible .card-head').forEach((head) => {
   beat();
   setInterval(beat, 8000);
 })();
+
+// ---- optional custom marble skins (see public/marbles/README.md) -----------
+// Loads marbles/manifest.json if present. Absent/invalid manifest = default
+// colored marbles, no effect. Applied per race (only the 5 competitors' assets
+// are ever loaded) just before that race's marbles are (re)created.
+let marbleManifest = null;
+fetch('marbles/manifest.json', { cache: 'no-store' })
+  .then((r) => (r.ok ? r.json() : null))
+  .then((m) => {
+    if (m && typeof m === 'object') marbleManifest = m;
+  })
+  .catch(() => {});
+
+function applyRaceSkins(a, race) {
+  if (!a || !a.setMarbleSkins || !marbleManifest || !race) return;
+  const skins = {};
+  for (const s of race.roster) {
+    const sk = marbleManifest[s.marbleId] || marbleManifest[String(s.marbleId)];
+    if (sk && (sk.img || sk.glb)) skins[s.lane] = sk;
+  }
+  a.setMarbleSkins(skins);
+}

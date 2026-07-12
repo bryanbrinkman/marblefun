@@ -1,0 +1,9 @@
+{
+  "_comment": "Rename to manifest.json to activate custom marble skins. Keyed by marble number (1-100). Each entry is EITHER an image OR a glb (paths are relative to /public, or absolute https URLs). Any marble not listed uses its default solid color. Delete this file (or leave it as manifest.example.json) to keep the default colored marbles.",
+  "1":  { "img": "marbles/001.png" },
+  "2":  { "img": "marbles/002.png" },
+  "7":  { "img": "marbles/007.jpg" },
+  "12": { "glb": "marbles/012.glb" },
+  "51": { "glb": "marbles/051.glb" },
+  "99": { "img": "https://your-cdn.example/marbles/099.png" }
+}

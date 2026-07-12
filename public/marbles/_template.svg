@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1024" viewBox="0 0 2048 1024">
+  <!-- Marble texture template — EQUIRECTANGULAR (2:1). This wraps around a
+       sphere like a world map: left/right edges meet at the back, the middle
+       row is the equator (faces the camera), and the top/bottom rows pinch to
+       the poles (keep important art away from the very top/bottom). Paint over
+       this, hide the guides, and export a PNG/JPG (1024x512, 2048x1024, or a
+       square 1024x1024 also works). Save as public/marbles/NNN.png -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c9d3e0"/>
+      <stop offset="0.5" stop-color="#eef2f7"/>
+      <stop offset="1" stop-color="#c9d3e0"/>
+    </linearGradient>
+  </defs>
+  <rect width="2048" height="1024" fill="url(#bg)"/>
+
+  <!-- longitude lines every 1/12 -->
+  <g stroke="#9fb0c4" stroke-width="1" opacity="0.5">
+    <line x1="170" y1="0" x2="170" y2="1024"/><line x1="341" y1="0" x2="341" y2="1024"/>
+    <line x1="512" y1="0" x2="512" y2="1024"/><line x1="683" y1="0" x2="683" y2="1024"/>
+    <line x1="853" y1="0" x2="853" y2="1024"/><line x1="1195" y1="0" x2="1195" y2="1024"/>
+    <line x1="1365" y1="0" x2="1365" y2="1024"/><line x1="1536" y1="0" x2="1536" y2="1024"/>
+    <line x1="1707" y1="0" x2="1707" y2="1024"/><line x1="1877" y1="0" x2="1877" y2="1024"/>
+  </g>
+  <!-- latitude lines -->
+  <g stroke="#9fb0c4" stroke-width="1" opacity="0.5">
+    <line x1="0" y1="256" x2="2048" y2="256"/><line x1="0" y1="768" x2="2048" y2="768"/>
+  </g>
+
+  <!-- pole zones (art pinches here) -->
+  <rect x="0" y="0" width="2048" height="128" fill="#ff6b6b" opacity="0.12"/>
+  <rect x="0" y="896" width="2048" height="128" fill="#ff6b6b" opacity="0.12"/>
+
+  <!-- center (front, faces camera) -->
+  <line x1="1024" y1="0" x2="1024" y2="1024" stroke="#35d07f" stroke-width="3" opacity="0.7"/>
+  <line x1="0" y1="512" x2="2048" y2="512" stroke="#35d07f" stroke-width="3" opacity="0.7"/>
+  <circle cx="1024" cy="512" r="10" fill="#35d07f"/>
+
+  <g font-family="system-ui, sans-serif" fill="#3a4657" text-anchor="middle">
+    <text x="1024" y="64" font-size="34" opacity="0.7">▲ TOP POLE — keep art clear (pinches)</text>
+    <text x="1024" y="980" font-size="34" opacity="0.7">▼ BOTTOM POLE — keep art clear (pinches)</text>
+    <text x="1024" y="480" font-size="42" font-weight="700" fill="#1f6b45">FRONT / EQUATOR — faces the camera</text>
+    <text x="1024" y="556" font-size="120" font-weight="800" fill="#8b98ab" opacity="0.55">MARBLE ###</text>
+    <text x="150" y="512" font-size="26" fill="#7a8698" opacity="0.8" transform="rotate(-90 150 512)">← wraps around to the right edge →</text>
+  </g>
+</svg>

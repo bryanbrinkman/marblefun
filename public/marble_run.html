@@ -3522,6 +3522,71 @@ function updateFans(dt) {
 // =========================================================
 const marbles = [];
 
+// ---- optional custom marble skins (cosmetic only — never affects physics) ----
+// A host sets these via marbleAPI.setMarbleSkins({ RED: {img|glb}, ... }); each
+// marble whose color-lane has a skin gets a texture on its sphere, or its sphere
+// replaced by a GLB model. Anything without a skin keeps its solid color.
+let _marbleSkins = null;
+let _texLoader = null;
+let _gltfLoaderPromise = null;
+function ensureGLTFLoader() {
+  if (window.THREE && THREE.GLTFLoader) return Promise.resolve(THREE.GLTFLoader);
+  if (_gltfLoaderPromise) return _gltfLoaderPromise;
+  _gltfLoaderPromise = new Promise((resolve) => {
+    const s = document.createElement('script');
+    s.src = 'vendor/GLTFLoader.js';
+    s.onload = () => resolve(THREE.GLTFLoader || null);
+    s.onerror = () => resolve(null);
+    document.head.appendChild(s);
+  });
+  return _gltfLoaderPromise;
+}
+function applyMarbleSkin(m) {
+  if (!_marbleSkins || !m || !m.mesh) return;
+  const skin = _marbleSkins[m.name];
+  if (!skin) return;
+  try {
+    if (skin.img) {
+      _texLoader = _texLoader || new THREE.TextureLoader();
+      _texLoader.setCrossOrigin('anonymous');
+      _texLoader.load(skin.img, (tex) => {
+        if (!m.mesh || !m.mesh.material) return;
+        tex.encoding = THREE.sRGBEncoding;
+        const mat = m.mesh.material;
+        mat.map = tex;
+        mat.color.set(0xffffff);
+        if (mat.emissive) mat.emissive.set(0x000000);
+        mat.needsUpdate = true;
+      });
+    } else if (skin.glb) {
+      ensureGLTFLoader().then((Loader) => {
+        if (!Loader || !m.mesh) return;
+        const loader = new Loader();
+        if (loader.setCrossOrigin) loader.setCrossOrigin('anonymous');
+        loader.load(skin.glb, (gltf) => {
+          if (!m.mesh) return;
+          const model = gltf.scene || gltf.scenes[0];
+          // Auto-fit to marble size and center on the marble.
+          const box = new THREE.Box3().setFromObject(model);
+          const size = new THREE.Vector3();
+          box.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z) || 1;
+          const s = (CONFIG.marbleRadius * 2) / maxDim;
+          model.scale.setScalar(s);
+          const center = new THREE.Vector3();
+          box.getCenter(center);
+          model.position.copy(center.multiplyScalar(-s));
+          if (m.mesh.material) m.mesh.material.visible = false; // hide the default sphere
+          m.mesh.add(model);
+          m.skinModel = model;
+        });
+      });
+    }
+  } catch (e) {
+    /* skin failure never breaks the race */
+  }
+}
+
 function createMarbles() {
   // Remove any existing marble meshes before rebuilding so repeated
   // prepare/reset cycles (e.g. a tournament resetting the course between races)
@@ -3611,6 +3676,7 @@ function createMarbles() {
       // bounce" when the marble rolls off the end of a slope onto a flat tile.
       prevCellType: 'start',
     });
+    applyMarbleSkin(marbles[marbles.length - 1]);
   }
 }
 
@@ -5791,6 +5857,12 @@ window.marbleAPI = {
   // null to fall back to the raw colors.
   setDisplayNames(map) {
     _displayNames = map || null;
+  },
+  // Optional per-lane marble skins, keyed by color-name, e.g.
+  // { RED: { img: 'marbles/001.png' }, BLUE: { glb: 'marbles/012.glb' } }.
+  // Cosmetic only; must be set before the race's marbles are (re)created.
+  setMarbleSkins(map) {
+    _marbleSkins = map || null;
   },
   newCourse(trackSeed) {
     if (trackSeed !== undefined) {
