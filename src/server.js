@@ -68,6 +68,15 @@ function serveStatic(req, res) {
 }
 
 async function main() {
+  // Last-resort guards: an async throw (e.g. a scheduler timer or a DB write on
+  // a flaky volume) must never take the whole site down. Log and keep serving.
+  process.on('uncaughtException', (err) => {
+    console.error('[server] uncaughtException (staying up):', (err && err.stack) || err);
+  });
+  process.on('unhandledRejection', (reason) => {
+    console.error('[server] unhandledRejection (staying up):', (reason && reason.stack) || reason);
+  });
+
   const cfg = buildConfig();
   console.log('[server] config:', {
     port: cfg.port,
