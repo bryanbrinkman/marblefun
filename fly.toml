@@ -6,6 +6,11 @@
 app = "marblefun"
 primary_region = "iad"   # Ashburn, US-East. Change to your nearest region.
 
+# Headless Chromium spikes memory while building the 3D course; on a 1 GB VM
+# that can trip the kernel OOM killer (a SIGKILL no code can survive). Swap
+# absorbs the spike at no extra cost.
+swap_size_mb = 1024
+
 [build]
 
 [env]
