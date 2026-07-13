@@ -1,0 +1,23 @@
+# Continuous deployment to Fly.io.
+# Every push to `main` builds the Docker image on Fly's remote builders and
+# releases it — no local machine or terminal needed. Requires one repository
+# secret, FLY_API_TOKEN (see DEPLOY.md).
+name: Deploy to Fly.io
+
+on:
+  push:
+    branches: [main]
+  # Allow manual runs from the GitHub Actions tab ("Run workflow").
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy app
+    runs-on: ubuntu-latest
+    concurrency: deploy-group # never run two deploys at once
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

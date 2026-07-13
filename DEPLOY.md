@@ -39,6 +39,26 @@ The Fly dashboard's "launch from GitHub repo" screen does the same thing —
 just make sure the **branch is `main`** and that a volume named `marble_data`
 exists (step 2), or the first boot fails with "volume not found."
 
+## Automatic deploys from GitHub (no terminal needed)
+
+`.github/workflows/fly-deploy.yml` deploys to Fly on every push to `main`
+(building on Fly's remote builders, so no local Docker/terminal is required).
+One-time setup, all in the browser:
+
+1. **Create a Fly deploy token.** In the Fly dashboard, open your account menu →
+   **Tokens** (or go to `https://fly.io/dashboard` → the `marblefun` app →
+   **Tokens** → **Create deploy token**). Copy the whole value (starts with
+   `FlyV1 ...`).
+2. **Add it to GitHub.** In the repo: **Settings → Secrets and variables →
+   Actions → New repository secret**. Name it exactly `FLY_API_TOKEN`, paste the
+   token, save.
+3. **Trigger a deploy.** Either push any commit to `main`, or go to the repo's
+   **Actions** tab → **Deploy to Fly.io** → **Run workflow**. Watch it build and
+   release. Done — from now on it's automatic.
+
+If a run fails with "token" / "unauthorized", the secret is missing or wrong —
+re-do step 2 and re-run the workflow.
+
 ## Configuration
 
 Everything is env vars (set in `fly.toml`'s `[env]`, or with
