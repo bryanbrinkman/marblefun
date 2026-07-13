@@ -343,15 +343,24 @@ function renderBracketDock() {
     : '';
   const heatsDone = heats ? heats.races.filter((r) => r.result).length : 0;
 
+  // Preserve the horizontal scroll position across the frequent re-renders (on
+  // mobile the bracket is wider than the screen and pans left/right); centre it
+  // on the very first render so the Final is the focal point.
+  const prev = body.querySelector('.bd-scroll');
+  const prevLeft = prev ? prev.scrollLeft : null;
+
   body.innerHTML =
-    `<div class="bd-main">` +
+    `<div class="bd-scroll"><div class="bd-main">` +
     `<div class="bd-wing left">${bracketBox(semi(0), 'Semifinal 1', 'bd-semi')}${bracketBox(semi(1), 'Semifinal 2', 'bd-semi')}</div>` +
     `<div class="bd-join left"></div>` +
     `<div class="bd-center">${bracketBox(finalRace, 'The Final', 'bd-final')}${champ}</div>` +
     `<div class="bd-join right"></div>` +
     `<div class="bd-wing right">${bracketBox(semi(2), 'Semifinal 3', 'bd-semi')}${bracketBox(semi(3), 'Semifinal 4', 'bd-semi')}</div>` +
-    `</div>` +
+    `</div></div>` +
     `<div class="bd-heats"><span class="bd-heats-l">Heats <b>${heatsDone}/20</b></span><div class="bd-pips">${heatPips}</div></div>`;
+
+  const sc = body.querySelector('.bd-scroll');
+  if (sc) sc.scrollLeft = prevLeft != null ? prevLeft : Math.max(0, (sc.scrollWidth - sc.clientWidth) / 2);
 }
 
 function renderChampion() {

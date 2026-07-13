@@ -217,8 +217,13 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 .bd-close:hover { color: var(--text); border-color: var(--muted); }
 
 .bd-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+/* Horizontal scroller: on a narrow screen the two-sided bracket is wider than
+   the viewport, so it pans left/right instead of cropping. */
+.bd-scroll { flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+.bd-scroll::-webkit-scrollbar { height: 7px; }
+.bd-scroll::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 999px; }
 .bd-main {
-  flex: 1; min-height: 0;
+  height: 100%; min-width: 680px; /* keeps columns readable; scrolls when the screen is narrower */
   display: grid; grid-template-columns: 1fr 22px minmax(150px, 220px) 22px 1fr;
   align-items: center; gap: 6px;
 }
@@ -282,7 +287,7 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 @media (max-width: 720px) {
   .bracket-dock { height: 42vh; max-height: none; padding: 9px 10px 10px; }
   .bd-top .funnel { display: none; }
-  .bd-main { grid-template-columns: 1fr 14px minmax(120px, 1fr) 14px 1fr; gap: 4px; }
+  /* The bracket keeps its readable width and scrolls sideways (see .bd-scroll). */
   .bd-champ-n, .bd-box-h { font-size: 10.5px; }
 }
 @media (max-width: 470px) {
