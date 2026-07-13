@@ -84,27 +84,32 @@
         </div>
       </div>
 
-      <div class="card collapsible" id="bracketCard">
-        <button class="card-head" type="button">
-          <span class="ch-title">Bracket</span><span class="caret">▾</span>
-        </button>
-        <div class="card-body">
-          <div class="funnel" id="funnel">
-            <div class="funnel-stage" data-stage="heats"><b>100</b><span>marbles</span></div>
-            <div class="funnel-arrow">→</div>
-            <div class="funnel-stage" data-stage="semis"><b>20</b><span>winners</span></div>
-            <div class="funnel-arrow">→</div>
-            <div class="funnel-stage" data-stage="final"><b>5</b><span>finalists</span></div>
-            <div class="funnel-arrow">→</div>
-            <div class="funnel-stage" data-stage="champion"><b>1</b><span>champ</span></div>
-          </div>
-          <div class="bracket" id="bracket"></div>
-        </div>
-      </div>
     </aside>
 
     <!-- Kept for the renderer; the game draws its own live leaderboard. -->
     <div class="roster" id="roster" hidden></div>
+
+    <!-- Bracket: a classic two-sided "Road to the Final" that slides up from the
+         bottom as a lower third, toggled by the button in the corner. -->
+    <button class="bracket-btn" id="bracketBtn" aria-label="Toggle bracket">
+      <span class="bic" aria-hidden="true"></span><span>Bracket</span>
+    </button>
+    <section class="bracket-dock" id="bracketDock" aria-hidden="true">
+      <div class="bd-top">
+        <div class="bd-title">BRACKET <span>· Road to the Final</span></div>
+        <div class="funnel" id="funnel">
+          <div class="funnel-stage" data-stage="heats"><b>100</b><span>marbles</span></div>
+          <div class="funnel-arrow">→</div>
+          <div class="funnel-stage" data-stage="semis"><b>20</b><span>winners</span></div>
+          <div class="funnel-arrow">→</div>
+          <div class="funnel-stage" data-stage="final"><b>5</b><span>finalists</span></div>
+          <div class="funnel-arrow">→</div>
+          <div class="funnel-stage" data-stage="champion"><b>1</b><span>champ</span></div>
+        </div>
+        <button class="bd-close" id="bracketClose" aria-label="Close bracket">✕</button>
+      </div>
+      <div class="bd-body" id="bracketBody"></div>
+    </section>
 
     <script src="tournament-core.js"></script>
     <script src="viewer.js"></script>

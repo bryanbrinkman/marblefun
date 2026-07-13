@@ -275,34 +275,12 @@ function renderStandings() {
   el('aliveCount').textContent = model.champion ? '' : alive + ' left';
 }
 
-function renderBracket() {
-  const wrap = el('bracket');
-  wrap.innerHTML = '';
-  for (const round of model.rounds) {
-    const col = document.createElement('div');
-    col.className = 'round-col' + (round.key === 'final' ? ' final-col' : '');
-    col.innerHTML = `<h3>${round.title}<span class="rc-n">${round.races.length}</span></h3>`;
-    const races = document.createElement('div');
-    races.className = 'round-races';
-    for (const race of round.races) races.appendChild(renderRaceCard(race));
-    col.appendChild(races);
-    wrap.appendChild(col);
-  }
-  // Keep the current race in view (only matters when the Bracket window is open).
-  const cur = wrap.querySelector('.race-card.current');
-  if (cur && el('bracketCard').classList.contains('open')) {
-    cur.scrollIntoView({ block: 'nearest' });
-  }
-}
-
-function renderRaceCard(race) {
-  const card = document.createElement('div');
-  const status = race.result ? 'done' : race.status || 'pending';
-  card.className = 'race-card ' + status + (race.key === model.currentKey ? ' current' : '');
-  if (race.key === justRevealed) card.classList.add('just-in');
-  const idxLabel = race.roundKey === 'final' ? 'Final' : `#${race.indexInRound + 1}`;
-  card.innerHTML = `<div class="rc-head"><span>${idxLabel}</span><span class="rc-status ${status}">${status}</span></div>`;
-
+// Two-sided "Road to the Final" bracket (Final-Four style): the four
+// semifinals sit at the wings, converging through connectors to the Final and
+// Champion in the centre, with a live Heats progress rail beneath. Rendered
+// into the lower-third dock.
+function bracketSlotRows(race) {
+  if (!race) return '<div class="bd-tbd">— to be decided —</div>';
   const rankBySlot = {};
   const timeBySlot = {};
   if (race.result)
@@ -313,23 +291,67 @@ function renderRaceCard(race) {
   const rows = race.result
     ? race.result.map((r) => race.roster.find((s) => s.slot === r.slot))
     : race.roster;
+  return rows
+    .map((s) => {
+      const rank = rankBySlot[s.slot];
+      const done = rank != null;
+      const t = done ? (timeBySlot[s.slot] != null ? timeBySlot[s.slot].toFixed(1) + 's' : 'DNF') : '';
+      return (
+        `<div class="bd-slot${rank === 1 ? ' win' : ''}">` +
+        `<span class="pos">${done ? rank : ''}</span>` +
+        `<span class="swatch" style="background:${s.color}"></span>` +
+        `<span class="nm">${shortName(s.marbleName)}</span>` +
+        `<span class="t">${t}</span></div>`
+      );
+    })
+    .join('');
+}
 
-  for (const s of rows) {
-    const rank = rankBySlot[s.slot];
-    const slotDiv = document.createElement('div');
-    slotDiv.className = 'slot' + (rank === 1 ? ' win' : '');
-    const done = rank != null;
-    const t = done
-      ? `<span class="t">${timeBySlot[s.slot] != null ? timeBySlot[s.slot].toFixed(1) + 's' : 'DNF'}</span>`
-      : '';
-    slotDiv.innerHTML =
-      `<span class="pos">${done ? rank + '.' : ''}</span>` +
-      `<span class="swatch" style="background:${s.color}"></span>` +
-      `<span class="nm">${shortName(s.marbleName)}</span>` +
-      t;
-    card.appendChild(slotDiv);
-  }
-  return card;
+function bracketBox(race, label, cls) {
+  const status = race ? (race.result ? 'done' : race.status || 'pending') : 'tbd';
+  const current = race && race.key === model.currentKey ? ' current' : '';
+  const justIn = race && race.key === justRevealed ? ' just-in' : '';
+  return (
+    `<div class="bd-box ${cls} ${status}${current}${justIn}">` +
+    `<div class="bd-box-h">${label}</div>` +
+    bracketSlotRows(race) +
+    `</div>`
+  );
+}
+
+function renderBracketDock() {
+  const body = el('bracketBody');
+  if (!body) return;
+  const byKey = (k) => model.rounds.find((r) => r.key === k);
+  const semis = byKey('semis');
+  const final = byKey('final');
+  const heats = byKey('heats');
+  const semi = (i) => (semis && semis.races[i]) || null;
+  const finalRace = final ? final.races[0] : null;
+
+  const champ = model.champion
+    ? `<div class="bd-champ has"><div class="bd-champ-t">🏆</div><div class="bd-champ-n">${model.champion.name}</div></div>`
+    : `<div class="bd-champ"><div class="bd-champ-t">🏁</div><div class="bd-champ-n">Winner</div></div>`;
+
+  const heatPips = heats
+    ? heats.races
+        .map((r) => {
+          const st = r.result ? 'done' : r.key === model.currentKey || (r.status && r.status !== 'pending') ? 'live' : 'pending';
+          return `<i class="bd-pip ${st}" title="Heat ${r.indexInRound + 1}"></i>`;
+        })
+        .join('')
+    : '';
+  const heatsDone = heats ? heats.races.filter((r) => r.result).length : 0;
+
+  body.innerHTML =
+    `<div class="bd-main">` +
+    `<div class="bd-wing left">${bracketBox(semi(0), 'Semifinal 1', 'bd-semi')}${bracketBox(semi(1), 'Semifinal 2', 'bd-semi')}</div>` +
+    `<div class="bd-join left"></div>` +
+    `<div class="bd-center">${bracketBox(finalRace, 'The Final', 'bd-final')}${champ}</div>` +
+    `<div class="bd-join right"></div>` +
+    `<div class="bd-wing right">${bracketBox(semi(2), 'Semifinal 3', 'bd-semi')}${bracketBox(semi(3), 'Semifinal 4', 'bd-semi')}</div>` +
+    `</div>` +
+    `<div class="bd-heats"><span class="bd-heats-l">Heats <b>${heatsDone}/20</b></span><div class="bd-pips">${heatPips}</div></div>`;
 }
 
 function renderChampion() {
@@ -350,7 +372,7 @@ function renderAll() {
   renderFunnel();
   renderUpNext();
   renderRecent();
-  renderBracket();
+  renderBracketDock();
   renderStandings();
   renderChampion();
   const cur = model.currentKey && model.racesByKey.get(model.currentKey);
@@ -783,6 +805,20 @@ connect();
 document.querySelectorAll('.card.collapsible .card-head').forEach((head) => {
   head.addEventListener('click', () => head.closest('.card').classList.toggle('open'));
 });
+
+// Bracket dock: slides up from the bottom; collapses to the corner button.
+{
+  const btn = el('bracketBtn');
+  const dock = el('bracketDock');
+  const closeBtn = el('bracketClose');
+  const setOpen = (open) => {
+    dock.classList.toggle('open', open);
+    btn.classList.toggle('active', open);
+    dock.setAttribute('aria-hidden', open ? 'false' : 'true');
+  };
+  if (btn) btn.addEventListener('click', () => setOpen(!dock.classList.contains('open')));
+  if (closeBtn) closeBtn.addEventListener('click', () => setOpen(false));
+}
 
 // (The embedded game hides its own control bar via ?embed=1 — see marble_run.html.)
 
