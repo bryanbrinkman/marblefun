@@ -18,8 +18,8 @@
   html.embed #topMenu { top: 66px !important; left: 24px !important; right: auto !important; }
   html.embed #ui { top: 116px !important; }
   @media (max-width: 720px) {
-    html.embed #topMenu { top: 98px !important; left: 16px !important; }
-    html.embed #ui { top: 148px !important; left: 16px !important; }
+    html.embed #topMenu { top: 64px !important; left: 16px !important; }
+    html.embed #ui { top: 116px !important; left: 16px !important; }
   }
   html, body {
     width: 100%; height: 100%; overflow: hidden;
@@ -140,13 +140,13 @@
 
   /* Camera button highlights when a follow cam (action / chase / top) is engaged.
      Subtle green tint signals "tracking the marble" without screaming for attention. */
-  #actionCam.active {
+  #actionCam.active, #lqBtn.active {
     background: #9ec272;
     border-color: #5d8538;
     box-shadow: 0 3px 0 #4a6a2c;
   }
-  #actionCam.active:hover { background: #b0d488; }
-  #actionCam.active:active { box-shadow: 0 1px 0 #4a6a2c; }
+  #actionCam.active:hover, #lqBtn.active:hover { background: #b0d488; }
+  #actionCam.active:active, #lqBtn.active:active { box-shadow: 0 1px 0 #4a6a2c; }
 
   /* RE-RACE state: when the race finishes, the RACE button transforms in-place
      (text + handler) into a Re-Race button. We use a separate visual state class
@@ -391,6 +391,12 @@
       <polyline points="4 15 9 15 9 20"/>
     </svg>
   </button>
+  <button id="lqBtn" aria-pressed="false" title="Low-quality mode — smoother on older phones & PCs">
+    <!-- Lightning bolt: performance / low-power rendering. -->
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 2 L4 14 h7 l-1 8 l10-13 h-7 z"/>
+    </svg>
+  </button>
 </div>
 
 <!-- Split-screen panel labels. Hidden by default; shown when X is pressed. Each
@@ -591,6 +597,33 @@ renderer.setClearColor(0x000000, 0);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 document.body.appendChild(renderer.domElement);
+
+// ---- Low-quality mode (persisted) --------------------------------------
+// A lighter render path for old phones / PCs: cap the device pixel ratio at 1
+// (a big fill-rate win on high-DPI screens) and turn dynamic shadows off.
+// Toggled by the ⚡ button in the control bar; the choice is remembered. Set
+// before the world is built so materials compile without shadow sampling.
+let _lowQ = false;
+try { _lowQ = localStorage.getItem('marbleLowQ') === '1'; } catch (e) {}
+function applyQuality(recompile) {
+  const maxDpr = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(_lowQ ? Math.min(maxDpr, 1) : maxDpr);
+  renderer.shadowMap.enabled = !_lowQ;
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  if (recompile && typeof scene !== 'undefined' && scene) {
+    scene.traverse((o) => {
+      if (!o.material) return;
+      const list = Array.isArray(o.material) ? o.material : [o.material];
+      list.forEach((m) => (m.needsUpdate = true));
+    });
+  }
+  const b = document.getElementById('lqBtn');
+  if (b) {
+    b.classList.toggle('active', _lowQ);
+    b.setAttribute('aria-pressed', _lowQ ? 'true' : 'false');
+  }
+}
+applyQuality(false);
 
 // Soft warm ambient — kept low so directional light creates strong contrast
 scene.add(new THREE.AmbientLight(0xfff0d8, 0.38));
@@ -5897,6 +5930,16 @@ fsBtn.addEventListener('click', () => {
 });
 document.addEventListener('fullscreenchange', _syncFsIcon);
 document.addEventListener('webkitfullscreenchange', _syncFsIcon);
+
+// Low-quality toggle: flip the flag, persist it, and re-apply (recompiling
+// materials so shadows drop/return immediately).
+const lqBtn = document.getElementById('lqBtn');
+if (lqBtn)
+  lqBtn.addEventListener('click', () => {
+    _lowQ = !_lowQ;
+    try { localStorage.setItem('marbleLowQ', _lowQ ? '1' : '0'); } catch (e) {}
+    applyQuality(true);
+  });
 
 restartBtn.addEventListener('click', () => {
   finishOrder.length = 0;
