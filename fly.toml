@@ -1,33 +1,30 @@
-# Fly.io config for the always-on marble tournament server.
-#   - one machine that never auto-stops, so the tournament keeps ticking even
-#     when nobody is watching
-#   - a persistent volume for the SQLite database
-# Deploy from the `main` branch.
-app = "marblefun"
-primary_region = "iad"   # Ashburn, US-East. Change to your nearest region.
+# fly.toml app configuration file generated for marblefun on 2026-07-13T15:20:15Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'marblefun'
+primary_region = 'iad'
 
 [build]
 
 [env]
-  HOST = "0.0.0.0"
-  PORT = "8080"
-  DB_PATH = "/data/tournament.db"
-  # MASTER_SEED sets the whole tournament. Change it for a fresh bracket.
-  MASTER_SEED = "424242"
+  DB_PATH = '/data/tournament.db'
+  HOST = '0.0.0.0'
+  MASTER_SEED = '424242'
+  PORT = '8080'
+
+[[mounts]]
+  source = 'marble_data'
+  destination = '/data'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  # Keep the machine running so the tournament clock never pauses.
-  auto_stop_machines = "off"
+  auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
 
-# SQLite lives on a persistent volume so results survive deploys/restarts.
-[[mounts]]
-  source = "marble_data"
-  destination = "/data"
-
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "1gb"   # headless Chromium needs the headroom
+  size = 'shared-cpu-1x'
+  memory = '1gb'
