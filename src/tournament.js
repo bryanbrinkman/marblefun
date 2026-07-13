@@ -68,9 +68,6 @@ class Tournament {
   // tournament is reproducible.
   constructor(masterSeed) {
     this.masterSeed = masterSeed >>> 0;
-    // One shared course for the whole tournament (every marble races the same
-    // track; the race seed varies per race).
-    this.trackSeed = deriveSeed(this.masterSeed, 0xABCD);
 
     // 100 marbles with stable ids and display names.
     this.marbles = [];
@@ -92,6 +89,8 @@ class Tournament {
   _makeRace(roundIdx, indexInRound, participantIds) {
     const round = ROUNDS[roundIdx];
     const raceSeed = deriveSeed(this.masterSeed, 0x5A17, roundIdx + 1, indexInRound + 1);
+    // Each race runs on its own course, so the track changes every race.
+    const trackSeed = deriveSeed(this.masterSeed, 0x7A2C, roundIdx + 1, indexInRound + 1);
     const roster = participantIds.map((mid, slot) => ({
       slot,
       marbleId: mid,
@@ -105,7 +104,7 @@ class Tournament {
       roundKey: round.key,
       roundTitle: round.title,
       indexInRound,
-      trackSeed: this.trackSeed,
+      trackSeed,
       raceSeed,
       roster, // slot -> marble
       result: null, // filled after the race runs

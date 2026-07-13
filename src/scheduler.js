@@ -276,7 +276,6 @@ class Scheduler {
       tournament: {
         id: this.tournamentId,
         masterSeed: this.t.masterSeed,
-        trackSeed: this.t.trackSeed,
         status: this.t.isComplete() ? 'complete' : 'running',
         champion: this.t.champion
           ? { id: this.t.champion, name: this.t.marbleName(this.t.champion) }

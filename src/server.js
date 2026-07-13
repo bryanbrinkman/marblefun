@@ -81,7 +81,6 @@ async function main() {
   const tournament = new Tournament(cfg.masterSeed);
   const tournamentId = db.createTournament({
     masterSeed: tournament.masterSeed,
-    trackSeed: tournament.trackSeed,
     createdAt: Date.now(),
   });
   db.insertMarbles(tournamentId, tournament.marbles);
@@ -111,7 +110,8 @@ async function main() {
   console.log('[server] launching headless simulator…');
   const simulator = await createSimulator({
     url: `${localUrl}/marble_run.html`,
-    trackSeed: tournament.trackSeed,
+    // Any valid seed; each race rebuilds the course for its own trackSeed.
+    trackSeed: tournament.nextPendingRace().trackSeed,
     headless: cfg.headless,
   });
   console.log('[server] simulator ready (course built)');

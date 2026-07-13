@@ -71,7 +71,6 @@
   class Tournament {
     constructor(masterSeed) {
       this.masterSeed = masterSeed >>> 0;
-      this.trackSeed = deriveSeed(this.masterSeed, 0xabcd);
       this.marbles = [];
       for (let i = 1; i <= MARBLE_COUNT; i++) {
         this.marbles.push({ id: i, name: 'Marble ' + String(i).padStart(3, '0') });
@@ -87,6 +86,8 @@
     _makeRace(roundIdx, indexInRound, participantIds) {
       const round = ROUNDS[roundIdx];
       const raceSeed = deriveSeed(this.masterSeed, 0x5a17, roundIdx + 1, indexInRound + 1);
+      // Each race runs on its own course.
+      const trackSeed = deriveSeed(this.masterSeed, 0x7a2c, roundIdx + 1, indexInRound + 1);
       const roster = participantIds.map((mid, slot) => ({
         slot,
         marbleId: mid,
@@ -100,7 +101,7 @@
         roundKey: round.key,
         roundTitle: round.title,
         indexInRound,
-        trackSeed: this.trackSeed,
+        trackSeed,
         raceSeed,
         roster,
         result: null,

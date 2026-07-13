@@ -120,7 +120,7 @@ async function main() {
   await test('scheduler drives the full tournament & persists to SQLite', async () => {
     const db = new DB(':memory:');
     const t = new Tournament(31337);
-    const tid = db.createTournament({ masterSeed: t.masterSeed, trackSeed: t.trackSeed, createdAt: 1 });
+    const tid = db.createTournament({ masterSeed: t.masterSeed, createdAt: 1 });
     db.insertMarbles(tid, t.marbles);
 
     const events = [];

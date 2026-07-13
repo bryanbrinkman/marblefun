@@ -15,7 +15,6 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS tournaments (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,
   master_seed        INTEGER NOT NULL,
-  track_seed         INTEGER NOT NULL,
   created_at         INTEGER NOT NULL,
   status             TEXT NOT NULL DEFAULT 'running',   -- running | complete
   champion_marble_id INTEGER
@@ -77,13 +76,13 @@ class DB {
     this.db.exec(SCHEMA);
   }
 
-  createTournament({ masterSeed, trackSeed, createdAt }) {
+  createTournament({ masterSeed, createdAt }) {
     const info = this.db
       .prepare(
-        `INSERT INTO tournaments (master_seed, track_seed, created_at, status)
-         VALUES (?, ?, ?, 'running')`
+        `INSERT INTO tournaments (master_seed, created_at, status)
+         VALUES (?, ?, 'running')`
       )
-      .run(masterSeed, trackSeed, createdAt);
+      .run(masterSeed, createdAt);
     return Number(info.lastInsertRowid);
   }
 
