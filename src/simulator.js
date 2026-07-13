@@ -35,13 +35,39 @@ async function createSimulator({ url, trackSeed, headless = true, readyTimeoutMs
   const page = await browser.newPage();
 
   const consoleErrors = [];
-  page.on('pageerror', (e) => consoleErrors.push(e.message));
+  const consoleLog = [];
+  page.on('pageerror', (e) => {
+    consoleErrors.push(e.message);
+    console.error('[sim/page error]', e.message);
+  });
+  page.on('console', (m) => consoleLog.push(m.type() + ': ' + m.text()));
+  page.on('requestfailed', (r) =>
+    console.error('[sim/req failed]', r.url(), r.failure() && r.failure().errorText)
+  );
 
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(
-    () => window.marbleAPI && typeof window.marbleAPI.simulateRace === 'function',
-    { timeout: readyTimeoutMs }
-  );
+  try {
+    await page.waitForFunction(
+      () => window.marbleAPI && typeof window.marbleAPI.simulateRace === 'function',
+      { timeout: readyTimeoutMs }
+    );
+  } catch (err) {
+    // Dump what the page actually did so a headless failure is diagnosable from
+    // the server logs instead of a bare TimeoutError.
+    const probe = await page
+      .evaluate(() => ({
+        marbleAPI: typeof window.marbleAPI,
+        simulateRace: window.marbleAPI ? typeof window.marbleAPI.simulateRace : 'n/a',
+        THREE: typeof window.THREE,
+        headlessNoGL: !!window.__headlessNoGL,
+        readyState: document.readyState,
+      }))
+      .catch((e) => ({ probeError: e.message }));
+    console.error('[sim] marbleAPI never became ready. probe:', JSON.stringify(probe));
+    console.error('[sim] page errors:', JSON.stringify(consoleErrors));
+    console.error('[sim] last page console:', JSON.stringify(consoleLog.slice(-15)));
+    throw err;
+  }
 
   // Build the shared course once.
   await page.evaluate((t) => window.marbleAPI.newCourse(t), trackSeed >>> 0);
