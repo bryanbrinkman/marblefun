@@ -24,7 +24,12 @@ function loadPlaywright() {
 
 async function createSimulator({ url, trackSeed, headless = true, readyTimeoutMs = 30000 }) {
   const { chromium } = loadPlaywright();
-  const browser = await chromium.launch({ headless });
+  // In a container the browser runs as root with a tiny /dev/shm, so Chromium
+  // won't start without these flags (it would crash the server on boot).
+  const browser = await chromium.launch({
+    headless,
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+  });
   const page = await browser.newPage();
 
   const consoleErrors = [];
