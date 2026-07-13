@@ -70,6 +70,24 @@ CREATE TABLE IF NOT EXISTS results (
 class DB {
   constructor(file) {
     if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
+    try {
+      this._open(file);
+    } catch (err) {
+      // A hard-killed machine can leave a half-written SQLite file that throws
+      // on open. The DB is just a record of history, so recover by deleting the
+      // corrupt files and starting fresh rather than crashing the server.
+      if (file === ':memory:') throw err;
+      console.error('[db] could not open', file, '-', err && err.message, '— resetting it.');
+      for (const suffix of ['', '-wal', '-shm', '-journal']) {
+        try {
+          fs.rmSync(file + suffix, { force: true });
+        } catch {}
+      }
+      this._open(file);
+    }
+  }
+
+  _open(file) {
     this.db = new DatabaseSync(file);
     this.db.exec('PRAGMA journal_mode = WAL;');
     this.db.exec('PRAGMA foreign_keys = ON;');

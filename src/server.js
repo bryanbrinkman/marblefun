@@ -77,21 +77,19 @@ async function main() {
     fastDemo: process.env.FAST_DEMO === '1',
   });
 
-  const db = new DB(cfg.dbPath);
-  const tournament = new Tournament(cfg.masterSeed);
-  const tournamentId = db.createTournament({
-    masterSeed: tournament.masterSeed,
-    createdAt: Date.now(),
-  });
-  db.insertMarbles(tournamentId, tournament.marbles);
-
+  // State the HTTP/WS handlers close over. Everything heavy (DB, simulator,
+  // scheduler) is set up AFTER the server is already listening, so a failure in
+  // any of it can never stop the site from serving the page.
+  let db = null;
+  let tournament = null;
+  let simulator = null;
   let scheduler = null;
   let simFailed = false;
 
   const httpServer = http.createServer((req, res) => {
     if (req.url.split('?')[0] === '/api/state') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(scheduler ? scheduler.snapshot() : { type: 'starting' }));
+      res.end(JSON.stringify(scheduler ? scheduler.snapshot() : { type: simFailed ? 'no_tournament' : 'starting' }));
       return;
     }
     serveStatic(req, res);
@@ -99,22 +97,30 @@ async function main() {
 
   const wss = new WSServer(httpServer, '/ws');
   wss.on('connection', (conn) => {
-    // Bring the new client fully up to date. If the simulator couldn't start
-    // (e.g. headless issues), tell the client so it falls back to running the
-    // tournament in-browser instead of waiting forever on a live server.
+    // Bring the new client fully up to date. If there's no live tournament
+    // (simulator/DB unavailable), tell the client so it falls back to running
+    // the tournament in-browser instead of waiting forever on a live server.
     if (scheduler) conn.send(JSON.stringify(scheduler.snapshot()));
     else if (simFailed) conn.send(JSON.stringify({ type: 'no_tournament' }));
   });
 
+  // Serve FIRST — the page must always load even if the pieces below fail.
   await new Promise((resolve) => httpServer.listen(cfg.port, cfg.host, resolve));
   const localUrl = `http://127.0.0.1:${cfg.port}`;
   console.log(`[server] listening on http://${cfg.host}:${cfg.port}  (viewer at /)`);
 
-  // Headless simulator loads the very page clients replay. If it can't start,
-  // keep the server up (serving the page + WS) rather than crashing the whole
-  // site: clients will fall back to running the tournament in-browser.
-  let simulator = null;
+  // Now bring up the authoritative tournament: DB → headless simulator →
+  // scheduler. If ANY step fails (corrupt volume, headless issues, …), keep the
+  // server up and let clients fall back to running the tournament in-browser.
   try {
+    db = new DB(cfg.dbPath);
+    tournament = new Tournament(cfg.masterSeed);
+    const tournamentId = db.createTournament({
+      masterSeed: tournament.masterSeed,
+      createdAt: Date.now(),
+    });
+    db.insertMarbles(tournamentId, tournament.marbles);
+
     console.log('[server] launching headless simulator…');
     simulator = await createSimulator({
       url: `${localUrl}/marble_run.html`,
@@ -141,8 +147,10 @@ async function main() {
     scheduler.start();
   } catch (err) {
     simFailed = true;
-    console.error('[server] simulator failed to start; serving page in local-fallback mode:', err && err.message);
-    wss.broadcast({ type: 'no_tournament' });
+    console.error('[server] no live tournament (serving page in local-fallback mode):', err && err.stack || err);
+    try {
+      wss.broadcast({ type: 'no_tournament' });
+    } catch {}
   }
 
   const shutdown = async () => {
@@ -154,7 +162,7 @@ async function main() {
       if (simulator) await simulator.close();
     } catch {}
     try {
-      db.close();
+      if (db) db.close();
     } catch {}
     httpServer.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 2000).unref();
