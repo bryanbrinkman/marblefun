@@ -45,6 +45,19 @@ async function createSimulator({ url, trackSeed, headless = true, readyTimeoutMs
     console.error('[sim/req failed]', r.url(), r.failure() && r.failure().errorText)
   );
 
+  // Force the no-WebGL, physics-only path. Playwright's Chromium enables
+  // software WebGL (SwiftShader) by default, which "works" but renders the
+  // whole 3D scene on the CPU — on a small VM the course build took minutes
+  // and the kernel OOM-killed Chromium. Refusing WebGL contexts makes the game
+  // fall back to its no-op renderer: pure physics, identical results, seconds.
+  await page.addInitScript(() => {
+    const orig = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
+      if (/webgl/i.test(String(type))) return null;
+      return orig.call(this, type, ...rest);
+    };
+  });
+
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   try {
     await page.waitForFunction(
@@ -54,15 +67,20 @@ async function createSimulator({ url, trackSeed, headless = true, readyTimeoutMs
   } catch (err) {
     // Dump what the page actually did so a headless failure is diagnosable from
     // the server logs instead of a bare TimeoutError.
-    const probe = await page
-      .evaluate(() => ({
-        marbleAPI: typeof window.marbleAPI,
-        simulateRace: window.marbleAPI ? typeof window.marbleAPI.simulateRace : 'n/a',
-        THREE: typeof window.THREE,
-        headlessNoGL: !!window.__headlessNoGL,
-        readyState: document.readyState,
-      }))
-      .catch((e) => ({ probeError: e.message }));
+    // The page may be wedged in long-running script, which would hang
+    // page.evaluate (and with it the whole fallback path) — bound the probe.
+    const probe = await Promise.race([
+      page
+        .evaluate(() => ({
+          marbleAPI: typeof window.marbleAPI,
+          simulateRace: window.marbleAPI ? typeof window.marbleAPI.simulateRace : 'n/a',
+          THREE: typeof window.THREE,
+          headlessNoGL: !!window.__headlessNoGL,
+          readyState: document.readyState,
+        }))
+        .catch((e) => ({ probeError: e.message })),
+      new Promise((resolve) => setTimeout(() => resolve({ probeError: 'probe timed out (page busy)' }), 5000)),
+    ]);
     console.error('[sim] marbleAPI never became ready. probe:', JSON.stringify(probe));
     console.error('[sim] page errors:', JSON.stringify(consoleErrors));
     console.error('[sim] last page console:', JSON.stringify(consoleLog.slice(-15)));
