@@ -371,6 +371,8 @@ function ingestSnapshot(msg) {
     for (const race of round.races) model.racesByKey.set(race.key, race);
   for (const race of model.racesByKey.values()) if (race.result) startedRaces.add(race.key);
 
+  if (typeof msg.paused === 'boolean') reflectServerPaused(msg.paused);
+
   const cur = msg.current;
   model.currentKey = cur ? cur.raceKey : null;
   renderAll();
@@ -379,6 +381,14 @@ function ingestSnapshot(msg) {
     const race = model.racesByKey.get(cur.raceKey);
     if (race && !race.result) scheduleStart(race);
   }
+}
+
+// Reflect the SERVER's paused state (admin-driven) in the viewer UI, reusing
+// the same badge/dimming the local-mode pause uses.
+function reflectServerPaused(paused) {
+  document.body.classList.toggle('paused', paused);
+  const badge = el('pausedBadge');
+  if (badge) badge.hidden = !paused;
 }
 
 function onMessage(msg) {
@@ -418,6 +428,9 @@ function onMessage(msg) {
       justRevealed = null;
       break;
     }
+    case 'paused':
+      reflectServerPaused(!!msg.paused);
+      break;
     case 'no_tournament':
       // Server is reachable but has no live tournament (e.g. its headless
       // simulator couldn't start). Run the whole tournament in-browser instead

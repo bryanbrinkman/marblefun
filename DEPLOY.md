@@ -70,6 +70,23 @@ Everything is env vars (set in `fly.toml`'s `[env]`, or with
 | `DB_PATH` | `/data/tournament.db` | SQLite file (on the mounted volume). |
 | `PORT` / `HOST` | `8080` / `0.0.0.0` | Bind address. |
 | `FAST_DEMO` | off | `1` = compressed timings, handy for a quick end-to-end test. |
+| `ADMIN_TOKEN` | _(unset)_ | Protects `/admin`. **Strongly recommended in production** — while unset, anyone can pause/restart/reset your tournament. |
+
+## Admin panel (`/admin`)
+
+`https://<your-app>/admin` controls the live tournament: pause/resume, restart
+(optionally with a specific seed), reset all history, and download CSVs
+(per-race results, per-marble leaderboard, champions).
+
+**Lock it down:** set an `ADMIN_TOKEN` secret so only you can use it. In the Fly
+dashboard → `marblefun` → **Secrets** → **New secret**, name `ADMIN_TOKEN`,
+value = any strong string. (Setting a secret triggers a redeploy.) Then open
+`/admin`, paste the same value into the token field, and Save — it's stored in
+your browser. Without a token set, `/admin` shows a red "UNPROTECTED" banner.
+
+On a static host (Vercel) there's no server, so `/admin` automatically falls
+back to controlling the tournament running in your own browser tab (pause /
+restart only; history/CSV are server-only).
 
 ## Good to know
 

@@ -200,6 +200,81 @@ class DB {
     return races;
   }
 
+  // ---- admin: stats + export + reset ------------------------------------
+
+  // Headline counts for the admin dashboard.
+  statsSummary() {
+    const one = (sql) => this.db.prepare(sql).get().c;
+    return {
+      tournaments: one(`SELECT COUNT(*) c FROM tournaments`),
+      completed: one(`SELECT COUNT(*) c FROM tournaments WHERE status='complete'`),
+      racesRun: one(`SELECT COUNT(*) c FROM races WHERE status='done'`),
+      resultRows: one(`SELECT COUNT(*) c FROM results`),
+    };
+  }
+
+  // Per-tournament champion history (one row per finished tournament).
+  exportChampions() {
+    return this.db
+      .prepare(
+        `SELECT id AS tournament_id, master_seed, created_at,
+                champion_marble_id,
+                'Marble ' || substr('000' || champion_marble_id, -3) AS champion_name
+         FROM tournaments
+         WHERE status='complete' AND champion_marble_id IS NOT NULL
+         ORDER BY id`
+      )
+      .all();
+  }
+
+  // Every finishing position of every race ever run (the raw record).
+  exportResults() {
+    return this.db
+      .prepare(
+        `SELECT r.tournament_id, r.race_key, r.round_key, r.index_in_round + 1 AS heat_number,
+                r.track_seed, r.race_seed,
+                res.rank, res.marble_id, res.marble_name, res.lane, res.time_sec
+         FROM results res
+         JOIN races r ON r.id = res.race_id
+         ORDER BY r.tournament_id, r.round_idx, r.index_in_round, res.rank`
+      )
+      .all();
+  }
+
+  // Aggregate per-marble leaderboard across all history.
+  exportMarbleStats() {
+    return this.db
+      .prepare(
+        `SELECT res.marble_id, res.marble_name,
+                COUNT(*) AS races,
+                SUM(CASE WHEN res.rank = 1 THEN 1 ELSE 0 END) AS heat_wins,
+                SUM(CASE WHEN res.rank <= 3 THEN 1 ELSE 0 END) AS podiums,
+                SUM(CASE WHEN res.time_sec IS NULL THEN 1 ELSE 0 END) AS dnfs,
+                (SELECT COUNT(*) FROM tournaments t
+                   WHERE t.status='complete' AND t.champion_marble_id = res.marble_id) AS titles
+         FROM results res
+         GROUP BY res.marble_id, res.marble_name
+         ORDER BY titles DESC, heat_wins DESC, podiums DESC, races DESC`
+      )
+      .all();
+  }
+
+  // Wipe ALL history. Order respects the implicit result->race->tournament
+  // relationships. The caller is expected to immediately start a fresh
+  // tournament so the DB isn't left empty.
+  resetAllHistory() {
+    this.db.exec('BEGIN');
+    try {
+      for (const table of ['results', 'race_slots', 'races', 'marbles', 'tournaments']) {
+        this.db.exec(`DELETE FROM ${table};`);
+      }
+      this.db.exec('COMMIT');
+    } catch (e) {
+      this.db.exec('ROLLBACK');
+      throw e;
+    }
+  }
+
   close() {
     this.db.close();
   }

@@ -43,8 +43,33 @@ function buildConfig() {
       : fast
         ? 15000
         : null,
+    adminToken: process.env.ADMIN_TOKEN || '', // '' = admin API unprotected
   };
   return cfg;
+}
+
+// A fresh, well-distributed 32-bit seed for a new tournament.
+function randomSeed() {
+  return (Date.now() ^ ((Math.random() * 0xffffffff) >>> 0)) >>> 0;
+}
+
+// Serialize an array of flat row objects to CSV (RFC-4180-ish quoting).
+function toCSV(rows) {
+  if (!rows || rows.length === 0) return '';
+  const cols = Object.keys(rows[0]);
+  const esc = (v) => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [cols.join(',')];
+  for (const r of rows) lines.push(cols.map((c) => esc(r[c])).join(','));
+  return lines.join('\r\n') + '\r\n';
+}
+
+function sendJSON(res, code, obj) {
+  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(obj));
 }
 
 function serveStatic(req, res) {
@@ -94,12 +119,109 @@ async function main() {
   let simulator = null;
   let scheduler = null;
   let simFailed = false;
+  let startTournament = null; // assigned once setup succeeds
+
+  // ---- admin API ---------------------------------------------------------
+  // All /api/admin/* routes require the ADMIN_TOKEN (header x-admin-token or
+  // ?token=) when one is configured. If none is set, the API is open and the
+  // status response flags it as unprotected.
+  const adminAuthed = (url) => {
+    if (!cfg.adminToken) return true;
+    const tok = req_token_from(url);
+    return tok === cfg.adminToken;
+  };
+  function req_token_from(urlObj) {
+    return urlObj.searchParams.get('token') || currentReqHeaders['x-admin-token'] || '';
+  }
+  let currentReqHeaders = {};
+
+  const csvExports = {
+    results: { fn: () => db.exportResults(), file: 'marble-results.csv' },
+    champions: { fn: () => db.exportChampions(), file: 'marble-champions.csv' },
+    marbles: { fn: () => db.exportMarbleStats(), file: 'marble-stats.csv' },
+  };
+
+  function handleAdmin(req, res, url) {
+    currentReqHeaders = req.headers || {};
+    const route = url.pathname.replace(/^\/api\/admin\/?/, '');
+
+    // Status is always readable (so the page can prompt for a token), but it
+    // never exposes the token itself.
+    if (route === 'status' || route === '') {
+      return sendJSON(res, 200, {
+        ok: true,
+        mode: 'server',
+        protected: !!cfg.adminToken,
+        authed: adminAuthed(url),
+        paused: scheduler ? scheduler.isPaused() : false,
+        running: !!scheduler,
+        simFailed,
+        current: scheduler ? scheduler.current : null,
+        tournament: scheduler ? scheduler.snapshot().tournament : null,
+        stats: db ? db.statsSummary() : null,
+      });
+    }
+
+    if (!adminAuthed(url)) return sendJSON(res, 401, { ok: false, error: 'bad or missing admin token' });
+
+    // CSV downloads (GET).
+    if (route.startsWith('export')) {
+      const type = url.searchParams.get('type') || 'results';
+      const spec = csvExports[type];
+      if (!spec) return sendJSON(res, 400, { ok: false, error: 'unknown export type' });
+      const csv = toCSV(spec.fn());
+      res.writeHead(200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${spec.file}"`,
+      });
+      res.end(csv);
+      return;
+    }
+
+    // Mutations (POST).
+    if (req.method !== 'POST') return sendJSON(res, 405, { ok: false, error: 'use POST' });
+    if (!scheduler && route !== 'reset-stats' && route !== 'restart')
+      return sendJSON(res, 409, { ok: false, error: 'no tournament running (simulator unavailable)' });
+
+    switch (route) {
+      case 'pause':
+        scheduler && scheduler.pause();
+        return sendJSON(res, 200, { ok: true, paused: true });
+      case 'resume':
+        scheduler && scheduler.resume();
+        return sendJSON(res, 200, { ok: true, paused: false });
+      case 'restart': {
+        const raw = url.searchParams.get('seed');
+        const seed = raw != null && raw !== '' ? parseInt(raw, 10) >>> 0 : randomSeed();
+        if (!startTournament) return sendJSON(res, 503, { ok: false, error: 'simulator not ready' });
+        if (scheduler) scheduler.stop();
+        startTournament(seed);
+        return sendJSON(res, 200, { ok: true, restarted: true, seed });
+      }
+      case 'reset-stats': {
+        if (!startTournament || !db) return sendJSON(res, 503, { ok: false, error: 'not ready' });
+        if (scheduler) scheduler.stop();
+        db.resetAllHistory();
+        startTournament(randomSeed());
+        return sendJSON(res, 200, { ok: true, reset: true });
+      }
+      default:
+        return sendJSON(res, 404, { ok: false, error: 'unknown admin route' });
+    }
+  }
 
   const httpServer = http.createServer((req, res) => {
-    if (req.url.split('?')[0] === '/api/state') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(scheduler ? scheduler.snapshot() : { type: simFailed ? 'no_tournament' : 'starting' }));
-      return;
+    const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/api/state') {
+      return sendJSON(res, 200, scheduler ? scheduler.snapshot() : { type: simFailed ? 'no_tournament' : 'starting' });
+    }
+    if (url.pathname === '/api/admin' || url.pathname.startsWith('/api/admin/')) {
+      try {
+        return handleAdmin(req, res, url);
+      } catch (e) {
+        console.error('[admin] error:', e && e.message);
+        return sendJSON(res, 500, { ok: false, error: 'admin action failed' });
+      }
     }
     serveStatic(req, res);
   });
@@ -135,8 +257,9 @@ async function main() {
 
     // Endless mode: run a tournament to its champion, hold on the podium for
     // the intermission, then start the next one with a fresh seed — forever.
-    // The first tournament uses the configured masterSeed.
-    const startTournament = (masterSeed) => {
+    // The first tournament uses the configured masterSeed. Assigned to the
+    // outer `startTournament` so the admin API can restart/reset.
+    startTournament = (masterSeed) => {
       tournament = new Tournament(masterSeed >>> 0);
       const tournamentId = db.createTournament({
         masterSeed: tournament.masterSeed,
@@ -156,7 +279,7 @@ async function main() {
           playbackRate: cfg.playbackRate,
           watchOverrideMs: cfg.watchOverrideMs,
           onTournamentComplete: () => {
-            const next = (Date.now() ^ ((Math.random() * 0xffffffff) >>> 0)) >>> 0;
+            const next = randomSeed();
             console.log(`[server] tournament ${tournamentId} complete — starting next (seed ${next})`);
             startTournament(next);
           },

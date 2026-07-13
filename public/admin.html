@@ -16,20 +16,12 @@
         font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
         display: flex; align-items: flex-start; justify-content: center; padding: 32px 18px;
       }
-      .wrap { width: 100%; max-width: 520px; }
-      h1 {
-        font-size: 18px; letter-spacing: 2px; font-weight: 900; margin: 0 0 4px;
-        display: flex; align-items: center; gap: 10px;
-      }
+      .wrap { width: 100%; max-width: 540px; }
+      h1 { font-size: 18px; letter-spacing: 2px; font-weight: 900; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
       h1 .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
       .sub { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
-      .card {
-        background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
-        padding: 18px; margin-bottom: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.4);
-      }
-      .card h2 {
-        margin: 0 0 14px; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted);
-      }
+      .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin-bottom: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.4); }
+      .card h2 { margin: 0 0 14px; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }
       .status-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 14px; }
       .status-grid .k { color: var(--muted); }
       .status-grid .v { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
@@ -37,40 +29,43 @@
       .pill.running { background: rgba(53,208,127,.16); color: var(--live); }
       .pill.paused { background: rgba(255,207,92,.16); color: var(--accent); }
       .pill.off { background: rgba(255,107,107,.14); color: var(--danger); }
-      .row { display: flex; gap: 10px; }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; }
       button {
-        flex: 1; padding: 13px 16px; border-radius: 12px; border: 1px solid var(--line);
+        flex: 1; min-width: 120px; padding: 13px 16px; border-radius: 12px; border: 1px solid var(--line);
         background: var(--panel2); color: var(--text); font-size: 15px; font-weight: 700;
         cursor: pointer; transition: transform .1s, background .2s, border-color .2s;
       }
       button:hover { border-color: var(--muted); }
       button:active { transform: translateY(1px); }
+      button:disabled { opacity: .4; cursor: not-allowed; }
       button.primary { background: linear-gradient(180deg, #2a3a26, var(--panel2)); border-color: #3a5a34; color: var(--live); }
       button.warn { background: linear-gradient(180deg, #3a3416, var(--panel2)); border-color: #5a5122; color: var(--accent); }
       button.danger { background: linear-gradient(180deg, #3a1e1e, var(--panel2)); border-color: #5a2c2c; color: var(--danger); }
       .field { display: flex; gap: 10px; margin-top: 12px; }
-      input {
-        flex: 1; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line);
-        background: #0c1120; color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums;
-      }
+      input { flex: 1; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: #0c1120; color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums; }
       .note { color: var(--muted); font-size: 12.5px; line-height: 1.6; }
       .note code { background: var(--panel2); padding: 1px 5px; border-radius: 5px; }
       a { color: var(--accent); }
-      .toast { min-height: 18px; color: var(--live); font-size: 13px; margin-top: 10px; text-align: center; }
+      .toast { min-height: 18px; font-size: 13px; margin-top: 10px; text-align: center; color: var(--live); }
+      .toast.err { color: var(--danger); }
+      .banner { border-radius: 12px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+      .banner.warn { background: rgba(255,207,92,.12); border: 1px solid #5a5122; color: var(--accent); }
+      [hidden] { display: none !important; }
     </style>
   </head>
   <body>
     <div class="wrap">
       <h1><span class="dot"></span> TOURNAMENT ADMIN</h1>
-      <div class="sub">Control the marble tournament running in this browser.</div>
+      <div class="sub" id="subline">Connecting…</div>
+
+      <div class="banner warn" id="tokenBanner" hidden></div>
 
       <div class="card">
         <h2>Status</h2>
         <div class="status-grid">
-          <div class="k">Viewer</div><div class="v" id="stViewer">—</div>
+          <div class="k">Mode</div><div class="v" id="stMode">—</div>
           <div class="k">State</div><div class="v" id="stState">—</div>
           <div class="k">Current race</div><div class="v" id="stCurrent">—</div>
-          <div class="k">Progress</div><div class="v" id="stProgress">—</div>
           <div class="k">Champion</div><div class="v" id="stChampion">—</div>
         </div>
       </div>
@@ -82,73 +77,184 @@
           <button class="primary" id="resumeBtn">▶ Resume</button>
         </div>
         <div class="field">
-          <input id="seedInput" placeholder="Reset — optional seed (number)" inputmode="numeric" />
-          <button class="danger" id="resetBtn" style="flex:0 0 auto; padding-left:20px; padding-right:20px;">↺ Reset</button>
+          <input id="seedInput" placeholder="New tournament — optional seed" inputmode="numeric" />
+          <button class="primary" id="restartBtn" style="flex:0 0 auto; padding:0 20px;">↻ Restart</button>
         </div>
         <div class="toast" id="toast"></div>
       </div>
 
-      <div class="card note">
-        The tournament is deterministic and runs client-side, so these controls
-        act on the tournament in <b>your browser</b> (open the
-        <a href="./" target="_blank">viewer</a> in another tab). Pause halts
-        between races; Reset starts a fresh tournament — enter a seed to
-        reproduce a specific one, or leave blank for random. Pausing is
-        remembered across reloads.
+      <div class="card" id="statsCard">
+        <h2>Historical stats</h2>
+        <div class="status-grid" style="margin-bottom:14px">
+          <div class="k">Tournaments</div><div class="v" id="stTournaments">—</div>
+          <div class="k">Completed</div><div class="v" id="stCompleted">—</div>
+          <div class="k">Races recorded</div><div class="v" id="stRaces">—</div>
+          <div class="k">Result rows</div><div class="v" id="stRows">—</div>
+        </div>
+        <div class="row">
+          <button id="dlResults">⬇ Results CSV</button>
+          <button id="dlMarbles">⬇ Marble stats CSV</button>
+          <button id="dlChampions">⬇ Champions CSV</button>
+        </div>
+        <div class="field">
+          <button class="danger" id="resetBtn">🗑 Reset all historical stats</button>
+        </div>
+      </div>
+
+      <div class="card" id="tokenCard" hidden>
+        <h2>Admin token</h2>
+        <div class="field" style="margin-top:0">
+          <input id="tokenInput" type="password" placeholder="ADMIN_TOKEN" autocomplete="off" />
+          <button class="primary" id="saveTokenBtn" style="flex:0 0 auto; padding:0 20px;">Save</button>
+        </div>
+        <div class="note" style="margin-top:10px">Stored only in this browser.</div>
+      </div>
+
+      <div class="card note" id="serverNote" hidden>
+        These controls act on the <b>live server tournament</b> everyone sees at
+        <a href="./" target="_blank">the viewer</a>. Pause halts between races;
+        Restart starts a fresh tournament immediately (blank seed = random).
+        Reset wipes all recorded history and starts clean — download the CSVs
+        first if you want to keep them.
+      </div>
+      <div class="card note" id="localNote" hidden>
+        No live server detected, so these controls act on the tournament in
+        <b>your browser</b> only (open the <a href="./" target="_blank">viewer</a>
+        in another tab). History/CSV export is a server-only feature.
       </div>
     </div>
 
     <script>
-      const ch = 'BroadcastChannel' in window ? new BroadcastChannel('marble-admin') : null;
       const el = (id) => document.getElementById(id);
-      let last = null, lastSeen = 0;
+      const TOKEN_KEY = 'marble-admin-token';
+      let serverMode = null; // null=unknown, true=server, false=local
+      let token = '';
+      try { token = localStorage.getItem(TOKEN_KEY) || ''; } catch {}
 
-      function send(cmd) {
+      function toast(msg, isErr) {
+        const t = el('toast');
+        t.textContent = msg; t.className = 'toast' + (isErr ? ' err' : '');
+        setTimeout(() => { if (t.textContent === msg) t.textContent = ''; }, 2500);
+      }
+
+      // ---- server mode (HTTP API) -----------------------------------------
+      async function apiStatus() {
+        const r = await fetch('/api/admin/status', { headers: token ? { 'x-admin-token': token } : {} });
+        if (!r.ok) throw new Error('status ' + r.status);
+        return r.json();
+      }
+      async function apiPost(route) {
+        const r = await fetch('/api/admin/' + route, { method: 'POST', headers: token ? { 'x-admin-token': token } : {} });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
+        return j;
+      }
+      function download(type) {
+        const q = new URLSearchParams({ type }); if (token) q.set('token', token);
+        window.location.href = '/api/admin/export?' + q.toString();
+      }
+
+      function renderServer(s) {
+        el('subline').textContent = 'Controlling the live server tournament.';
+        el('serverNote').hidden = false; el('localNote').hidden = true;
+        el('statsCard').hidden = false;
+        el('stMode').innerHTML = '<span class="pill running">server</span>';
+        const needTok = s.protected && !s.authed;
+        el('tokenCard').hidden = !s.protected;
+        el('tokenBanner').hidden = !needTok;
+        if (needTok) el('tokenBanner').textContent = '🔒 This admin is protected. Enter the ADMIN_TOKEN below to enable controls.';
+        else if (!s.protected) { el('tokenBanner').hidden = false; el('tokenBanner').textContent = '⚠ Admin is UNPROTECTED — anyone can control it. Set an ADMIN_TOKEN (see the note) to lock it down.'; }
+
+        const disabled = needTok;
+        for (const id of ['pauseBtn','resumeBtn','restartBtn','resetBtn','dlResults','dlMarbles','dlChampions'])
+          el(id).disabled = disabled;
+
+        if (!s.running) el('stState').innerHTML = '<span class="pill off">' + (s.simFailed ? 'no live tournament' : 'starting…') + '</span>';
+        else el('stState').innerHTML = s.paused ? '<span class="pill paused">paused</span>' : '<span class="pill running">running</span>';
+        const cur = s.current;
+        el('stCurrent').textContent = cur && cur.raceKey ? (cur.raceKey + ' · ' + (cur.phase || '')) : '—';
+        el('stChampion').textContent = s.tournament && s.tournament.champion ? s.tournament.champion.name : '—';
+        const st = s.stats || {};
+        el('stTournaments').textContent = st.tournaments ?? '—';
+        el('stCompleted').textContent = st.completed ?? '—';
+        el('stRaces').textContent = st.racesRun ?? '—';
+        el('stRows').textContent = st.resultRows ?? '—';
+      }
+
+      async function refresh() {
+        try {
+          const s = await apiStatus();
+          if (s && s.mode === 'server') { serverMode = true; renderServer(s); return; }
+          throw new Error('not server');
+        } catch (e) {
+          if (serverMode !== false) { serverMode = false; initLocal(); }
+        }
+      }
+
+      // Server control wiring (also used by local mode where noted).
+      el('pauseBtn').onclick = async () => {
+        if (serverMode) { try { await apiPost('pause'); toast('Paused'); refresh(); } catch (e) { toast(e.message, true); } }
+        else localSend({ type: 'pause' }, 'Paused');
+      };
+      el('resumeBtn').onclick = async () => {
+        if (serverMode) { try { await apiPost('resume'); toast('Resumed'); refresh(); } catch (e) { toast(e.message, true); } }
+        else localSend({ type: 'resume' }, 'Resumed');
+      };
+      el('restartBtn').onclick = async () => {
+        const raw = el('seedInput').value.trim();
+        const seed = raw === '' ? null : (parseInt(raw, 10) >>> 0);
+        if (serverMode) {
+          if (!confirm('Start a brand-new tournament now? The current one is abandoned.')) return;
+          try { const j = await apiPost('restart' + (seed != null ? '?seed=' + seed : '')); toast('Restarted (seed ' + j.seed + ')'); refresh(); }
+          catch (e) { toast(e.message, true); }
+        } else localSend({ type: 'reset', seed }, seed == null ? 'Reset (random)' : 'Reset (seed ' + seed + ')');
+      };
+      el('resetBtn').onclick = async () => {
+        if (!serverMode) { toast('Server-only feature', true); return; }
+        if (!confirm('DELETE all recorded history (every past tournament, race and result) and start fresh? This cannot be undone.')) return;
+        try { await apiPost('reset-stats'); toast('History wiped — fresh tournament started'); refresh(); }
+        catch (e) { toast(e.message, true); }
+      };
+      el('dlResults').onclick = () => download('results');
+      el('dlMarbles').onclick = () => download('marbles');
+      el('dlChampions').onclick = () => download('champions');
+      el('saveTokenBtn').onclick = () => {
+        token = el('tokenInput').value.trim();
+        try { localStorage.setItem(TOKEN_KEY, token); } catch {}
+        el('tokenInput').value = '';
+        toast('Token saved'); refresh();
+      };
+
+      // ---- local (BroadcastChannel) fallback ------------------------------
+      let ch = null, last = null, lastSeen = 0, localInited = false;
+      function localSend(cmd, msg) {
         if (ch) ch.postMessage(cmd);
         if (cmd.type === 'pause' || cmd.type === 'resume') {
           try { localStorage.setItem('marble-admin', JSON.stringify({ paused: cmd.type === 'pause' })); } catch {}
         }
+        if (msg) toast(msg);
       }
-      function toast(msg) {
-        el('toast').textContent = msg;
-        setTimeout(() => { if (el('toast').textContent === msg) el('toast').textContent = ''; }, 2000);
+      function initLocal() {
+        el('subline').textContent = 'No server — controlling the tournament in this browser.';
+        el('localNote').hidden = false; el('serverNote').hidden = true;
+        el('statsCard').hidden = true; el('tokenCard').hidden = true; el('tokenBanner').hidden = true;
+        el('stMode').innerHTML = '<span class="pill paused">local (this browser)</span>';
+        if (localInited) return; localInited = true;
+        ch = 'BroadcastChannel' in window ? new BroadcastChannel('marble-admin') : null;
+        if (ch) ch.onmessage = (e) => { if (e.data && e.data.type === 'status') { last = e.data; lastSeen = Date.now(); renderLocal(); } };
+        setInterval(() => { if (!serverMode && ch) { ch.postMessage({ type: 'request-status' }); renderLocal(); } }, 1500);
       }
-
-      if (ch) ch.onmessage = (e) => {
-        if (e.data && e.data.type === 'status') { last = e.data; lastSeen = Date.now(); render(); }
-      };
-
-      function render() {
+      function renderLocal() {
         const live = last && Date.now() - lastSeen < 4000;
-        el('stViewer').innerHTML = live
-          ? '<span class="pill running">connected</span>'
-          : '<span class="pill off">no viewer</span>';
-        if (live) {
-          el('stState').innerHTML = last.paused
-            ? '<span class="pill paused">paused</span>'
-            : '<span class="pill running">running</span>';
-          el('stCurrent').textContent = last.champion ? '— (complete)' : (last.current || '—');
-          el('stProgress').textContent = `${last.done} / ${last.total}`;
-          el('stChampion').textContent = last.champion || '—';
-        } else {
-          el('stState').textContent = el('stCurrent').textContent = el('stProgress').textContent = el('stChampion').textContent = '—';
-        }
+        el('stState').innerHTML = live
+          ? (last.paused ? '<span class="pill paused">paused</span>' : '<span class="pill running">running</span>')
+          : '<span class="pill off">no viewer open</span>';
+        el('stCurrent').textContent = live ? (last.champion ? '— (complete)' : (last.current || '—')) : '—';
+        el('stChampion').textContent = live ? (last.champion || '—') : '—';
       }
 
-      el('pauseBtn').onclick = () => { send({ type: 'pause' }); toast('Paused'); };
-      el('resumeBtn').onclick = () => { send({ type: 'resume' }); toast('Resumed'); };
-      el('resetBtn').onclick = () => {
-        const raw = el('seedInput').value.trim();
-        const seed = raw === '' ? null : (parseInt(raw, 10) >>> 0);
-        send({ type: 'reset', seed });
-        toast(seed == null ? 'Reset (random)' : 'Reset (seed ' + seed + ')');
-      };
-
-      // Poll the viewer for status.
-      setInterval(() => { send({ type: 'request-status' }); render(); }, 1500);
-      if (!ch) { el('stViewer').textContent = 'BroadcastChannel unsupported'; }
-      send({ type: 'request-status' });
-      render();
+      refresh();
+      setInterval(() => { if (serverMode !== false) refresh(); }, 2500);
     </script>
   </body>
 </html>

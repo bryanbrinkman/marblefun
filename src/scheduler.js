@@ -44,8 +44,32 @@ class Scheduler {
     this.cfg = { ...DEFAULTS, ...config };
     this.timers = new Set();
     this.stopped = false;
+    this.paused = false;
+    this._idle = false; // true when paused and waiting between races
     this.current = null; // { race, phase, scheduledStart }
     this._persistedRounds = new Set();
+  }
+
+  isPaused() {
+    return this.paused;
+  }
+
+  // Pause takes effect between races: the current race (if any) finishes, then
+  // the scheduler idles until resume().
+  pause() {
+    if (this.paused || this.stopped) return;
+    this.paused = true;
+    this.broadcast({ type: 'paused', paused: true, serverNow: this.now() });
+  }
+
+  resume() {
+    if (!this.paused || this.stopped) return;
+    this.paused = false;
+    this.broadcast({ type: 'paused', paused: false, serverNow: this.now() });
+    if (this._idle) {
+      this._idle = false;
+      this._runNext();
+    }
   }
 
   _t(fn, ms) {
@@ -87,6 +111,12 @@ class Scheduler {
 
   _runNext() {
     if (this.stopped) return;
+    if (this.paused) {
+      // Idle until resume() calls _runNext again.
+      this._idle = true;
+      if (this.current) this.current = { ...this.current, phase: 'paused' };
+      return;
+    }
     let race = this.t.nextPendingRace();
     if (!race) {
       // Current round done — try to build the next one.
@@ -309,6 +339,7 @@ class Scheduler {
       announceLeadMs: this.cfg.announceLeadMs,
       playbackRate: this.cfg.playbackRate,
       viewerUrl: 'marble_run.html',
+      paused: this.paused,
       tournament: {
         id: this.tournamentId,
         masterSeed: this.t.masterSeed,
