@@ -86,6 +86,7 @@ async function main() {
   db.insertMarbles(tournamentId, tournament.marbles);
 
   let scheduler = null;
+  let simFailed = false;
 
   const httpServer = http.createServer((req, res) => {
     if (req.url.split('?')[0] === '/api/state') {
@@ -98,39 +99,51 @@ async function main() {
 
   const wss = new WSServer(httpServer, '/ws');
   wss.on('connection', (conn) => {
-    // Bring the new client fully up to date.
+    // Bring the new client fully up to date. If the simulator couldn't start
+    // (e.g. headless issues), tell the client so it falls back to running the
+    // tournament in-browser instead of waiting forever on a live server.
     if (scheduler) conn.send(JSON.stringify(scheduler.snapshot()));
+    else if (simFailed) conn.send(JSON.stringify({ type: 'no_tournament' }));
   });
 
   await new Promise((resolve) => httpServer.listen(cfg.port, cfg.host, resolve));
   const localUrl = `http://127.0.0.1:${cfg.port}`;
   console.log(`[server] listening on http://${cfg.host}:${cfg.port}  (viewer at /)`);
 
-  // Headless simulator loads the very page clients replay.
-  console.log('[server] launching headless simulator…');
-  const simulator = await createSimulator({
-    url: `${localUrl}/marble_run.html`,
-    // Any valid seed; each race rebuilds the course for its own trackSeed.
-    trackSeed: tournament.nextPendingRace().trackSeed,
-    headless: cfg.headless,
-  });
-  console.log('[server] simulator ready (course built)');
+  // Headless simulator loads the very page clients replay. If it can't start,
+  // keep the server up (serving the page + WS) rather than crashing the whole
+  // site: clients will fall back to running the tournament in-browser.
+  let simulator = null;
+  try {
+    console.log('[server] launching headless simulator…');
+    simulator = await createSimulator({
+      url: `${localUrl}/marble_run.html`,
+      // Any valid seed; each race rebuilds the course for its own trackSeed.
+      trackSeed: tournament.nextPendingRace().trackSeed,
+      headless: cfg.headless,
+    });
+    console.log('[server] simulator ready (course built)');
 
-  scheduler = new Scheduler({
-    tournament,
-    db,
-    simulator,
-    tournamentId,
-    broadcast: (msg) => wss.broadcast(msg),
-    config: {
-      masterSeed: cfg.masterSeed,
-      announceLeadMs: cfg.announceLeadMs,
-      interRaceGapMs: cfg.interRaceGapMs,
-      playbackRate: cfg.playbackRate,
-      watchOverrideMs: cfg.watchOverrideMs,
-    },
-  });
-  scheduler.start();
+    scheduler = new Scheduler({
+      tournament,
+      db,
+      simulator,
+      tournamentId,
+      broadcast: (msg) => wss.broadcast(msg),
+      config: {
+        masterSeed: cfg.masterSeed,
+        announceLeadMs: cfg.announceLeadMs,
+        interRaceGapMs: cfg.interRaceGapMs,
+        playbackRate: cfg.playbackRate,
+        watchOverrideMs: cfg.watchOverrideMs,
+      },
+    });
+    scheduler.start();
+  } catch (err) {
+    simFailed = true;
+    console.error('[server] simulator failed to start; serving page in local-fallback mode:', err && err.message);
+    wss.broadcast({ type: 'no_tournament' });
+  }
 
   const shutdown = async () => {
     console.log('\n[server] shutting down…');
@@ -138,7 +151,7 @@ async function main() {
       scheduler && scheduler.stop();
     } catch {}
     try {
-      await simulator.close();
+      if (simulator) await simulator.close();
     } catch {}
     try {
       db.close();

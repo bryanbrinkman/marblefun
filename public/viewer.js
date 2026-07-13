@@ -414,6 +414,12 @@ function onMessage(msg) {
       justRevealed = null;
       break;
     }
+    case 'no_tournament':
+      // Server is reachable but has no live tournament (e.g. its headless
+      // simulator couldn't start). Run the whole tournament in-browser instead
+      // of waiting forever on a server that will never announce a race.
+      goLocal();
+      break;
     case 'tournament_complete':
       model.champion = msg.champion;
       model.currentKey = null;
@@ -729,6 +735,7 @@ function connect() {
     } catch {}
   };
   ws.onmessage = (ev) => {
+    if (mode === 'local') return; // already fell back; ignore late server msgs
     if (mode !== 'server') mode = 'server';
     try {
       onMessage(JSON.parse(ev.data));
