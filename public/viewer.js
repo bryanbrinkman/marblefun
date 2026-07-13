@@ -333,34 +333,37 @@ function renderBracketDock() {
     ? `<div class="bd-champ has"><div class="bd-champ-t">🏆</div><div class="bd-champ-n">${model.champion.name}</div></div>`
     : `<div class="bd-champ"><div class="bd-champ-t">🏁</div><div class="bd-champ-n">Winner</div></div>`;
 
-  const heatPips = heats
-    ? heats.races
-        .map((r) => {
-          const st = r.result ? 'done' : r.key === model.currentKey || (r.status && r.status !== 'pending') ? 'live' : 'pending';
-          return `<i class="bd-pip ${st}" title="Heat ${r.indexInRound + 1}"></i>`;
-        })
-        .join('')
-    : '';
-  const heatsDone = heats ? heats.races.filter((r) => r.result).length : 0;
+  const hraces = heats ? heats.races : [];
+  const heatCol = (arr, offset) =>
+    `<div class="bd-heatcol">` +
+    arr.map((r, i) => bracketBox(r || null, 'Heat ' + (offset + i + 1), 'bd-heat')).join('') +
+    `</div>`;
 
-  // Preserve the horizontal scroll position across the frequent re-renders (on
-  // mobile the bracket is wider than the screen and pans left/right); centre it
-  // on the very first render so the Final is the focal point.
+  // Preserve scroll position across the frequent re-renders (the full bracket is
+  // wider AND taller than the dock, so it pans both ways); on the very first
+  // render, centre on the Final.
   const prev = body.querySelector('.bd-scroll');
   const prevLeft = prev ? prev.scrollLeft : null;
+  const prevTop = prev ? prev.scrollTop : null;
 
   body.innerHTML =
     `<div class="bd-scroll"><div class="bd-main">` +
+    heatCol(hraces.slice(0, 10), 0) +
+    `<div class="bd-core">` +
     `<div class="bd-wing left">${bracketBox(semi(0), 'Semifinal 1', 'bd-semi')}${bracketBox(semi(1), 'Semifinal 2', 'bd-semi')}</div>` +
     `<div class="bd-join left"></div>` +
     `<div class="bd-center">${bracketBox(finalRace, 'The Final', 'bd-final')}${champ}</div>` +
     `<div class="bd-join right"></div>` +
     `<div class="bd-wing right">${bracketBox(semi(2), 'Semifinal 3', 'bd-semi')}${bracketBox(semi(3), 'Semifinal 4', 'bd-semi')}</div>` +
-    `</div></div>` +
-    `<div class="bd-heats"><span class="bd-heats-l">Heats <b>${heatsDone}/20</b></span><div class="bd-pips">${heatPips}</div></div>`;
+    `</div>` +
+    heatCol(hraces.slice(10, 20), 10) +
+    `</div></div>`;
 
   const sc = body.querySelector('.bd-scroll');
-  if (sc) sc.scrollLeft = prevLeft != null ? prevLeft : Math.max(0, (sc.scrollWidth - sc.clientWidth) / 2);
+  if (sc) {
+    sc.scrollLeft = prevLeft != null ? prevLeft : Math.max(0, (sc.scrollWidth - sc.clientWidth) / 2);
+    sc.scrollTop = prevTop != null ? prevTop : Math.max(0, (sc.scrollHeight - sc.clientHeight) / 2);
+  }
 }
 
 function renderChampion() {

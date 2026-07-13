@@ -197,7 +197,7 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 
 .bracket-dock {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
-  height: 36vh; min-height: 250px; max-height: 360px; overflow: hidden;
+  height: 46vh; min-height: 300px; max-height: 460px; overflow: hidden;
   display: flex; flex-direction: column; gap: 7px; padding: 8px 16px 10px;
   background: linear-gradient(180deg, rgba(10,13,20,.30) 0%, rgba(12,16,26,.80) 22%, rgba(8,11,18,.90) 100%);
   border-top: 1px solid var(--line);
@@ -217,17 +217,19 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 .bd-close:hover { color: var(--text); border-color: var(--muted); }
 
 .bd-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
-/* Horizontal scroller: on a narrow screen the two-sided bracket is wider than
-   the viewport, so it pans left/right instead of cropping. */
-.bd-scroll { flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
-.bd-scroll::-webkit-scrollbar { height: 7px; }
+/* The FULL bracket (20 heats + semis + final) is wider and taller than the
+   lower-third dock, so it pans both ways inside this scroller. */
+.bd-scroll { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
+.bd-scroll::-webkit-scrollbar { width: 7px; height: 7px; }
 .bd-scroll::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 999px; }
-.bd-main {
-  height: 100%; min-width: 680px; /* keeps columns readable; scrolls when the screen is narrower */
-  display: grid; grid-template-columns: 1fr 22px minmax(150px, 220px) 22px 1fr;
-  align-items: center; gap: 6px;
-}
-.bd-wing { display: flex; flex-direction: column; justify-content: center; gap: 7px; min-width: 0; height: 100%; }
+.bd-main { display: flex; align-items: center; gap: 12px; width: max-content; padding: 2px; }
+
+/* Outer columns: the 10 heats on each side. */
+.bd-heatcol { flex: none; width: 150px; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+
+/* Centre group: the Final-Four bracket (semis -> final -> champion). */
+.bd-core { flex: none; display: grid; grid-template-columns: 182px 20px 186px 20px 182px; align-items: stretch; gap: 6px; }
+.bd-wing { display: flex; flex-direction: column; justify-content: center; gap: 10px; min-width: 0; }
 .bd-center { display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 6px; min-width: 0; }
 
 .bd-box {
@@ -248,6 +250,14 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 .bd-slot .t { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 9.5px; }
 .bd-slot.win { color: var(--accent); font-weight: 800; opacity: 1; }
 .bd-box.pending .bd-slot { opacity: .55; }
+
+/* compact heat boxes (there are 20 of them) */
+.bd-heat { padding: 3px 6px 4px; }
+.bd-heat .bd-box-h { font-size: 8px; margin-bottom: 1px; }
+.bd-heat .bd-slot { font-size: 9.5px; gap: 5px; line-height: 1.22; }
+.bd-heat .bd-slot .pos { width: 8px; }
+.bd-heat .bd-slot .swatch { width: 8px; height: 8px; }
+.bd-heat .bd-slot .t { font-size: 8.5px; }
 
 /* connectors: vertical link between the two wing semis + a stub into the centre */
 .bd-join { position: relative; align-self: stretch; }
@@ -285,10 +295,9 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
   .paused-badge { top: 58px; }
 }
 @media (max-width: 720px) {
-  .bracket-dock { height: 42vh; max-height: none; padding: 9px 10px 10px; }
+  .bracket-dock { height: 56vh; max-height: none; padding: 9px 10px 10px; }
   .bd-top .funnel { display: none; }
-  /* The bracket keeps its readable width and scrolls sideways (see .bd-scroll). */
-  .bd-champ-n, .bd-box-h { font-size: 10.5px; }
+  /* The full bracket keeps its readable size and pans in both directions. */
 }
 @media (max-width: 470px) {
   .brand-name { display: none; }
