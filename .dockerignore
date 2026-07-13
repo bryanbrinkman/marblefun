@@ -1,0 +1,10 @@
+.git
+node_modules
+data
+*.db
+*.db-wal
+*.db-shm
+npm-debug.log
+.DS_Store
+.vercel
+scratchpad

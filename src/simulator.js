@@ -8,8 +8,8 @@
 // same code the viewer replays, the recorded result is guaranteed to match
 // what every client sees on screen.
 //
-// One browser + page is reused for the whole tournament. The course is built
-// once (the tournament shares a single track); each race just calls
+// One browser + page is reused for the whole tournament. Each race builds its
+// own course (via setCourse for the race's trackSeed) and then calls
 // simulateRace(raceSeed), which fast-forwards the physics with no rendering.
 
 // Playwright is installed globally in this environment; fall back to the
@@ -44,8 +44,7 @@ async function createSimulator({ url, trackSeed, headless = true, readyTimeoutMs
   return {
     consoleErrors,
 
-    // Rebuild the course for a different track seed (not needed for the default
-    // single-track tournament, but supported).
+    // Rebuild the course for a different track seed (each race has its own).
     async setCourse(t) {
       currentTrack = t >>> 0;
       await page.evaluate((tt) => window.marbleAPI.newCourse(tt), currentTrack);
