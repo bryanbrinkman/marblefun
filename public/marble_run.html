@@ -552,7 +552,33 @@ setIsoCamera(camYaw, camPitch, camDistance);
 // so right-click → "Save Image As..." in the browser captures the actual rendered
 // frame. Without this, the buffer may be cleared by the time the browser reads it,
 // producing a blank PNG. Small perf overhead, acceptable for this scene size.
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+//
+// The deterministic race sim (window.marbleAPI.simulateRace) is pure physics and
+// never renders, so the tournament SERVER can run this page headless on a machine
+// with no GPU/WebGL. In that case WebGLRenderer construction throws; fall back to
+// a no-op renderer so the rest of the script (which defines marbleAPI) still runs.
+// Real browsers with WebGL are unaffected — they take the normal path.
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+} catch (e) {
+  console.warn('[marble] WebGL unavailable — running headless (physics only, no rendering).', e && e.message);
+  window.__headlessNoGL = true;
+  const noop = () => {};
+  renderer = {
+    domElement: document.createElement('canvas'),
+    shadowMap: {},
+    capabilities: { getMaxAnisotropy: () => 1 },
+    setSize: noop,
+    setPixelRatio: noop,
+    setClearColor: noop,
+    setScissorTest: noop,
+    setScissor: noop,
+    setViewport: noop,
+    clear: noop,
+    render: noop,
+  };
+}
 renderer.setSize(window.innerWidth, window.innerHeight);
 // Cap pixel ratio at 2 — high-DPI mobile devices (3x) otherwise allocate huge
 // framebuffers that exceed GPU memory limits and prevent the page from rendering.

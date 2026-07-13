@@ -24,23 +24,13 @@ function loadPlaywright() {
 
 async function createSimulator({ url, trackSeed, headless = true, readyTimeoutMs = 30000 }) {
   const { chromium } = loadPlaywright();
-  // The game is a THREE.js/WebGL app, so headless Chromium must have a working
-  // WebGL context or the renderer throws and window.marbleAPI never attaches.
-  //   --no-sandbox / --disable-dev-shm-usage: required to run as root in a
-  //     container with a tiny /dev/shm (else Chromium won't start).
-  //   --use-gl=angle + --use-angle=swiftshader + --enable-unsafe-swiftshader:
-  //     force software (SwiftShader) WebGL. Recent Chromium disables the
-  //     automatic GPU->software fallback on headless boxes with no GPU (like
-  //     Fly) unless --enable-unsafe-swiftshader re-enables it.
+  // --no-sandbox / --disable-dev-shm-usage are required to run Chromium as root
+  // in a container with a tiny /dev/shm (else it won't start). No WebGL flags
+  // needed: the sim is pure physics and the game falls back to a no-op renderer
+  // when WebGL is unavailable (see the WebGLRenderer try/catch in marble_run.html).
   const browser = await chromium.launch({
     headless,
-    args: [
-      '--no-sandbox',
-      '--disable-dev-shm-usage',
-      '--use-gl=angle',
-      '--use-angle=swiftshader',
-      '--enable-unsafe-swiftshader',
-    ],
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
   });
   const page = await browser.newPage();
 
