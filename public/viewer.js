@@ -333,7 +333,11 @@ function renderRaceCard(race) {
 }
 
 function renderChampion() {
-  if (!model.champion) return;
+  if (!model.champion) {
+    // A fresh tournament (server auto-loop or local restart) clears the champion.
+    el('championCard').hidden = true;
+    return;
+  }
   el('championCard').hidden = false;
   el('championName').textContent = model.champion.name;
   el('cd').classList.remove('live');
@@ -566,7 +570,7 @@ async function runLocalTournament(seed, aborted) {
   model.currentKey = null;
   renderAll();
   broadcastStatus();
-  await ensureCourse(T.trackSeed);
+  // (No shared course to pre-build — every race builds its own track.)
 
   for (;;) {
     if (aborted && aborted()) return false;
@@ -659,10 +663,19 @@ async function runLocalRace(T, race, aborted) {
   runCountdown(race);
   await ensureCourse(race.trackSeed);
   // Compute the true result first (deterministic fast-forward), then reset the
-  // marbles to the gate for a clean pre-race view. We reset WITHOUT rebuilding
-  // the course (the tournament reuses one course all tournament) — rebuilding
-  // every race was wasteful and left duplicate base geometry behind.
-  const order = await computeResult(race);
+  // marbles to the gate for a clean pre-race view (no course rebuild).
+  let order = await computeResult(race);
+  // A rare track seed builds an unwinnable course where nobody finishes. Skip
+  // to the next candidate seed — the EXACT rule the server scheduler uses
+  // (scheduler._computeOrder), so both modes agree on every race's course.
+  for (let attempt = 1; attempt <= 4 && !order.some((o) => o.timeSec != null); attempt++) {
+    race.trackSeed = window.TournamentCore.deriveSeed(
+      T.masterSeed, 0x7a2c, race.roundIdx + 1, race.indexInRound + 1, attempt
+    );
+    console.warn('[viewer] dud track for ' + race.key + ' — retrying with candidate ' + attempt);
+    await ensureCourse(race.trackSeed);
+    order = await computeResult(race);
+  }
   const a = await whenApiReady();
   applyRaceSkins(a, race);
   if (a.resetForNextRace) a.resetForNextRace(race.raceSeed);

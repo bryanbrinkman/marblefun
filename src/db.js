@@ -104,6 +104,12 @@ class DB {
     return Number(info.lastInsertRowid);
   }
 
+  // A race's track can be re-derived if the original seed built an unwinnable
+  // course (see scheduler._computeOrder); keep the stored record accurate.
+  updateRaceTrackSeed(raceId, trackSeed) {
+    this.db.prepare(`UPDATE races SET track_seed = ? WHERE id = ?`).run(trackSeed, raceId);
+  }
+
   insertMarbles(tournamentId, marbles) {
     const stmt = this.db.prepare(
       `INSERT OR REPLACE INTO marbles (tournament_id, marble_id, name) VALUES (?, ?, ?)`

@@ -123,37 +123,50 @@ async function main() {
   // server up and let clients fall back to running the tournament in-browser.
   try {
     db = new DB(cfg.dbPath);
-    tournament = new Tournament(cfg.masterSeed);
-    const tournamentId = db.createTournament({
-      masterSeed: tournament.masterSeed,
-      createdAt: Date.now(),
-    });
-    db.insertMarbles(tournamentId, tournament.marbles);
 
     console.log('[server] launching headless simulator…');
     simulator = await createSimulator({
       url: `${localUrl}/marble_run.html`,
-      // Any valid seed; each race rebuilds the course for its own trackSeed.
-      trackSeed: tournament.nextPendingRace().trackSeed,
+      // Any valid seed; every race rebuilds the course for its own trackSeed.
+      trackSeed: cfg.masterSeed,
       headless: cfg.headless,
     });
     console.log('[server] simulator ready (course built)');
 
-    scheduler = new Scheduler({
-      tournament,
-      db,
-      simulator,
-      tournamentId,
-      broadcast: (msg) => wss.broadcast(msg),
-      config: {
-        masterSeed: cfg.masterSeed,
-        announceLeadMs: cfg.announceLeadMs,
-        interRaceGapMs: cfg.interRaceGapMs,
-        playbackRate: cfg.playbackRate,
-        watchOverrideMs: cfg.watchOverrideMs,
-      },
-    });
-    scheduler.start();
+    // Endless mode: run a tournament to its champion, hold on the podium for
+    // the intermission, then start the next one with a fresh seed — forever.
+    // The first tournament uses the configured masterSeed.
+    const startTournament = (masterSeed) => {
+      tournament = new Tournament(masterSeed >>> 0);
+      const tournamentId = db.createTournament({
+        masterSeed: tournament.masterSeed,
+        createdAt: Date.now(),
+      });
+      db.insertMarbles(tournamentId, tournament.marbles);
+      scheduler = new Scheduler({
+        tournament,
+        db,
+        simulator,
+        tournamentId,
+        broadcast: (msg) => wss.broadcast(msg),
+        config: {
+          masterSeed: tournament.masterSeed,
+          announceLeadMs: cfg.announceLeadMs,
+          interRaceGapMs: cfg.interRaceGapMs,
+          playbackRate: cfg.playbackRate,
+          watchOverrideMs: cfg.watchOverrideMs,
+          onTournamentComplete: () => {
+            const next = (Date.now() ^ ((Math.random() * 0xffffffff) >>> 0)) >>> 0;
+            console.log(`[server] tournament ${tournamentId} complete — starting next (seed ${next})`);
+            startTournament(next);
+          },
+        },
+      });
+      // start() broadcasts a fresh snapshot, so connected viewers reset to the
+      // new bracket automatically.
+      scheduler.start();
+    };
+    startTournament(cfg.masterSeed);
   } catch (err) {
     simFailed = true;
     console.error('[server] no live tournament (serving page in local-fallback mode):', err && err.stack || err);

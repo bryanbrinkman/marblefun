@@ -1,6 +1,7 @@
 'use strict';
 
 const { Tournament } = require('./tournament');
+const { deriveSeed } = require('./seeds');
 
 // =========================================================
 // Scheduler — drives the tournament on a live timeline
@@ -28,6 +29,9 @@ const DEFAULTS = {
   watchOverrideMs: null, // if set, ignore real race duration (tests/demo only)
   maxSimSeconds: 300,
   verbose: true, // per-race console logging
+  trackAttempts: 5, // candidate track seeds to try before accepting an all-DNF race
+  intermissionMs: 30000, // pause on the champion before onTournamentComplete fires
+  onTournamentComplete: null, // hook: start the next tournament (endless mode)
 };
 
 class Scheduler {
@@ -112,6 +116,11 @@ class Scheduler {
           champion: { id: this.t.champion, name: this.t.marbleName(this.t.champion) },
           serverNow: this.now(),
         });
+        // Endless mode: hold on the champion for the intermission, then hand
+        // off so a fresh tournament (new seed) can start.
+        if (this.cfg.onTournamentComplete) {
+          this._t(() => this.cfg.onTournamentComplete(), this.cfg.intermissionMs);
+        }
       }
       return;
     }
@@ -119,45 +128,45 @@ class Scheduler {
   }
 
   _announce(race) {
-    const scheduledStart = this.now() + this.cfg.announceLeadMs;
-    race.status = 'announced';
-    race.scheduledStart = scheduledStart;
-    this.current = { raceKey: race.key, phase: 'announced', scheduledStart };
-    this.db.markAnnounced(race.dbId, scheduledStart, this.now());
+    // Compute the authoritative result FIRST (a few seconds of fast-forward).
+    // The announced trackSeed must be final — clients pre-build the course from
+    // it during the countdown — and validating the track requires simulating.
+    this._computeOrder(race).then((order) => {
+      if (this.stopped) return;
+      if (!order) {
+        // Simulator hiccup — try this race again shortly instead of stalling.
+        this._t(() => this._announce(race), 15000);
+        return;
+      }
 
-    if (this.cfg.verbose)
-      console.log(
-        `[race] ${race.roundKey}:${race.indexInRound} announced  track=${race.trackSeed} race=${race.raceSeed}  start in ${this.cfg.announceLeadMs}ms`
-      );
-    this.broadcast({
-      type: 'race_announced',
-      serverNow: this.now(),
-      scheduledStart,
-      announceLeadMs: this.cfg.announceLeadMs,
-      playbackRate: this.cfg.playbackRate,
-      race: this.raceView(race),
-    });
+      const scheduledStart = this.now() + this.cfg.announceLeadMs;
+      race.status = 'announced';
+      race.scheduledStart = scheduledStart;
+      this.current = { raceKey: race.key, phase: 'announced', scheduledStart };
+      this.db.markAnnounced(race.dbId, scheduledStart, this.now());
 
-    // Compute the true result now (runs concurrently with the countdown).
-    const resultP = this.sim
-      .simulate(race.raceSeed, { forTrackSeed: race.trackSeed })
-      .then((sim) => this._toOrder(race, sim))
-      .catch((err) => {
-        console.error('[scheduler] sim failed for', race.key, err.message);
-        return null;
+      if (this.cfg.verbose)
+        console.log(
+          `[race] ${race.roundKey}:${race.indexInRound} announced  track=${race.trackSeed} race=${race.raceSeed}  start in ${this.cfg.announceLeadMs}ms`
+        );
+      this.broadcast({
+        type: 'race_announced',
+        serverNow: this.now(),
+        scheduledStart,
+        announceLeadMs: this.cfg.announceLeadMs,
+        playbackRate: this.cfg.playbackRate,
+        race: this.raceView(race),
       });
 
-    // Fire the START signal at the scheduled time.
-    this._t(() => {
-      race.status = 'running';
-      this.current = { raceKey: race.key, phase: 'running', scheduledStart };
-      this.db.markStarted(race.dbId, this.now());
-      this.broadcast({ type: 'race_start', raceKey: race.key, serverNow: this.now() });
-    }, Math.max(0, scheduledStart - this.now()));
+      // Fire the START signal at the scheduled time.
+      this._t(() => {
+        race.status = 'running';
+        this.current = { raceKey: race.key, phase: 'running', scheduledStart };
+        this.db.markStarted(race.dbId, this.now());
+        this.broadcast({ type: 'race_start', raceKey: race.key, serverNow: this.now() });
+      }, Math.max(0, scheduledStart - this.now()));
 
-    // Reveal once the marbles would have finished on screen.
-    resultP.then((order) => {
-      if (this.stopped || !order) return;
+      // Reveal once the marbles would have finished on screen.
       const finishTimes = order.map((o) => o.timeSec).filter((t) => t != null);
       const maxFinish = finishTimes.length ? Math.max(...finishTimes) : this.cfg.maxSimSeconds;
       const watchMs =
@@ -167,6 +176,33 @@ class Scheduler {
       const revealAt = scheduledStart + watchMs;
       this._t(() => this._reveal(race, order), Math.max(0, revealAt - this.now()));
     });
+  }
+
+  // Simulate the race, deterministically skipping "dud" track seeds (a rare
+  // seed builds an unwinnable course where nobody finishes). The viewer's
+  // local mode applies the IDENTICAL candidate rule, so both modes always
+  // agree on which course a race runs on. Returns null on simulator failure.
+  async _computeOrder(race) {
+    try {
+      for (let attempt = 0; ; attempt++) {
+        const candidate =
+          attempt === 0
+            ? race.trackSeed
+            : deriveSeed(this.t.masterSeed, 0x7a2c, race.roundIdx + 1, race.indexInRound + 1, attempt);
+        const sim = await this.sim.simulate(race.raceSeed, { forTrackSeed: candidate });
+        if (sim.order.length > 0 || attempt >= this.cfg.trackAttempts - 1) {
+          if (candidate !== race.trackSeed) {
+            race.trackSeed = candidate;
+            if (race.dbId != null) this.db.updateRaceTrackSeed(race.dbId, candidate);
+          }
+          return this._toOrder(race, sim);
+        }
+        console.warn(`[race] ${race.key} track ${candidate} is a dud (0 finishers) — trying next candidate`);
+      }
+    } catch (err) {
+      console.error('[scheduler] sim failed for', race.key, err.message);
+      return null;
+    }
   }
 
   // Map the sim's color-lane finishing order back to tournament marbles via

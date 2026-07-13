@@ -35,7 +35,7 @@ swap_size_mb = 1024
 
 [[vm]]
   size = "shared-cpu-1x"
-  # Headless Chromium alone holds ~560MB running the game's physics world; on
-  # a 1gb VM the kernel OOM-killed it (verified in production logs). 2gb + the
-  # swap above gives it real headroom.
-  memory = "2gb"
+  # 1gb + the swap above is enough now that the simulator refuses WebGL: the
+  # old OOM kills came from SwiftShader software-rendering the 3D scene
+  # (~560MB); the physics-only path is far lighter.
+  memory = "1gb"
