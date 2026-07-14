@@ -728,6 +728,14 @@ function reseedTrack() { _trackRand = makeRng(SEEDS.track); }
 // 0 when the gate opens.
 let simTime = 0;
 
+// Finish line as a world-space plane: the banner's position and the travel
+// direction there. A marble finishes when it crosses this plane on the final
+// stretch, so the podium hand-off happens AT the line, not before it. Set in
+// buildFinishLine(). (A nearest-point-on-curve approach is unsafe here — a
+// winding/spiral track can have an earlier pass snap nearest to the banner.)
+let finishLinePos = null;
+let finishLineDir = null;
+
 // Permutation-based 2D value noise (smoother than pure rand, cheap to evaluate)
 function makeNoise2D(seed) {
   const rng = makeRng(seed);
@@ -3416,6 +3424,11 @@ function buildFinishLine() {
   // Tangent at the finish cell's exit — points in the outDir direction.
   const dirVec = DIRS[finishCell.outDir];
   const tangent = new THREE.Vector3(dirVec.dx, 0, dirVec.dz).normalize();
+
+  // Record the banner as a crossing plane (position + travel direction) for
+  // finish detection, so the podium hand-off happens exactly at the line.
+  finishLinePos = p.clone();
+  finishLineDir = tangent.clone();
   const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0,1,0)).normalize();
   const up = new THREE.Vector3(0, 1, 0);
 
@@ -4784,7 +4797,16 @@ function stepPhysics(dt) {
 
     m.mesh.position.copy(m.pos);
 
-    if (m.progress >= 0.99 && !m.finished) {
+    // Finished when the marble crosses the finish-line plane on the final
+    // stretch. The progress>0.8 gate ensures we only test the true end region
+    // (a winding track never has two places with progress that high), so the
+    // plane can't false-trigger on an earlier spiral pass. Falls back to a
+    // progress threshold if the plane wasn't set (headless safety).
+    const crossedFinish = finishLinePos
+      ? m.progress > 0.8 &&
+        (m.pos.x - finishLinePos.x) * finishLineDir.x + (m.pos.z - finishLinePos.z) * finishLineDir.z >= 0
+      : m.progress >= 0.995;
+    if (crossedFinish && !m.finished) {
       m.finished = true;
       // Sim-seconds, not wall clock — identical across clients for the same
       // race seed, and directly usable as an official race time / record.
