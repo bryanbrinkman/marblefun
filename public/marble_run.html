@@ -3844,6 +3844,21 @@ function beginRace() {
   console.log(`[determinism] race started — replay this exact race with ?track=${SEEDS.track}&race=${SEEDS.race}`);
 }
 
+// Fast-forward the just-started race by `seconds` of deterministic sim, with no
+// rendering, so a viewer who joins mid-race lands at the exact live moment
+// everyone else is watching instead of starting from the gate. Because the sim
+// is deterministic, catching up produces the identical marble positions.
+function _catchUpRace(seconds) {
+  const steps = Math.min(Math.ceil(seconds / FIXED_DT), Math.ceil(300 / FIXED_DT));
+  for (let i = 0; i < steps && finishOrder.length < marbles.length; i++) {
+    stepPhysics(FIXED_DT);
+  }
+  for (const m of marbles) if (m.mesh) m.mesh.position.copy(m.pos);
+  // Reset the real-time clock so animate() doesn't try to re-catch-up.
+  accumulator = 0;
+  lastTime = performance.now();
+}
+
 // =========================================================
 // BUILD WORLD
 // =========================================================
@@ -6021,7 +6036,8 @@ window.marbleAPI = {
     STATE.raceStarted = false;
     STATE.gateOpen = false;
   },
-  startRace(raceSeed) {
+  // catchUpSec > 0 fast-forwards to the current live moment (for mid-race joins).
+  startRace(raceSeed, catchUpSec = 0) {
     if (STATE.raceStarted && !finishOrder.length) return false;  // race in progress
     if (startBtn.classList.contains('rerace') || finishOrder.length) {
       // Post-race state: reuse the reset path, but with our seed.
@@ -6040,6 +6056,7 @@ window.marbleAPI = {
       beginRace();
       startBtn.classList.add('hidden');
     }
+    if (catchUpSec > 0.3) _catchUpRace(catchUpSec);
     return true;
   },
   getResults: () => finishOrder.map((m, i) => ({

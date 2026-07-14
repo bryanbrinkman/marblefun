@@ -68,14 +68,18 @@ async function startReplay(race) {
   startedRaces.add(race.key);
   const a = await ensureCourse(race.trackSeed);
   applyRaceSkins(a, race);
+  // If we're joining a race that already started (a mid-race page load), how far
+  // into it we are — the game fast-forwards its deterministic sim by this much
+  // so we land at the exact moment everyone else is watching, not at the gate.
+  const catchUp = race.scheduledStart ? Math.max(0, (Date.now() - toLocal(race.scheduledStart)) / 1000) : 0;
   // startRace refuses (returns false) if a previous replay is still on screen.
   // That happens when a client is catching up or running faster than real
   // time — hard-reset the course and start cleanly so no race is skipped.
-  const ok = a.startRace(race.raceSeed);
+  const ok = a.startRace(race.raceSeed, catchUp);
   if (ok === false) {
     a.newCourse(race.trackSeed);
     builtTrack = race.trackSeed;
-    a.startRace(race.raceSeed);
+    a.startRace(race.raceSeed, catchUp);
   }
 
   // Label the game's in-race leaderboard with the competitor names, and cut to
