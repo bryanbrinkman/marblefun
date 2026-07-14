@@ -747,6 +747,7 @@ async function runLocalRace(T, race, aborted) {
 // Try a server first; if none answers (static hosting), fall back to local mode.
 
 let mode = 'connecting'; // 'connecting' | 'server' | 'local'
+let serverKnown = false; // /api/state confirmed a live server → never fall back to local
 
 function goLocal() {
   if (mode === 'local') return;
@@ -762,29 +763,42 @@ function connect() {
   try {
     ws = new WebSocket(`${proto}://${location.host}/ws`);
   } catch {
-    goLocal();
+    if (serverKnown) setTimeout(connect, 1500);
+    else goLocal();
     return;
   }
-  const fallback = setTimeout(() => {
-    if (mode === 'connecting') {
+  // Only fall back to a local (in-browser) tournament when we DON'T know a
+  // server exists. If /api/state already confirmed one, keep trying the socket
+  // instead — otherwise a slow handshake on refresh would flash a divergent
+  // random tournament before snapping back to the live one.
+  const fallback = serverKnown
+    ? null
+    : setTimeout(() => {
+        if (mode === 'connecting') {
+          try {
+            ws.close();
+          } catch {}
+          goLocal();
+        }
+      }, 3000);
+  ws.onopen = () => {
+    if (mode === 'local') {
       try {
         ws.close();
       } catch {}
-      goLocal();
+      return; // already fell back; don't run two tournaments at once
     }
-  }, 3000);
-  ws.onopen = () => {
     mode = 'server';
-    clearTimeout(fallback);
+    if (fallback) clearTimeout(fallback);
     conn.textContent = '● live';
     conn.classList.add('live');
   };
   ws.onclose = () => {
-    clearTimeout(fallback);
-    if (mode === 'server') {
+    if (fallback) clearTimeout(fallback);
+    if (mode === 'server' || serverKnown) {
       conn.textContent = 'reconnecting…';
       conn.classList.remove('live');
-      setTimeout(connect, 1500);
+      if (mode !== 'local') setTimeout(connect, 1500);
     } else if (mode === 'connecting') {
       goLocal();
     }
@@ -805,7 +819,27 @@ function connect() {
   };
 }
 
-connect();
+// Probe for a live server before connecting. If one is running, commit to it
+// (no local fallback); if /api/state 404s (static host) or reports no
+// tournament, run the tournament in-browser. This makes a refresh on the live
+// site reconnect cleanly instead of briefly showing a different local track.
+(async function boot() {
+  try {
+    const r = await fetch('/api/state', { cache: 'no-store' });
+    if (r.ok) {
+      const s = await r.json().catch(() => null);
+      if (s && s.type === 'no_tournament') {
+        goLocal();
+        return;
+      }
+      if (s && (s.type === 'snapshot' || s.type === 'starting')) {
+        serverKnown = true;
+        if (s.type === 'snapshot') onMessage(s); // paint the current race immediately
+      }
+    }
+  } catch {}
+  connect();
+})();
 
 // Toggle the stat overlays for an unobstructed, bigger race view.
 {

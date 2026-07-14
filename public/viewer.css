@@ -219,10 +219,15 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 .bd-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
 /* The FULL bracket (20 heats + semis + final) is wider and taller than the
    lower-third dock, so it pans both ways inside this scroller. */
-.bd-scroll { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
+.bd-scroll {
+  flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch;
+  /* Centre the bracket when it fits; `safe` falls back to start when it
+     overflows so the edges stay scroll-reachable. */
+  display: flex; justify-content: safe center; align-items: safe center;
+}
 .bd-scroll::-webkit-scrollbar { width: 7px; height: 7px; }
 .bd-scroll::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 999px; }
-.bd-main { display: flex; align-items: center; gap: 12px; width: max-content; padding: 2px; }
+.bd-main { display: flex; align-items: center; gap: 12px; width: max-content; margin: auto; padding: 2px; }
 
 /* Outer columns: the 10 heats on each side. */
 .bd-heatcol { flex: none; width: 150px; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
