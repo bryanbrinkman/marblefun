@@ -175,6 +175,18 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 .race-card .slot .t { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 9.5px; }
 .race-card.pending .slot { opacity: .55; }
 
+/* past champions (hall of fame) */
+.champs { display: flex; flex-direction: column; gap: 5px; max-height: 240px; overflow-y: auto; }
+.champ-row {
+  display: flex; align-items: center; gap: 8px; font-size: 12px;
+  padding: 6px 9px; background: var(--panel2); border: 1px solid var(--line); border-radius: 9px;
+}
+.champ-row .ct { font-size: 13px; }
+.champ-row b { font-weight: 800; }
+.champ-row .cwhen { margin-left: auto; color: var(--muted); font-size: 10.5px; }
+.champ-row .cid { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.champ-row:first-child { border-color: var(--accent); background: linear-gradient(180deg, rgba(255,207,92,.12), var(--panel2)); }
+
 /* scrollbars */
 .side::-webkit-scrollbar { width: 8px; }
 .side::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 999px; }

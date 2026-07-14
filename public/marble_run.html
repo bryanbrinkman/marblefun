@@ -3854,6 +3854,7 @@ function beginRace() {
   simTime = 0;
   STATE.gateOpen = true;
   STATE.raceStarted = true;
+  playGateSound();
   console.log(`[determinism] race started — replay this exact race with ?track=${SEEDS.track}&race=${SEEDS.race}`);
 }
 
@@ -3862,9 +3863,14 @@ function beginRace() {
 // everyone else is watching instead of starting from the gate. Because the sim
 // is deterministic, catching up produces the identical marble positions.
 function _catchUpRace(seconds) {
-  const steps = Math.min(Math.ceil(seconds / FIXED_DT), Math.ceil(300 / FIXED_DT));
-  for (let i = 0; i < steps && finishOrder.length < marbles.length; i++) {
-    stepPhysics(FIXED_DT);
+  _silentSim = true; // skip audio during the fast-forward
+  try {
+    const steps = Math.min(Math.ceil(seconds / FIXED_DT), Math.ceil(300 / FIXED_DT));
+    for (let i = 0; i < steps && finishOrder.length < marbles.length; i++) {
+      stepPhysics(FIXED_DT);
+    }
+  } finally {
+    _silentSim = false;
   }
   for (const m of marbles) if (m.mesh) m.mesh.position.copy(m.pos);
   // Reset the real-time clock so animate() doesn't try to re-catch-up.
@@ -4814,6 +4820,7 @@ function stepPhysics(dt) {
       finishOrder.push(m);
       spawnConfettiBurst();
       const rank = finishOrder.length; // 1-based: 1 = first finisher
+      playFinishSound(rank, _panForPos(m.pos));
       if (rank === 1) {
         // First crossing reveals the (empty) podium, and we hand control of the camera
         // over to the podium-framing logic (disengaging the action cam if it was on).
@@ -6096,16 +6103,21 @@ window.marbleAPI = {
   //   JSON.stringify(a) === JSON.stringify(b)   // -> true
   // Note: leaves the world in a "race finished" state; hit RE-RACE after.
   simulateRace(raceSeed, maxSimSeconds = 300) {
-    finishOrder.length = 0;
-    STATE.podiumShown = false;
-    if (podiumGroup) podiumGroup.visible = false;
-    for (const m of marbles) {
-      if (m.mesh && m.mesh.parent) m.mesh.parent.remove(m.mesh);
-    }
-    prepareRace(raceSeed);
-    beginRace();
-    while (finishOrder.length < marbles.length && simTime < maxSimSeconds) {
-      stepPhysics(FIXED_DT);
+    _silentSim = true; // fast-forward is a silent pre-computation — no audio
+    try {
+      finishOrder.length = 0;
+      STATE.podiumShown = false;
+      if (podiumGroup) podiumGroup.visible = false;
+      for (const m of marbles) {
+        if (m.mesh && m.mesh.parent) m.mesh.parent.remove(m.mesh);
+      }
+      prepareRace(raceSeed);
+      beginRace();
+      while (finishOrder.length < marbles.length && simTime < maxSimSeconds) {
+        stepPhysics(FIXED_DT);
+      }
+    } finally {
+      _silentSim = false;
     }
     return {
       trackSeed: SEEDS.track,
@@ -6131,12 +6143,52 @@ let _savedCamState = null;
 // during wall scrapes are avoided.
 let _audioCtx = null;
 let _soundEnabled = false;
+let _masterBus = null;
+// True while the deterministic sim is being fast-forwarded (simulateRace /
+// mid-race catch-up). The same physics that plays sounds runs there, but it's
+// a silent pre-computation — without this guard, enabling sound would blast a
+// compressed burst of every clack in the race during the fast-forward.
+let _silentSim = false;
 function _ensureAudio() {
   if (_audioCtx) return _audioCtx;
   const Ctor = window.AudioContext || window.webkitAudioContext;
   if (!Ctor) return null;
   _audioCtx = new Ctor();
+  // Master bus: gain -> limiter -> speakers. Every sound routes through this,
+  // so five marbles clattering through a peg field compress gracefully instead
+  // of clipping into distortion.
+  _masterBus = _audioCtx.createGain();
+  _masterBus.gain.value = 0.9;
+  const lim = _audioCtx.createDynamicsCompressor();
+  lim.threshold.value = -14;
+  lim.knee.value = 8;
+  lim.ratio.value = 10;
+  lim.attack.value = 0.003;
+  lim.release.value = 0.18;
+  _masterBus.connect(lim);
+  lim.connect(_audioCtx.destination);
   return _audioCtx;
+}
+
+// Where a sound sits in the stereo field, from the marble's on-screen position:
+// project its offset from the camera target onto the camera's right axis.
+// Works for both the ortho overview and the follow cams.
+const _panRight = new THREE.Vector3();
+function _panForPos(pos) {
+  _panRight.setFromMatrixColumn(camera.matrixWorld, 0);
+  const dx = (pos.x - cameraTarget.x) * _panRight.x + (pos.z - cameraTarget.z) * _panRight.z;
+  return Math.max(-0.8, Math.min(0.8, dx / 22));
+}
+
+// Per-sound output node: optional stereo pan, then the master bus.
+function _hitOut(ctx, pan) {
+  if (pan && ctx.createStereoPanner) {
+    const p = ctx.createStereoPanner();
+    p.pan.value = pan;
+    p.connect(_masterBus);
+    return p;
+  }
+  return _masterBus;
 }
 
 // Pool of pre-enveloped noise buffers, lazily generated on first clack. Each
@@ -6189,10 +6241,11 @@ const SURFACES = {
 //      tuned instrument
 // No pitch sweeps, no oscillators that ring out — percussion doesn't sustain.
 // `surf` selects the material profile (frequency band, brightness, decay).
-function playClack(intensity, surf) {
-  if (!_soundEnabled) return;
+function playClack(intensity, surf, pan) {
+  if (!_soundEnabled || _silentSim) return;
   const ctx = _ensureAudio();
   if (!ctx) return;
+  const out = _hitOut(ctx, pan);
   const s = surf || SURFACES.wood;
   const now = ctx.currentTime;
   const vol = Math.min(1, Math.max(0.05, intensity));
@@ -6205,7 +6258,8 @@ function playClack(intensity, surf) {
   const modeRatio = 2.5 + Math.random() * 0.6;       // inharmonic 2nd mode
   // Brightness varies per hit within the surface's band — models hitting
   // different surface points (a dense knot rings brighter, a soft spot duller).
-  const lpCutoff = s.lpLo + Math.random() * (s.lpHi - s.lpLo);
+  // Harder hits also skew brighter: more impact energy excites higher modes.
+  const lpCutoff = s.lpLo + Math.random() * (s.lpHi - s.lpLo) + vol * 500;
   // Decay times scale with the surface profile — glass clicks die fast, floor
   // thuds linger.
   const dm = s.decayMult;
@@ -6241,7 +6295,7 @@ function playClack(intensity, surf) {
   const noiseGain = ctx.createGain();
   noiseGain.gain.setValueAtTime(vol * s.noiseVol, now);
   noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + noiseDecay);
-  noise.connect(hp).connect(lp).connect(noiseGain).connect(ctx.destination);
+  noise.connect(hp).connect(lp).connect(noiseGain).connect(out);
   noise.start(now);
 
   // ---------- Inharmonic resonators (the "wood" character) ----------
@@ -6259,7 +6313,7 @@ function playClack(intensity, surf) {
     const rGain = ctx.createGain();
     rGain.gain.setValueAtTime(vol * gainMult, now);
     rGain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
-    rNoise.connect(r).connect(rGain).connect(ctx.destination);
+    rNoise.connect(r).connect(rGain).connect(out);
     rNoise.start(now);
   };
   makeResonator(baseFreq, 0.45, res1Decay);
@@ -6273,14 +6327,137 @@ function playClack(intensity, surf) {
 // one clack per ~60ms. Hashed by marble identity.
 const _clackLastTime = new WeakMap();
 function maybeClack(marble, intensity, surf) {
-  if (!_soundEnabled) return;
+  if (!_soundEnabled || _silentSim) return;
   const ctx = _ensureAudio();
   if (!ctx) return;
   const last = _clackLastTime.get(marble) || 0;
   const now = ctx.currentTime;
   if (now - last < 0.06) return;
   _clackLastTime.set(marble, now);
-  playClack(intensity, surf);
+  playClack(intensity, surf, _panForPos(marble.pos));
+}
+
+// ---------- Rolling — continuous velocity-driven wood rumble ----------
+// The clacks are punctuation; this is the sentence. Each of the 5 marbles gets
+// a looping filtered-noise chain whose loudness, brightness and pitch track its
+// speed, and whose pan tracks its on-screen position. Gains sit at 0 whenever
+// a marble is airborne, finished, or the race hasn't started.
+const _rollChains = [];
+function _ensureRollChains(ctx) {
+  if (_rollChains.length) return;
+  const len = Math.floor(ctx.sampleRate * 1.5);
+  for (let i = 0; i < 5; i++) {
+    // Rumbly one-pole-lowpassed noise loop, with the seam faded so it doesn't tick.
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let acc = 0;
+    for (let s = 0; s < len; s++) {
+      acc += 0.06 * ((Math.random() * 2 - 1) - acc);
+      d[s] = acc * 3.2;
+    }
+    const fade = Math.floor(ctx.sampleRate * 0.02);
+    for (let s = 0; s < fade; s++) {
+      const k = s / fade;
+      d[s] *= k;
+      d[len - 1 - s] *= k;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    src.playbackRate.value = 0.9 + i * 0.05; // slight per-marble detune
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.value = 500;
+    filt.Q.value = 0.4;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    let pan = null;
+    if (ctx.createStereoPanner) {
+      pan = ctx.createStereoPanner();
+      src.connect(filt); filt.connect(gain); gain.connect(pan); pan.connect(_masterBus);
+    } else {
+      src.connect(filt); filt.connect(gain); gain.connect(_masterBus);
+    }
+    src.start();
+    _rollChains.push({ src, filt, gain, pan, level: 0 });
+  }
+}
+function _muteRolls() {
+  for (const ch of _rollChains) {
+    ch.level = 0;
+    ch.gain.gain.value = 0;
+  }
+}
+function updateRollSounds(dt) {
+  if (!_soundEnabled || !_audioCtx || !_masterBus) return;
+  _ensureRollChains(_audioCtx);
+  for (let i = 0; i < _rollChains.length; i++) {
+    const ch = _rollChains[i];
+    const m = marbles[i];
+    let target = 0;
+    if (m && STATE.raceStarted && !m.finished && m.vel) {
+      const spd = m.vel.length();
+      // Rolling contact ≈ moving but not free-falling (big |vy| vs speed = airborne).
+      if (spd > 0.7 && Math.abs(m.vel.y) < Math.max(2.2, spd * 0.55)) {
+        target = Math.min(0.11, 0.015 + spd * 0.011);
+        ch.filt.frequency.value = 350 + Math.min(1900, spd * 150);
+        ch.src.playbackRate.value = 0.85 + Math.min(0.5, spd * 0.035) + i * 0.03;
+        if (ch.pan) ch.pan.pan.value = _panForPos(m.pos);
+      }
+    }
+    // Exponential approach — quick onset, no zipper artifacts.
+    ch.level += (target - ch.level) * Math.min(1, dt * 10);
+    ch.gain.gain.value = ch.level;
+  }
+}
+// A hidden tab stops rAF, which would freeze rolling gains at their last value
+// (an endless hum). Silence them on hide; they rebuild from velocity on return.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) _muteRolls();
+});
+
+// ---------- Pitched dings — finishes, and a tiny fanfare for the winner ----
+// Toy-marimba tone: a sine fundamental + a fast-dying woody partial.
+function _playTone(freq, when, dur, vol, pan) {
+  const ctx = _ensureAudio();
+  if (!ctx) return;
+  const out = _hitOut(ctx, pan || 0);
+  const o = ctx.createOscillator();
+  o.type = 'sine';
+  o.frequency.value = freq;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(vol, when);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+  o.connect(g); g.connect(out);
+  o.start(when); o.stop(when + dur + 0.02);
+  const o2 = ctx.createOscillator();
+  o2.type = 'sine';
+  o2.frequency.value = freq * 3.01; // inharmonic partial = wooden, not electronic
+  const g2 = ctx.createGain();
+  g2.gain.setValueAtTime(vol * 0.18, when);
+  g2.gain.exponentialRampToValueAtTime(0.0001, when + dur * 0.4);
+  o2.connect(g2); g2.connect(out);
+  o2.start(when); o2.stop(when + dur + 0.02);
+}
+// Winner: quick C-E-G fanfare. Everyone else: one ding stepping down with rank.
+function playFinishSound(rank, pan) {
+  if (!_soundEnabled || _silentSim) return;
+  const ctx = _ensureAudio();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  if (rank === 1) {
+    _playTone(523.25, now, 0.28, 0.5, pan);
+    _playTone(659.25, now + 0.09, 0.28, 0.5, pan);
+    _playTone(783.99, now + 0.18, 0.45, 0.55, pan);
+  } else {
+    _playTone(523.25 * Math.pow(0.84, rank - 1), now, 0.3, 0.32, pan);
+  }
+}
+// Gate-open: the start gate slamming aside — a solid double wood thunk.
+function playGateSound() {
+  if (!_soundEnabled || _silentSim) return;
+  playClack(0.9, SURFACES.floor, 0);
+  playClack(0.5, SURFACES.wood, 0);
 }
 
 // Switch to a specific camera mode: 'overview', 'action', or 'chase'.
@@ -6893,14 +7070,26 @@ window.addEventListener('keyup', (e) => {
 // waves when on, speaker-with-X when off).
 function toggleSound() {
   _soundEnabled = !_soundEnabled;
+  try { localStorage.setItem('marbleSoundOn', _soundEnabled ? '1' : '0'); } catch (e) {}
   if (_soundEnabled) {
     const ctx = _ensureAudio();
     if (ctx && ctx.state === 'suspended') ctx.resume();
+  } else {
+    _muteRolls();
   }
   const btn = document.getElementById('soundBtn');
   if (btn) btn.classList.toggle('active', _soundEnabled);
 }
 document.getElementById('soundBtn').addEventListener('click', toggleSound);
+// Remember the choice: if sound was on last visit, re-enable it on the first
+// user gesture (browsers refuse to start audio without one).
+try {
+  if (localStorage.getItem('marbleSoundOn') === '1') {
+    const rearm = () => { if (!_soundEnabled) toggleSound(); };
+    window.addEventListener('pointerdown', rearm, { once: true });
+    window.addEventListener('keydown', rearm, { once: true });
+  }
+} catch (e) {}
 
 function toggleMarbleBlast() {
   if (!STATE.marbleBlast) {
@@ -7324,6 +7513,7 @@ function animate() {
   }
 
   updateMarbleVisuals(frameTime);
+  updateRollSounds(frameTime);
   updateGateAnimation(frameTime);
   updateFans(frameTime);
   updateFlags(frameTime);

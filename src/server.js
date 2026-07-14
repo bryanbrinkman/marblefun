@@ -217,6 +217,16 @@ async function main() {
     if (url.pathname === '/api/state') {
       return sendJSON(res, 200, scheduler ? scheduler.snapshot() : { type: simFailed ? 'no_tournament' : 'starting' });
     }
+    if (url.pathname === '/api/champions') {
+      // Public hall of fame: recent tournament winners, newest first.
+      let champions = [];
+      try {
+        if (db) champions = db.exportChampions().slice(-50).reverse();
+      } catch (e) {
+        console.error('[api] champions failed:', e && e.message);
+      }
+      return sendJSON(res, 200, { champions });
+    }
     if (url.pathname === '/api/admin' || url.pathname.startsWith('/api/admin/')) {
       try {
         return handleAdmin(req, res, url);

@@ -421,6 +421,34 @@ function ingestSnapshot(msg) {
   }
 }
 
+// Past champions (hall of fame) — server-recorded history, newest first.
+// Server-only: on a static host there's no cross-visitor history to show.
+async function loadChampions() {
+  const card = el('champsCard');
+  if (!card) return;
+  try {
+    const r = await fetch('/api/champions', { cache: 'no-store' });
+    if (!r.ok) return;
+    const rows = ((await r.json()) || {}).champions || [];
+    if (!rows.length) return; // keep hidden until there's at least one winner
+    card.hidden = false;
+    const n = el('champsCount');
+    if (n) n.textContent = rows.length;
+    el('champsBody').innerHTML = rows
+      .map((c) => {
+        const when = c.created_at
+          ? new Date(c.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+          : '';
+        return (
+          `<div class="champ-row"><span class="ct">🏆</span>` +
+          `<b>${c.champion_name}</b>` +
+          `<span class="cwhen">${when}</span><span class="cid">#${c.tournament_id}</span></div>`
+        );
+      })
+      .join('');
+  } catch {}
+}
+
 // Reflect the SERVER's paused state (admin-driven) in the viewer UI, reusing
 // the same badge/dimming the local-mode pause uses.
 function reflectServerPaused(paused) {
@@ -479,6 +507,7 @@ function onMessage(msg) {
       model.champion = msg.champion;
       model.currentKey = null;
       renderAll();
+      loadChampions(); // the hall of fame just gained a row
       break;
   }
 }
@@ -839,6 +868,7 @@ function connect() {
       if (s && (s.type === 'snapshot' || s.type === 'starting')) {
         serverKnown = true;
         if (s.type === 'snapshot') onMessage(s); // paint the current race immediately
+        loadChampions();
       }
     }
   } catch {}
