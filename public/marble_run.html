@@ -728,13 +728,17 @@ function reseedTrack() { _trackRand = makeRng(SEEDS.track); }
 // 0 when the gate opens.
 let simTime = 0;
 
-// Finish line as a world-space plane: the banner's position and the travel
-// direction there. A marble finishes when it crosses this plane on the final
-// stretch, so the podium hand-off happens AT the line, not before it. Set in
-// buildFinishLine(). (A nearest-point-on-curve approach is unsafe here — a
-// winding/spiral track can have an earlier pass snap nearest to the banner.)
+// Finish line as a bounded world-space GATE: the banner's position, the travel
+// direction there, and how far sideways/forward a crossing may register. A
+// marble finishes only when it passes between the posts, so the podium
+// hand-off happens AT the line. The bounds matter: an unbounded plane extends
+// infinitely sideways, and ~15% of course seeds curl the late track past that
+// extension — marbles "finished" mid-curve several units from the banner.
+// Set in buildFinishLine().
 let finishLinePos = null;
 let finishLineDir = null;
+let finishLatMax = 2.0; // half-width of the gate (a bit past the posts)
+let finishFwdMax = 6.0; // runout depth — course gen keeps this zone clear of track
 
 // Permutation-based 2D value noise (smoother than pure rand, cheap to evaluate)
 function makeNoise2D(seed) {
@@ -3425,10 +3429,17 @@ function buildFinishLine() {
   const dirVec = DIRS[finishCell.outDir];
   const tangent = new THREE.Vector3(dirVec.dx, 0, dirVec.dz).normalize();
 
-  // Record the banner as a crossing plane (position + travel direction) for
-  // finish detection, so the podium hand-off happens exactly at the line.
+  // Record the banner as a bounded crossing gate (position + travel direction
+  // + extents) for finish detection, so the podium hand-off happens exactly at
+  // the line and can't trigger on track that merely passes the plane's
+  // sideways extension.
   finishLinePos = p.clone();
   finishLineDir = tangent.clone();
+  // The channel walls cap how far off-center a marble can legitimately be:
+  // trackWidth/2, plus a whisker. Anything wider admits nearby track sections
+  // that pass diagonally beside the gate (observed at lat 1.6-1.9).
+  finishLatMax = CONFIG.trackWidth / 2 + 0.4;
+  finishFwdMax = CONFIG.cellSize * 1.5; // the guaranteed-clear runout zone
   const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0,1,0)).normalize();
   const up = new THREE.Vector3(0, 1, 0);
 
@@ -4803,15 +4814,29 @@ function stepPhysics(dt) {
 
     m.mesh.position.copy(m.pos);
 
-    // Finished when the marble crosses the finish-line plane on the final
-    // stretch. The progress>0.8 gate ensures we only test the true end region
-    // (a winding track never has two places with progress that high), so the
-    // plane can't false-trigger on an earlier spiral pass. Falls back to a
-    // progress threshold if the plane wasn't set (headless safety).
-    const crossedFinish = finishLinePos
-      ? m.progress > 0.8 &&
-        (m.pos.x - finishLinePos.x) * finishLineDir.x + (m.pos.z - finishLinePos.z) * finishLineDir.z >= 0
-      : m.progress >= 0.995;
+    // Finished when the marble passes BETWEEN the finish posts on the final
+    // stretch: past the banner along the travel direction (fwd), within the
+    // gate's width (lat), inside the short guaranteed-clear runout (fwd max),
+    // and near the banner's height. The bounds make it a real gate — an
+    // unbounded plane false-triggered on courses whose late track curls past
+    // the line's sideways extension. Falls back to a progress threshold if the
+    // gate wasn't set (headless safety).
+    let crossedFinish = false;
+    if (finishLinePos) {
+      if (m.progress > 0.8) {
+        const fdx = m.pos.x - finishLinePos.x;
+        const fdz = m.pos.z - finishLinePos.z;
+        const fwd = fdx * finishLineDir.x + fdz * finishLineDir.z;
+        const lat = Math.abs(fdz * finishLineDir.x - fdx * finishLineDir.z);
+        // Height: the banner anchors at floor level and a marble's centre rides
+        // ~0.3 above it — 1.6 allows a bounce but rejects track passing overhead
+        // (false hits observed at dy 2.5-4).
+        crossedFinish =
+          fwd >= 0 && fwd < finishFwdMax && lat < finishLatMax && Math.abs(m.pos.y - finishLinePos.y) < 1.6;
+      }
+    } else {
+      crossedFinish = m.progress >= 0.995;
+    }
     if (crossedFinish && !m.finished) {
       m.finished = true;
       // Sim-seconds, not wall clock — identical across clients for the same
