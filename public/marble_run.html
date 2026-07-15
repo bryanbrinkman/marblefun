@@ -3681,6 +3681,10 @@ const marbles = [];
 let _marbleSkins = null;
 let _texLoader = null;
 let _gltfLoaderPromise = null;
+// GLB models loaded for skins are cached by URL and cloned per marble.
+let _glbCache = {};
+// Test skin toggle (T key): applies one wrap to every marble for previewing.
+let _testSkinOn = false;
 function ensureGLTFLoader() {
   if (window.THREE && THREE.GLTFLoader) return Promise.resolve(THREE.GLTFLoader);
   if (_gltfLoaderPromise) return _gltfLoaderPromise;
@@ -3711,31 +3715,68 @@ function applyMarbleSkin(m) {
         mat.needsUpdate = true;
       });
     } else if (skin.glb) {
+      // Clone the loaded model onto the marble, auto-fitting to marble size.
+      const place = (template) => {
+        if (!m.mesh || !template) return;
+        const model = template.clone(true);
+        const box = new THREE.Box3().setFromObject(model);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        const s = (CONFIG.marbleRadius * 2) / maxDim;
+        model.scale.setScalar(s);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        model.position.copy(center.multiplyScalar(-s));
+        if (m.mesh.material) m.mesh.material.visible = false; // hide the default sphere
+        m.mesh.add(model);
+        m.skinModel = model;
+      };
+      // Load a given GLB once, then clone it for every marble — loading a
+      // multi-MB model per marble per race would be wasteful.
+      if (_glbCache[skin.glb]) { place(_glbCache[skin.glb]); return; }
       ensureGLTFLoader().then((Loader) => {
         if (!Loader || !m.mesh) return;
         const loader = new Loader();
         if (loader.setCrossOrigin) loader.setCrossOrigin('anonymous');
         loader.load(skin.glb, (gltf) => {
-          if (!m.mesh) return;
-          const model = gltf.scene || gltf.scenes[0];
-          // Auto-fit to marble size and center on the marble.
-          const box = new THREE.Box3().setFromObject(model);
-          const size = new THREE.Vector3();
-          box.getSize(size);
-          const maxDim = Math.max(size.x, size.y, size.z) || 1;
-          const s = (CONFIG.marbleRadius * 2) / maxDim;
-          model.scale.setScalar(s);
-          const center = new THREE.Vector3();
-          box.getCenter(center);
-          model.position.copy(center.multiplyScalar(-s));
-          if (m.mesh.material) m.mesh.material.visible = false; // hide the default sphere
-          m.mesh.add(model);
-          m.skinModel = model;
+          const template = gltf.scene || gltf.scenes[0];
+          _glbCache[skin.glb] = template;
+          place(template);
         });
       });
     }
   } catch (e) {
     /* skin failure never breaks the race */
+  }
+}
+
+// Remove any skin from a marble, restoring its default colored sphere.
+function _clearSkin(m) {
+  if (!m || !m.mesh) return;
+  if (m.skinModel) { m.mesh.remove(m.skinModel); m.skinModel = null; }
+  const mat = m.mesh.material;
+  if (mat) {
+    mat.visible = true;
+    if (mat.map) { mat.map = null; mat.needsUpdate = true; }
+  }
+}
+
+// T key: toggle a test wrap (marbles/_test.glb) on every marble. This is a
+// local previewing aid for trying out custom marble art — it isn't part of the
+// tournament and doesn't affect the deterministic race result. Because
+// _marbleSkins is keyed by color-name and covers all lanes, the wrap persists
+// when the field is rebuilt for the next race.
+function toggleTestSkin() {
+  _testSkinOn = !_testSkinOn;
+  if (_testSkinOn) {
+    const skin = { glb: 'marbles/_test.glb' };
+    _marbleSkins = {};
+    NAMES.forEach((n) => { _marbleSkins[n] = skin; });
+    if (typeof marbles !== 'undefined' && marbles) marbles.forEach((m) => applyMarbleSkin(m));
+  } else {
+    _marbleSkins = null;
+    if (typeof marbles !== 'undefined' && marbles) marbles.forEach((m) => _clearSkin(m));
   }
 }
 
@@ -7156,6 +7197,9 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'm' || e.key === 'M') {
     // Toggle marble-blast mode — single-marble player control.
     toggleMarbleBlast();
+  } else if (e.key === 't' || e.key === 'T') {
+    // Preview a custom marble wrap on every ball (test skin).
+    toggleTestSkin();
   }
 });
 
