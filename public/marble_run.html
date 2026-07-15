@@ -255,6 +255,56 @@
     letter-spacing: 0.3em; color: #5a4630;
     text-transform: uppercase;
   }
+  /* Wordmark above the loader — same warm serif as the rest of the toy. */
+  #loaderBrand {
+    font-size: 34px; font-weight: bold; letter-spacing: 0.04em;
+    color: #4a3520; text-shadow: 0 2px 0 rgba(255,255,255,0.35);
+  }
+  #loaderBrand span { color: #b3542e; }
+  /* The whole marble+ring group bobs gently, like it's waiting at the gate. */
+  #loaderBob { animation: loaderBob 1.8s ease-in-out infinite; }
+  @keyframes loaderBob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  /* Rotating workshop quips under the (real) build-step label. */
+  #loaderQuip {
+    font-size: 11.5px; font-style: italic; letter-spacing: 0.08em;
+    color: #7a6248; min-height: 15px; margin-top: -8px;
+    transition: opacity 0.25s ease;
+  }
+  /* Mini marble race across a wooden plank. Each .lm carries its own colors
+     (--c1/--c2), lap time (--d) and phase (--dl); the highlight spot orbits to
+     read as spin. `left` keyframes are fine here — five elements, boot only. */
+  #loaderTrack {
+    position: relative; width: min(520px, 78vw); height: 42px;
+    margin-top: 6px; overflow: hidden;
+  }
+  #loaderPlank {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 10px; border-radius: 6px;
+    background: linear-gradient(to bottom, #cfa26c, #b3854f);
+    box-shadow: inset 0 2px 3px rgba(255,255,255,0.35), inset 0 -3px 4px rgba(58,40,23,0.35), 0 4px 8px rgba(58,40,23,0.25);
+  }
+  #loaderTrack .lm {
+    position: absolute; bottom: 9px; width: 22px; height: 22px; border-radius: 50%;
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.4) 18%, rgba(255,255,255,0) 34%),
+      radial-gradient(circle at 50% 45%, var(--c1) 0%, var(--c2) 100%);
+    box-shadow: inset -2px -4px 6px rgba(0,0,0,0.25), 0 3px 5px rgba(58,40,23,0.35);
+    left: -26px;
+    animation: lmRun var(--d) linear infinite;
+    animation-delay: var(--dl);
+  }
+  #loaderTrack .lm::after {
+    content: ''; position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle at 50% 16%, rgba(0,0,0,0.16) 0 2.5px, transparent 3.5px);
+    animation: lmSpin 0.5s linear infinite;
+  }
+  @keyframes lmRun { from { left: -26px; } to { left: 100%; } }
+  @keyframes lmSpin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    #loaderBob, #loaderTrack .lm, #loaderTrack .lm::after { animation: none; }
+  }
 
   /* Tilt-shift overlay — two strips at top and bottom of the screen with a
      backdrop-filter blur, fading toward the sharp middle band. The mask gradient
@@ -420,12 +470,26 @@
      loader is a glossy marble with a conic-gradient progress ring around it;
      the percentage sits ON the marble. Fades out when the build completes. -->
 <div id="loadingOverlay">
-  <div id="loaderRing">
-    <div id="loaderMarble">
-      <div id="loaderPct">0%</div>
+  <div id="loaderBrand">marblerun<span>.fun</span></div>
+  <div id="loaderBob">
+    <div id="loaderRing">
+      <div id="loaderMarble">
+        <div id="loaderPct">0%</div>
+      </div>
     </div>
   </div>
   <div id="loaderLabel">PLOTTING COURSE</div>
+  <div id="loaderQuip">Polishing the marbles…</div>
+  <!-- Mini marble race: the five lane colors roll across a wooden plank at
+       different speeds while the course builds. Pure CSS, purely decorative. -->
+  <div id="loaderTrack">
+    <div class="lm" style="--c1:#e87560;--c2:#8e2f22;--d:2.8s;--dl:0s"></div>
+    <div class="lm" style="--c1:#7fd4ef;--c2:#2a7a94;--d:3.4s;--dl:-1.1s"></div>
+    <div class="lm" style="--c1:#7ed07e;--c2:#2f6b2f;--d:2.4s;--dl:-1.8s"></div>
+    <div class="lm" style="--c1:#f6c46a;--c2:#9a6a1c;--d:3.1s;--dl:-0.5s"></div>
+    <div class="lm" style="--c1:#f4ecd8;--c2:#9a8a68;--d:3.7s;--dl:-2.4s"></div>
+    <div id="loaderPlank"></div>
+  </div>
 </div>
 
 <!-- Tilt-shift overlay (B key). Two horizontal strips above and below the
@@ -7166,6 +7230,34 @@ updateOrthoCamera();
   const ring    = document.getElementById('loaderRing');
   const pctEl   = document.getElementById('loaderPct');
   const labelEl = document.getElementById('loaderLabel');
+
+  // Workshop quips — rotate under the (real) build-step label while the course
+  // assembles. Fades between lines; purely decorative.
+  const quipEl = document.getElementById('loaderQuip');
+  const QUIPS = [
+    'Polishing the marbles…',
+    'Sanding off the splinters…',
+    'Teaching marbles to corner…',
+    'Tightening the guardrails…',
+    'Waxing the fast lane…',
+    'Consulting the physics department…',
+    'Hiding the shortcuts…',
+    'Untangling the spirals…',
+    'Warming up the confetti cannons…',
+    'Reminding gravity of its duties…',
+  ];
+  let quipIdx = Math.floor(Math.random() * QUIPS.length);
+  const quipTimer = setInterval(() => {
+    if (!quipEl) return;
+    quipEl.style.opacity = '0';
+    setTimeout(() => {
+      quipIdx = (quipIdx + 1) % QUIPS.length;
+      quipEl.textContent = QUIPS[quipIdx];
+      quipEl.style.opacity = '1';
+    }, 250);
+  }, 1700);
+  if (quipEl) quipEl.textContent = QUIPS[quipIdx];
+
   await buildWorldAsync((pct, label) => {
     if (pct !== null && pct !== undefined) {
       ring.style.setProperty('--p', pct);
@@ -7175,6 +7267,7 @@ updateOrthoCamera();
   });
   // Fade the overlay out, then remove it from the DOM entirely so its
   // backdrop never costs the compositor anything again.
+  clearInterval(quipTimer);
   overlay.classList.add('done');
   setTimeout(() => overlay.remove(), 600);
 })();
