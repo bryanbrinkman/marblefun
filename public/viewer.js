@@ -410,6 +410,8 @@ function ingestSnapshot(msg) {
   for (const race of model.racesByKey.values()) if (race.result) startedRaces.add(race.key);
 
   if (typeof msg.paused === 'boolean') reflectServerPaused(msg.paused);
+  // A snapshot without a champion is a fresh tournament — end the party.
+  if (!msg.tournament || !msg.tournament.champion) hideChampionCelebration();
 
   const cur = msg.current;
   model.currentKey = cur ? cur.raceKey : null;
@@ -447,6 +449,139 @@ async function loadChampions() {
       })
       .join('');
   } catch {}
+}
+
+// ---- tournament-champion celebration --------------------------------------
+// Full-screen moment when a champion is crowned: the winning marble huge and
+// glossy (using its lane color, or its custom image skin if one is installed),
+// name in lights, and a canvas fireworks show. Dismissed by click/✕, or
+// automatically when the next tournament starts.
+
+let _fwRaf = 0;
+let _fwTimer = 0;
+function startFireworks(baseColor) {
+  const cv = el('fwCanvas');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const fit = () => {
+    cv.width = cv.clientWidth * dpr;
+    cv.height = cv.clientHeight * dpr;
+  };
+  fit();
+  const palette = ['#ffcf5c', '#ffffff', '#ff9d3c', baseColor || '#5bc0de'];
+  const rockets = [];
+  const sparks = [];
+  const launch = () => {
+    rockets.push({
+      x: cv.width * (0.15 + Math.random() * 0.7),
+      y: cv.height + 10,
+      vy: -(cv.height * (0.011 + Math.random() * 0.005)),
+      burstY: cv.height * (0.18 + Math.random() * 0.3),
+      color: palette[(Math.random() * palette.length) | 0],
+    });
+  };
+  const burst = (r) => {
+    const n = 70 + ((Math.random() * 40) | 0);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.2;
+      const sp = (2 + Math.random() * 4.2) * dpr;
+      sparks.push({
+        x: r.x, y: r.y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 1, decay: 0.009 + Math.random() * 0.011,
+        color: Math.random() < 0.75 ? r.color : '#ffffff',
+      });
+    }
+  };
+  launch(); launch(); launch();
+  _fwTimer = setInterval(launch, 650);
+  const tick = () => {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    for (let i = rockets.length - 1; i >= 0; i--) {
+      const r = rockets[i];
+      r.y += r.vy;
+      ctx.fillStyle = r.color;
+      ctx.fillRect(r.x - dpr, r.y, dpr * 2, dpr * 7);
+      if (r.y <= r.burstY) {
+        burst(r);
+        rockets.splice(i, 1);
+      }
+    }
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const s = sparks[i];
+      s.x += s.vx;
+      s.y += s.vy;
+      s.vy += 0.045 * dpr; // gravity
+      s.vx *= 0.985;
+      s.life -= s.decay;
+      if (s.life <= 0) {
+        sparks.splice(i, 1);
+        continue;
+      }
+      ctx.globalAlpha = Math.max(0, s.life);
+      ctx.fillStyle = s.color;
+      ctx.fillRect(s.x, s.y, dpr * 3, dpr * 3);
+    }
+    ctx.globalAlpha = 1;
+    _fwRaf = requestAnimationFrame(tick);
+  };
+  _fwRaf = requestAnimationFrame(tick);
+}
+function stopFireworks() {
+  if (_fwRaf) cancelAnimationFrame(_fwRaf);
+  if (_fwTimer) clearInterval(_fwTimer);
+  _fwRaf = 0;
+  _fwTimer = 0;
+  const cv = el('fwCanvas');
+  if (cv) {
+    const ctx = cv.getContext('2d');
+    ctx && ctx.clearRect(0, 0, cv.width, cv.height);
+  }
+}
+
+// Darken a #rrggbb color for the ball's shaded side.
+function shadeColor(hex, k) {
+  const n = parseInt((hex || '#ffcf5c').replace('#', ''), 16);
+  const f = (v) => Math.max(0, Math.min(255, Math.round(v * k)));
+  return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
+}
+
+function showChampionCelebration(champion) {
+  const ov = el('champOverlay');
+  if (!ov || !champion) return;
+  // The champion's look: lane color from the final's result, or its custom
+  // image skin when a manifest provides one.
+  let color = '#ffcf5c';
+  const fin = model.racesByKey.get('final:0');
+  if (fin && fin.result && fin.result[0] && fin.result[0].color) color = fin.result[0].color;
+  const ball = el('coBall');
+  const skin = marbleManifest && (marbleManifest[champion.id] || marbleManifest[String(champion.id)]);
+  if (skin && skin.img) {
+    ball.style.backgroundImage = `url("${skin.img}")`;
+  } else {
+    ball.style.removeProperty('background-image');
+    ball.style.setProperty('--c1', color);
+    ball.style.setProperty('--c2', shadeColor(color, 0.45));
+  }
+  el('coName').textContent = champion.name;
+  ov.hidden = false;
+  requestAnimationFrame(() => ov.classList.add('show'));
+  stopFireworks();
+  startFireworks(color);
+}
+function hideChampionCelebration() {
+  const ov = el('champOverlay');
+  if (!ov || ov.hidden) return;
+  stopFireworks();
+  ov.classList.remove('show');
+  setTimeout(() => (ov.hidden = true), 500);
+}
+{
+  const ov = el('champOverlay');
+  const close = el('coClose');
+  if (close) close.addEventListener('click', hideChampionCelebration);
+  if (ov) ov.addEventListener('click', (e) => { if (e.target === ov) hideChampionCelebration(); });
 }
 
 // Reflect the SERVER's paused state (admin-driven) in the viewer UI, reusing
@@ -508,6 +643,7 @@ function onMessage(msg) {
       model.currentKey = null;
       renderAll();
       loadChampions(); // the hall of fame just gained a row
+      showChampionCelebration(msg.champion);
       break;
   }
 }
@@ -641,6 +777,7 @@ async function startLocalTournament() {
 
 async function runLocalTournament(seed, aborted) {
   const T = new window.TournamentCore.Tournament(seed);
+  hideChampionCelebration(); // fresh tournament — end the previous party
   model.champion = null;
   el('championCard').hidden = true;
   startedRaces = new Set();
@@ -676,6 +813,7 @@ async function runLocalTournament(seed, aborted) {
   model.currentKey = null;
   renderAll();
   renderChampion();
+  if (model.champion) showChampionCelebration(model.champion);
   broadcastStatus();
   return true;
 }

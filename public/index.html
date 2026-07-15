@@ -95,6 +95,20 @@
     <!-- Kept for the renderer; the game draws its own live leaderboard. -->
     <div class="roster" id="roster" hidden></div>
 
+    <!-- Tournament-champion celebration: full-screen fireworks + the winning
+         marble, huge. Shown when a champion is crowned; dismissed on click or
+         when the next tournament starts. -->
+    <div class="champ-overlay" id="champOverlay" hidden>
+      <canvas id="fwCanvas"></canvas>
+      <div class="co-inner">
+        <div class="co-kicker">🏆 TOURNAMENT CHAMPION 🏆</div>
+        <div class="co-ball" id="coBall"><span class="co-shine"></span></div>
+        <div class="co-name" id="coName"></div>
+        <div class="co-sub">100 marbles entered — one rolled out on top</div>
+      </div>
+      <button class="co-close" id="coClose" aria-label="Close">✕</button>
+    </div>
+
     <!-- Bracket: a classic two-sided "Road to the Final" that slides up from the
          bottom as a lower third, toggled by the button in the corner. -->
     <button class="bracket-btn" id="bracketBtn" aria-label="Toggle bracket">

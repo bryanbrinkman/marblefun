@@ -175,6 +175,78 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 .race-card .slot .t { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 9.5px; }
 .race-card.pending .slot { opacity: .55; }
 
+/* ---------- tournament-champion celebration ---------- */
+.champ-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(120% 90% at 50% 60%, rgba(10, 13, 22, 0.82), rgba(4, 6, 12, 0.94));
+  opacity: 0; transition: opacity 0.5s ease;
+}
+.champ-overlay.show { opacity: 1; }
+.champ-overlay canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.co-inner {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  gap: 18px; text-align: center; padding: 20px;
+}
+.co-kicker {
+  font-size: clamp(13px, 2.2vw, 18px); font-weight: 900; letter-spacing: 5px;
+  color: var(--accent); text-shadow: 0 0 24px rgba(255, 207, 92, 0.55);
+  animation: coDrop 0.6s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+}
+.co-ball {
+  --c1: #ffcf5c; --c2: #8a6a1c;
+  width: clamp(150px, 32vh, 300px); height: clamp(150px, 32vh, 300px);
+  border-radius: 50%; position: relative; background-size: cover; background-position: center;
+  background-image:
+    radial-gradient(circle at 33% 27%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.4) 12%, rgba(255,255,255,0) 32%),
+    radial-gradient(circle at 68% 80%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 32%),
+    radial-gradient(circle at 50% 42%, var(--c1) 0%, var(--c2) 100%);
+  box-shadow:
+    inset -14px -22px 44px rgba(0, 0, 0, 0.4),
+    0 0 60px rgba(255, 207, 92, 0.35),
+    0 30px 70px rgba(0, 0, 0, 0.6);
+  animation: coPop 0.9s cubic-bezier(0.22, 1.5, 0.36, 1) 0.15s both, coFloat 3.2s ease-in-out 1.05s infinite;
+}
+/* Custom image skins paint the ball; the gloss lives on this overlay so the
+   sphere read survives any texture. */
+.co-ball .co-shine {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background:
+    radial-gradient(circle at 33% 27%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.3) 12%, rgba(255,255,255,0) 34%),
+    radial-gradient(circle at 50% 115%, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 45%);
+  pointer-events: none;
+}
+.co-name {
+  font-size: clamp(30px, 6.5vw, 62px); font-weight: 900; letter-spacing: 1px; color: #fff;
+  text-shadow: 0 4px 26px rgba(0, 0, 0, 0.8), 0 0 40px rgba(255, 207, 92, 0.3);
+  animation: coDrop 0.7s cubic-bezier(0.22, 1.4, 0.36, 1) 0.45s both;
+}
+.co-sub {
+  font-size: clamp(11px, 1.6vw, 14px); letter-spacing: 2.5px; text-transform: uppercase;
+  color: var(--muted); animation: coDrop 0.7s ease 0.75s both;
+}
+.co-close {
+  position: absolute; top: 16px; right: 16px; width: 38px; height: 38px;
+  border-radius: 11px; border: 1px solid var(--line); background: var(--panel2);
+  color: var(--muted); font-size: 15px; cursor: pointer;
+}
+.co-close:hover { color: var(--text); border-color: var(--muted); }
+@keyframes coPop {
+  0% { transform: scale(0.1); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes coFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+@keyframes coDrop {
+  0% { transform: translateY(-26px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .co-ball, .co-kicker, .co-name, .co-sub { animation: none; }
+}
+
 /* past champions (hall of fame) */
 .champs { display: flex; flex-direction: column; gap: 5px; max-height: 240px; overflow-y: auto; }
 .champ-row {
