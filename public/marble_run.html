@@ -5876,10 +5876,14 @@ function updateLeaderboard() {
   leaderboardEl.innerHTML = sorted.map((m, idx) => {
     const isWinner = m === winner;
     const ribbon = isWinner ? '<span class="ribbon">🏆</span>' : '';
+    // A finished marble is at the line, so show 100%. While rolling, progress
+    // tops out just short of 1.0 (the finish sits before the curve's runout
+    // end), so cap the display at 99 — it hits 100 only on actually crossing.
+    const pct = m.finished ? 100 : Math.min(99, Math.round(m.progress * 100));
     return `
       <div class="row${isWinner ? ' winner-row' : ''}">
         <div class="dot" style="background:${m.color}"></div>
-        <div>${idx + 1}. ${_labelFor(m)}${ribbon}<span class="pct">${(m.progress * 100).toFixed(0)}%</span></div>
+        <div>${idx + 1}. ${_labelFor(m)}${ribbon}<span class="pct">${pct}%</span></div>
       </div>
     `;
   }).join('');
