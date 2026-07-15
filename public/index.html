@@ -16,8 +16,10 @@
 
     <header class="topbar ov">
       <div class="brand">
-        <span class="dot"></span>
-        <span class="brand-name">marblerun.fun</span>
+        <!-- Logo image if present (public/logo.png); falls back to the wordmark. -->
+        <img src="logo.png" alt="marblerun.fun" class="brand-logo"
+             onerror="this.hidden=true; this.nextElementSibling.hidden=false;" />
+        <span class="brand-name" hidden><span class="dot"></span>marblerun.fun</span>
       </div>
 
       <!-- Current race console, merged into the bar -->

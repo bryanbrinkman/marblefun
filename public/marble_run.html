@@ -260,7 +260,8 @@
     font-size: 34px; font-weight: bold; letter-spacing: 0.04em;
     color: #4a3520; text-shadow: 0 2px 0 rgba(255,255,255,0.35);
   }
-  #loaderBrand span { color: #b3542e; }
+  #loaderLogo { width: min(430px, 82vw); height: auto; display: block; filter: drop-shadow(0 6px 14px rgba(58,40,23,0.25)); }
+  #loaderBrand .lbfun { color: #b3542e; }
   /* The whole marble+ring group bobs gently, like it's waiting at the gate. */
   #loaderBob { animation: loaderBob 1.8s ease-in-out infinite; }
   @keyframes loaderBob {
@@ -470,7 +471,11 @@
      loader is a glossy marble with a conic-gradient progress ring around it;
      the percentage sits ON the marble. Fades out when the build completes. -->
 <div id="loadingOverlay">
-  <div id="loaderBrand">marblerun<span>.fun</span></div>
+  <div id="loaderBrand">
+    <img src="logo.png" alt="marblerun.fun" id="loaderLogo"
+         onerror="this.hidden=true; this.nextElementSibling.hidden=false;" />
+    <span hidden>marblerun<span class="lbfun">.fun</span></span>
+  </div>
   <div id="loaderBob">
     <div id="loaderRing">
       <div id="loaderMarble">
