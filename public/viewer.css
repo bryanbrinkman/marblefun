@@ -207,8 +207,12 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
   display: flex; align-items: center; justify-content: center;
   background: radial-gradient(120% 90% at 50% 60%, rgba(10, 13, 22, 0.82), rgba(4, 6, 12, 0.94));
   opacity: 0; transition: opacity 0.5s ease;
+  /* Never intercept clicks unless actually shown — .champ-overlay's display
+     would otherwise override [hidden] and cover the page invisibly. */
+  pointer-events: none;
 }
-.champ-overlay.show { opacity: 1; }
+.champ-overlay[hidden] { display: none; }
+.champ-overlay.show { opacity: 1; pointer-events: auto; }
 .champ-overlay canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .co-inner {
   position: relative; display: flex; flex-direction: column; align-items: center;
