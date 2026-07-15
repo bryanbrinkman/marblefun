@@ -31,12 +31,14 @@
         </div>
         <div class="rc-info">
           <div class="race-title" id="raceTitle">Waiting for the next race…</div>
-          <div class="seedline" id="seedline"></div>
+          <div class="rc-meta">
+            <span class="rc-count" id="progressCount">Race 0 / 25</span>
+            <span class="seedline" id="seedline"></span>
+          </div>
         </div>
-        <div class="rc-progress">
-          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
-          <span class="progress-count" id="progressCount">Race 0 / 25</span>
-        </div>
+        <!-- Live race tracker: one lane per marble (number on the left, marble
+             sliding toward a checkered finish on the right). -->
+        <div class="rc-lanes" id="rcLanes"><div class="rc-checker"></div></div>
       </div>
 
       <div class="topbar-right">

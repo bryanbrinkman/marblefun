@@ -171,6 +171,7 @@ function renderCurrent(race) {
     : `${roundName[race.roundKey] || race.roundKey} ${race.indexInRound + 1}`;
   title.textContent = label;
   el('seedline').textContent = `track ${race.trackSeed} · race ${race.raceSeed}`;
+  renderLanes(race);
   renderRoster(race);
 }
 
@@ -199,9 +200,59 @@ function renderProgress() {
   const done = orderedRaces().filter((r) => r.result).length;
   const cur = model.currentKey && model.racesByKey.get(model.currentKey);
   const shown = model.champion ? TOTAL_RACES : Math.min(TOTAL_RACES, done + (cur && !cur.result ? 1 : 0));
-  el('progressCount').textContent = `Race ${shown} / ${TOTAL_RACES}`;
-  el('progressFill').style.width = (100 * done) / TOTAL_RACES + '%';
+  const pc = el('progressCount');
+  if (pc) pc.textContent = `Race ${shown} / ${TOTAL_RACES}`;
 }
+
+// ---- top-bar live race tracker -------------------------------------------
+// One thin lane per marble (number on the left, a colored marble sliding
+// toward a checkered finish on the right). The lanes come from the current
+// race's roster; positions are polled live from the game each frame.
+let _laneDots = {}; // laneName -> dot element
+let _lanesKey = null; // which race the lanes were built for
+function renderLanes(race) {
+  const wrap = el('rcLanes');
+  if (!wrap) return;
+  if (_lanesKey === race.key && wrap.children.length > 1) return; // already built
+  _lanesKey = race.key;
+  _laneDots = {};
+  wrap.innerHTML =
+    '<div class="rc-checker"></div>' +
+    race.roster
+      .map(
+        (s) =>
+          `<div class="rc-lane"><span class="rc-num">${shortName(s.marbleName)}</span>` +
+          `<div class="rc-rail"><span class="rc-dot" data-lane="${s.lane}" style="background:${s.color}"></span></div></div>`
+      )
+      .join('');
+  for (const s of race.roster) _laneDots[s.lane] = wrap.querySelector(`.rc-dot[data-lane="${s.lane}"]`);
+}
+function clearLanes() {
+  const wrap = el('rcLanes');
+  if (wrap) wrap.innerHTML = '<div class="rc-checker"></div>';
+  _laneDots = {};
+  _lanesKey = null;
+}
+// Cheap per-frame poll of the game's live positions.
+function trackTick() {
+  const a = api();
+  if (a && a.getProgress && _laneDots && Object.keys(_laneDots).length) {
+    let prog = null;
+    try {
+      prog = a.getProgress();
+    } catch {}
+    if (prog)
+      for (const p of prog) {
+        const dot = _laneDots[p.lane];
+        if (dot) {
+          dot.style.left = (p.pos * 100).toFixed(1) + '%';
+          dot.classList.toggle('done', p.finished);
+        }
+      }
+  }
+  requestAnimationFrame(trackTick);
+}
+requestAnimationFrame(trackTick);
 
 function renderFunnel() {
   const cur = model.currentKey && model.racesByKey.get(model.currentKey);
@@ -393,6 +444,7 @@ function renderAll() {
   renderChampion();
   const cur = model.currentKey && model.racesByKey.get(model.currentKey);
   if (cur) renderCurrent(cur);
+  else clearLanes();
 }
 
 // ---- message handling ----------------------------------------------------

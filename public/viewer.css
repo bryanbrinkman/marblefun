@@ -57,11 +57,34 @@ body.stats-hidden .side { opacity: 0; pointer-events: none; }
 
 /* current race, merged into the bar */
 .race-console { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.rc-info { display: flex; flex-direction: column; justify-content: center; min-width: 0; max-width: 240px; flex: none; }
-.rc-progress { flex: 1; min-width: 80px; display: flex; align-items: center; gap: 8px; }
-.rc-progress .progress-track { flex: 1; height: 6px; background: rgba(0,0,0,.4); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
-.progress-fill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, var(--accent2), var(--accent)); box-shadow: 0 0 12px rgba(255,207,92,.5); transition: width .6s cubic-bezier(.22,1,.36,1); }
-.progress-count { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11px; white-space: nowrap; }
+.rc-info { display: flex; flex-direction: column; justify-content: center; min-width: 0; max-width: 220px; flex: none; }
+.rc-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rc-count { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 700; white-space: nowrap; }
+
+/* Live race tracker — one thin lane per marble, sliding to a checkered line. */
+.rc-lanes {
+  flex: 1; min-width: 110px; position: relative;
+  display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  height: 46px; padding: 3px 12px 3px 0;
+}
+.rc-checker {
+  position: absolute; right: 2px; top: 3px; bottom: 3px; width: 7px; border-radius: 2px;
+  background: repeating-conic-gradient(#12151c 0 25%, #eef2f7 0 50%) 0 0 / 7px 7px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.4);
+}
+.rc-lane { display: flex; align-items: center; gap: 7px; height: 8px; }
+.rc-num {
+  width: 30px; flex: none; text-align: right; font-size: 9px; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 700;
+}
+.rc-rail { position: relative; flex: 1; height: 3px; border-radius: 999px; background: rgba(0,0,0,.34); }
+.rc-dot {
+  position: absolute; top: 50%; left: 0%; width: 9px; height: 9px; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: inset -1.5px -2px 3px rgba(0,0,0,.35), 0 0 5px rgba(0,0,0,.5);
+  transition: left .12s linear;
+}
+.rc-dot.done { box-shadow: inset -1.5px -2px 3px rgba(0,0,0,.35), 0 0 8px var(--accent); }
 
 .topbar-right { display: flex; align-items: center; gap: 9px; justify-content: flex-end; }
 .conn, .watching { font-size: 11px; color: var(--muted); padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; white-space: nowrap; background: rgba(0,0,0,.25); }
@@ -379,7 +402,9 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 @media (max-width: 720px) {
   .topbar { gap: 8px; padding: 6px 10px; }
   .seedline { display: none; }
-  .rc-info { max-width: 130px; }
+  .rc-info { max-width: 120px; }
+  .rc-lanes { height: 42px; min-width: 84px; padding-right: 11px; }
+  .rc-num { width: 24px; font-size: 8px; }
   .side { top: 56px; width: 52vw; max-width: 240px; max-height: calc(100vh - 66px); }
   .paused-badge { top: 58px; }
 }
@@ -390,7 +415,7 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 }
 @media (max-width: 470px) {
   .brand-name { display: none; }
-  .progress-count { display: none; }
+  .rc-num { display: none; }
   .watching { display: none !important; }
   .bracket-btn span:last-child { display: none; }
   .bracket-btn { padding: 10px; }

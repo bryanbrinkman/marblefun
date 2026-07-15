@@ -6187,6 +6187,16 @@ window.marbleAPI = {
     color: m.color,
     timeSec: m.finishTime,
   })),
+  // Live per-lane race position (for the host's top-bar race tracker). `lane`
+  // is the color-name (RED/BLUE/…), `pos` is 0..1 along the track (1 = crossed
+  // the line). Cheap; safe to poll every frame.
+  getProgress: () => marbles.map((m) => ({
+    lane: m.name,
+    color: m.color,
+    pos: m.finished ? 1 : Math.max(0, Math.min(0.995, m.progress || 0)),
+    finished: !!m.finished,
+    rank: (finishOrder.indexOf(m) + 1) || 0,
+  })),
   // Headless fast-forward: computes a race's full result in milliseconds by
   // stepping the deterministic sim in a tight loop with no rendering. This is
   // exactly what a tournament server does to know results in advance, and it's
