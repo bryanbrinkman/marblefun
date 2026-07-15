@@ -52,7 +52,9 @@ body.stats-hidden .side { opacity: 0; pointer-events: none; }
 }
 .brand { font-weight: 900; letter-spacing: 0.5px; display: flex; align-items: center; gap: 10px; font-size: 15px; flex: none; }
 .brand-logo { height: 32px; width: auto; display: block; }
-.brand-name { display: flex; align-items: center; gap: 10px; background: linear-gradient(90deg, #fff, var(--accent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+/* :not([hidden]) so the fallback's `hidden` attribute actually wins (a plain
+   .brand-name rule would override [hidden]{display:none} and show both). */
+.brand-name:not([hidden]) { display: flex; align-items: center; gap: 10px; background: linear-gradient(90deg, #fff, var(--accent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .brand .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px var(--accent); animation: pulse 2.4s ease-in-out infinite; -webkit-text-fill-color: initial; }
 @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.82); } }
 
