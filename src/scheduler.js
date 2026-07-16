@@ -29,7 +29,7 @@ const DEFAULTS = {
   watchOverrideMs: null, // if set, ignore real race duration (tests/demo only)
   maxSimSeconds: 300,
   verbose: true, // per-race console logging
-  trackAttempts: 5, // candidate track seeds to try before accepting an all-DNF race
+  trackAttempts: 5, // candidate track seeds to try before accepting a poor-start race
   intermissionMs: 30000, // pause on the champion before onTournamentComplete fires
   onTournamentComplete: null, // hook: start the next tournament (endless mode)
 };
@@ -208,11 +208,15 @@ class Scheduler {
     });
   }
 
-  // Simulate the race, deterministically skipping "dud" track seeds (a rare
-  // seed builds an unwinnable course where nobody finishes). The viewer's
-  // local mode applies the IDENTICAL candidate rule, so both modes always
-  // agree on which course a race runs on. Returns null on simulator failure.
+  // Simulate the race, deterministically skipping "dud" track seeds. A rare seed
+  // builds a poor course where marbles jam at the start and most never finish —
+  // watching one marble roll while four sit stuck is no race at all. We require
+  // a MAJORITY of the field to finish (ceil(roster/2), i.e. 3 of 5); anything
+  // less re-rolls to the next candidate seed. The viewer's local mode applies
+  // the IDENTICAL candidate rule and threshold, so both modes always agree on
+  // which course a race runs on. Returns null on simulator failure.
   async _computeOrder(race) {
+    const minFinishers = Math.max(1, Math.ceil(race.roster.length / 2));
     try {
       for (let attempt = 0; ; attempt++) {
         const candidate =
@@ -220,14 +224,16 @@ class Scheduler {
             ? race.trackSeed
             : deriveSeed(this.t.masterSeed, 0x7a2c, race.roundIdx + 1, race.indexInRound + 1, attempt);
         const sim = await this.sim.simulate(race.raceSeed, { forTrackSeed: candidate });
-        if (sim.order.length > 0 || attempt >= this.cfg.trackAttempts - 1) {
+        if (sim.order.length >= minFinishers || attempt >= this.cfg.trackAttempts - 1) {
           if (candidate !== race.trackSeed) {
             race.trackSeed = candidate;
             if (race.dbId != null) this.db.updateRaceTrackSeed(race.dbId, candidate);
           }
           return this._toOrder(race, sim);
         }
-        console.warn(`[race] ${race.key} track ${candidate} is a dud (0 finishers) — trying next candidate`);
+        console.warn(
+          `[race] ${race.key} track ${candidate} is a dud (${sim.order.length}/${race.roster.length} finishers) — trying next candidate`
+        );
       }
     } catch (err) {
       console.error('[scheduler] sim failed for', race.key, err.message);

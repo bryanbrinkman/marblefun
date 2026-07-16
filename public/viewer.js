@@ -935,10 +935,14 @@ async function runLocalRace(T, race, aborted) {
   // Compute the true result first (deterministic fast-forward), then reset the
   // marbles to the gate for a clean pre-race view (no course rebuild).
   let order = await computeResult(race);
-  // A rare track seed builds an unwinnable course where nobody finishes. Skip
-  // to the next candidate seed — the EXACT rule the server scheduler uses
-  // (scheduler._computeOrder), so both modes agree on every race's course.
-  for (let attempt = 1; attempt <= 4 && !order.some((o) => o.timeSec != null); attempt++) {
+  // A rare track seed builds a poor course where marbles jam at the start and
+  // most never finish. Require a MAJORITY of the field to finish (ceil(roster/2),
+  // i.e. 3 of 5); otherwise skip to the next candidate seed — the EXACT rule and
+  // threshold the server scheduler uses (scheduler._computeOrder), so both modes
+  // agree on every race's course.
+  const minFinishers = Math.max(1, Math.ceil(race.roster.length / 2));
+  const finisherCount = (o) => o.filter((x) => x.timeSec != null).length;
+  for (let attempt = 1; attempt <= 4 && finisherCount(order) < minFinishers; attempt++) {
     race.trackSeed = window.TournamentCore.deriveSeed(
       T.masterSeed, 0x7a2c, race.roundIdx + 1, race.indexInRound + 1, attempt
     );
