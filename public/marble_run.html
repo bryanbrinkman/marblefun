@@ -230,13 +230,13 @@
   #loadingOverlay.done { opacity: 0; pointer-events: none; }
   #loaderRing {
     --p: 0;
-    width: 132px; height: 132px; border-radius: 50%;
+    width: 66px; height: 66px; border-radius: 50%;
     background: conic-gradient(#6db83e calc(var(--p) * 1%), rgba(58, 40, 23, 0.15) 0);
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 8px 22px rgba(58, 40, 23, 0.3);
   }
   #loaderMarble {
-    width: 112px; height: 112px; border-radius: 50%;
+    width: 56px; height: 56px; border-radius: 50%;
     background:
       radial-gradient(circle at 32% 28%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.45) 10%, rgba(255,255,255,0) 28%),
       radial-gradient(circle at 70% 78%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 30%),
@@ -245,10 +245,10 @@
     display: flex; align-items: center; justify-content: center;
   }
   #loaderPct {
-    font-family: inherit; font-size: 26px; font-weight: bold;
+    font-family: inherit; font-size: 14px; font-weight: bold;
     color: #fff8e6;
-    text-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-    letter-spacing: 0.03em;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    letter-spacing: 0.02em;
   }
   #loaderLabel {
     font-family: inherit; font-size: 12px; font-weight: bold;
@@ -672,8 +672,52 @@ document.body.appendChild(renderer.domElement);
 // (a big fill-rate win on high-DPI screens) and turn dynamic shadows off.
 // Toggled by the ⚡ button in the control bar; the choice is remembered. Set
 // before the world is built so materials compile without shadow sampling.
+// Guess whether this device is too weak for the full-quality render path, so
+// first-time visitors on old phones/PCs start smooth without touching the ⚡
+// button. Heuristic only (cosmetic — it never affects the deterministic race):
+// a software rasterizer or no WebGL is a hard "low"; otherwise we score the GPU
+// string, RAM and core count and go low only on clear evidence of weakness.
+// Any explicit choice the user made with the ⚡ button (persisted below) always
+// wins over this guess.
+function detectLowGfx() {
+  try {
+    let gl = null;
+    try {
+      const c = document.createElement('canvas');
+      gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+    } catch (e) {}
+    if (!gl) return true; // no WebGL at all → weakest path
+    let gpu = '';
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    gpu = String((dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) || '').toLowerCase();
+    // Software renderers (headless/VMs/locked-down browsers) → always low.
+    if (/swiftshader|llvmpipe|software|microsoft basic|softpipe/.test(gpu)) return true;
+
+    let score = 0;
+    // Strong discrete GPUs / Apple silicon.
+    if (/nvidia|geforce|\brtx\b|\bgtx\b|radeon rx|\bapple m\d|apple gpu|arc a\d/.test(gpu)) score += 3;
+    // Older integrated / low-end mobile GPUs.
+    if (/hd graphics (2000|2500|3000|4000|4400|5000)|gma|mali-4|mali-t[0-9]|adreno \(tm\) [1-4]\d\d|powervr|videocore/.test(gpu)) score -= 3;
+
+    const mem = navigator.deviceMemory; // undefined on Safari/iOS
+    if (mem >= 8) score += 2; else if (mem >= 4) score += 1; else if (mem && mem <= 2) score -= 2;
+
+    const cores = navigator.hardwareConcurrency || 0;
+    if (cores >= 8) score += 2; else if (cores >= 4) score += 1; else if (cores && cores <= 2) score -= 2;
+
+    return score < 0; // only drop to low on a net-negative (clearly weak) score
+  } catch (e) {
+    return false; // detection trouble → assume capable
+  }
+}
+
 let _lowQ = false;
-try { _lowQ = localStorage.getItem('marbleLowQ') === '1'; } catch (e) {}
+let _lowQUserSet = false; // true once the user has picked via the ⚡ button
+try {
+  const saved = localStorage.getItem('marbleLowQ');
+  if (saved === '1' || saved === '0') { _lowQ = saved === '1'; _lowQUserSet = true; }
+  else _lowQ = detectLowGfx(); // first visit: auto-pick from device capability
+} catch (e) { _lowQ = detectLowGfx(); }
 function applyQuality(recompile) {
   const maxDpr = Math.min(window.devicePixelRatio || 1, 2);
   renderer.setPixelRatio(_lowQ ? Math.min(maxDpr, 1) : maxDpr);
@@ -6120,6 +6164,8 @@ const lqBtn = document.getElementById('lqBtn');
 if (lqBtn)
   lqBtn.addEventListener('click', () => {
     _lowQ = !_lowQ;
+    _lowQUserSet = true;
+    if (typeof _fps !== 'undefined') _fps = null; // user decided — stop the auto watchdog
     try { localStorage.setItem('marbleLowQ', _lowQ ? '1' : '0'); } catch (e) {}
     applyQuality(true);
   });
@@ -7679,10 +7725,32 @@ const FIXED_DT = 1 / 120;
 let accumulator = 0;
 let lastTime = performance.now();
 
+// FPS watchdog. GPU capability strings are unreliable, so if we auto-guessed
+// the high-quality path (detectLowGfx) but the device can't actually sustain it,
+// quietly drop to low after a short measurement. Disarmed if the user made an
+// explicit ⚡ choice or we already start low. Cosmetic only; not persisted, so
+// it re-evaluates each visit.
+let _fps = (_lowQUserSet || _lowQ) ? null : { start: 0, measStart: 0, frames: 0 };
+function fpsWatch(now) {
+  if (!_fps) return;
+  if (_fps.start === 0) { _fps.start = now; return; }
+  if (now - _fps.start < 1200) return;               // skip boot jank
+  if (_fps.measStart === 0) { _fps.measStart = now; _fps.frames = 0; return; }
+  _fps.frames++;
+  const elapsed = now - _fps.measStart;
+  if (elapsed > 8000) { _fps.measStart = now; _fps.frames = 0; return; } // tab was backgrounded — remeasure
+  if (elapsed >= 4000) {
+    const fps = (_fps.frames * 1000) / elapsed;
+    if (fps < 30) { _lowQ = true; applyQuality(true); }
+    _fps = null; // decided; disarm
+  }
+}
+
 function animate() {
   requestAnimationFrame(animate);
 
   const now = performance.now();
+  fpsWatch(now);
   let frameTime = (now - lastTime) / 1000;
   lastTime = now;
   if (frameTime > 0.1) frameTime = 0.1;
