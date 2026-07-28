@@ -3806,6 +3806,57 @@ function _clearSkin(m) {
   }
 }
 
+// ---- follow-marble (viewer "pick a marble") ------------------------------
+// The host viewer can ask the cameras to prefer one lane over the automatic
+// progress-leader, and that marble gets a bobbing chevron marker so it's easy
+// to spot in the pack. Purely visual — never touches the physics.
+let _followLane = null;
+let _followMarker = null;
+function _ensureFollowMarker() {
+  if (_followMarker) return _followMarker;
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffcf5c';
+  g.strokeStyle = 'rgba(58,40,23,0.9)';
+  g.lineWidth = 5;
+  g.lineJoin = 'round';
+  g.beginPath();
+  g.moveTo(12, 8); g.lineTo(52, 8); g.lineTo(32, 46); g.closePath();
+  g.fill(); g.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  _followMarker = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  _followMarker.scale.set(1.3, 1.3, 1);
+  _followMarker.renderOrder = 30;
+  _followMarker.visible = false;
+  scene.add(_followMarker);
+  return _followMarker;
+}
+function updateFollowMarker() {
+  if (!_followLane) { if (_followMarker) _followMarker.visible = false; return; }
+  const m = marbles.find((x) => x.name === _followLane);
+  if (!m || !m.mesh || m.onPodium) { if (_followMarker) _followMarker.visible = false; return; }
+  const mk = _ensureFollowMarker();
+  mk.visible = true;
+  const bob = Math.sin(performance.now() / 320) * 0.09;
+  mk.position.set(m.pos.x, m.pos.y + CONFIG.marbleRadius + 0.75 + bob, m.pos.z);
+}
+// The marble a follow-style camera should track: the followed lane while it's
+// still racing, otherwise the progress leader (the pre-follow behavior).
+function _camSubject() {
+  if (_followLane) {
+    const f = marbles.find((m) => m.name === _followLane && !m.finished);
+    if (f) return f;
+  }
+  let leader = null;
+  let bestProgress = -1;
+  for (const m of marbles) {
+    if (m.finished) continue;
+    if (m.progress > bestProgress) { bestProgress = m.progress; leader = m; }
+  }
+  return leader;
+}
+
 // T key: toggle a test wrap (marbles/_test.glb) on every marble. This is a
 // local previewing aid for trying out custom marble art — it isn't part of the
 // tournament and doesn't affect the deterministic race result. Because
@@ -5507,12 +5558,7 @@ function updateCamera(dt) {
   // elevated, looking at the marble. The cam direction smooths over time so sudden
   // direction changes (corners, bumps) don't whip the view around.
   if (STATE.chaseCam) {
-    let leader = null;
-    let bestProgress = -1;
-    for (const m of marbles) {
-      if (m.finished) continue;
-      if (m.progress > bestProgress) { bestProgress = m.progress; leader = m; }
-    }
+    const leader = _camSubject();
     if (leader) {
       // Use the marble's velocity as the "forward" direction. Project to XZ plane and
       // normalize so the trail length stays constant regardless of fall speed.
@@ -5592,12 +5638,7 @@ function updateCamera(dt) {
   // visible around it from directly overhead. Useful for seeing path layout and
   // peg/wall arrangements without 3D perspective getting in the way.
   if (STATE.topCam) {
-    let leader = null;
-    let bestProgress = -1;
-    for (const m of marbles) {
-      if (m.finished) continue;
-      if (m.progress > bestProgress) { bestProgress = m.progress; leader = m; }
-    }
+    const leader = _camSubject();
     if (leader) {
       // Snap-fast follow so the marble stays roughly centered (slight lag for natural feel).
       const followK = 1 - Math.pow(0.0015, dt);
@@ -5636,12 +5677,7 @@ function updateCamera(dt) {
   if (STATE.actionCam) {
     // Pick the leader: the active marble with the highest progress.
     // If all marbles are finished, fall through to overview / podium.
-    let leader = null;
-    let bestProgress = -1;
-    for (const m of marbles) {
-      if (m.finished) continue;
-      if (m.progress > bestProgress) { bestProgress = m.progress; leader = m; }
-    }
+    const leader = _camSubject();
     if (leader) {
       // Smoothly follow the leader. Snap-faster early so the camera doesn't drift
       // behind the marble; once close, a slower follow looks smooth.
@@ -6226,6 +6262,12 @@ window.marbleAPI = {
   // Cosmetic only; must be set before the race's marbles are (re)created.
   setMarbleSkins(map) {
     _marbleSkins = map || null;
+  },
+  // Follow one lane (color-name) with the follow-style cameras and mark it
+  // with a chevron. Pass null to go back to tracking the leader. Cosmetic only.
+  setFollowLane(lane) {
+    _followLane = lane || null;
+    if (!_followLane && _followMarker) _followMarker.visible = false;
   },
   newCourse(trackSeed) {
     if (trackSeed !== undefined) {
@@ -7762,6 +7804,7 @@ function animate() {
   }
 
   updateMarbleVisuals(frameTime);
+  updateFollowMarker();
   updateRollSounds(frameTime);
   updateGateAnimation(frameTime);
   updateFans(frameTime);
@@ -7773,6 +7816,11 @@ function animate() {
   updateGhosting(frameTime);
   updateGlassCase(frameTime);
   updateCollapse(frameTime);
+
+  // Hidden tabs get near-zero rAF ticks from the browser already; on the ones
+  // that do fire, skip the paint entirely (physics above still advances so the
+  // deterministic replay stays on schedule when the tab returns).
+  if (document.hidden) return;
 
   if (STATE.splitScreen) {
     // Split-screen mode: snapshot all 4 cam-mode states, then render the scene
