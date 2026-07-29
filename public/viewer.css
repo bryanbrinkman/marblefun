@@ -502,32 +502,36 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 @keyframes prIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 .pr-tag { font-size: 12px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; color: var(--accent); }
 .pr-state { margin-top: 12px; font-size: 11px; letter-spacing: 2.2px; text-transform: uppercase; color: var(--muted); font-weight: 700; }
-.pr-title { font-size: clamp(19px, 4vw, 24px); font-weight: 900; margin-top: 3px; }
-.pr-count {
-  font-size: clamp(34px, 7vw, 46px); font-weight: 900; line-height: 1.1;
-  font-variant-numeric: tabular-nums; color: var(--accent);
-  text-shadow: 0 0 26px rgba(255, 207, 92, 0.35);
-}
-.pr-count[hidden] { display: none; }
+/* Primary line: the next-race countdown sentence. */
+.pr-title { font-size: clamp(19px, 4vw, 24px); font-weight: 900; margin-top: 3px; font-variant-numeric: tabular-nums; }
+/* Secondary flavor: phase label / "Lining up the next race…". */
+.pr-flavor { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .pr-journey { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 14px 0 4px; flex-wrap: wrap; }
 .j-stage {
   display: flex; flex-direction: column; align-items: center; min-width: 58px;
   padding: 6px 8px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line);
+  position: relative;
 }
 .j-stage b { font-size: 16px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
 .j-stage i { font-style: normal; font-size: 8.5px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
+/* Active: the stage the field is racing FOR — gold. */
 .j-stage.active { border-color: var(--accent); background: linear-gradient(180deg, rgba(255, 207, 92, 0.16), var(--panel2)); box-shadow: 0 0 0 1px var(--accent); }
 .j-stage.active b { color: var(--accent); }
-.j-stage.done { opacity: 0.5; }
+/* Completed: quietly earned, with a checkmark. */
+.j-stage.done { border-color: rgba(53, 208, 127, 0.35); background: rgba(53, 208, 127, 0.06); }
+.j-stage.done b { color: var(--alive); }
+.j-stage.done i::after { content: ' ✓'; color: var(--alive); }
+/* Upcoming: muted. */
+.j-stage:not(.active):not(.done) { opacity: 0.55; }
 .j-arrow { color: var(--line2); font-size: 13px; }
 .pr-starters { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-top: 9px; min-height: 0; }
 .pr-starters .um { display: flex; align-items: center; gap: 5px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; font-size: 11px; font-variant-numeric: tabular-nums; }
 .pr-starters .um .swatch { width: 10px; height: 10px; border-radius: 50%; }
 .pr-starters .um.followed { border-color: var(--accent); color: var(--accent); font-weight: 800; }
-.pr-actions { display: flex; gap: 9px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+.pr-actions { display: flex; gap: 9px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
 .pr-btn {
   cursor: pointer; font: 800 13px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  color: var(--text); padding: 11px 16px; border-radius: 12px;
+  color: var(--text); padding: 13px 18px; min-height: 44px; border-radius: 12px;
   border: 1px solid var(--line); background: var(--panel2);
   transition: border-color 0.2s, transform 0.1s;
 }
@@ -536,6 +540,52 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 .pr-btn.primary { border-color: rgba(255, 207, 92, 0.55); background: linear-gradient(180deg, rgba(255, 207, 92, 0.2), rgba(255, 207, 92, 0.06)); color: var(--accent); }
 .pr-btn.subtle { color: var(--muted); }
 .pr-btn[hidden] { display: none; }
+
+/* "Your marble" block: the pick button before choosing, a status card after. */
+.pr-marble { margin-top: 12px; display: flex; justify-content: center; }
+.pr-marble:empty { display: none; }
+.prm {
+  display: flex; align-items: center; gap: 11px; text-align: left;
+  width: 100%; max-width: 360px; padding: 10px 12px; border-radius: 14px;
+  background: var(--panel2); border: 1px solid rgba(255, 207, 92, 0.35);
+}
+.prm.out { border-color: var(--line); }
+.prm.out .prm-ball { filter: grayscale(0.5) brightness(0.8); }
+.prm-ball {
+  flex: none; width: 40px; height: 40px; border-radius: 50%;
+  box-shadow: inset -3px -6px 10px rgba(0, 0, 0, 0.35), 0 3px 8px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.prm-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.prm-k { font-style: normal; font-size: 8.5px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--accent); font-weight: 800; }
+.prm-info b { font-size: 14px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prm-status { font-size: 11px; color: var(--muted); }
+.prm-actions { flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
+.prm-follow {
+  cursor: pointer; font: 800 11.5px/1 inherit; color: var(--accent);
+  padding: 10px 12px; min-height: 44px; border-radius: 10px;
+  border: 1px solid rgba(255, 207, 92, 0.5); background: rgba(255, 207, 92, 0.1);
+}
+.prm-change {
+  cursor: pointer; font: 700 10.5px/1 inherit; color: var(--muted);
+  padding: 6px 12px; border-radius: 8px; border: 1px solid transparent; background: none;
+}
+.prm-change:hover { color: var(--text); border-color: var(--line); }
+
+/* "How it works" — reopens the full explainer from the compact card. */
+.pr-how {
+  margin-top: 10px; cursor: pointer; font: 700 11px/1 inherit; color: var(--muted);
+  background: none; border: 0; text-decoration: underline; text-underline-offset: 3px;
+  padding: 6px 8px;
+}
+.pr-how:hover { color: var(--accent); }
+.pr-how[hidden] { display: none; }
+
+/* Compact between-races card: countdown + label + actions only. */
+.pr-card.compact { padding: 15px 18px 12px; width: min(390px, 92vw); }
+.pr-card.compact .pr-tag,
+.pr-card.compact .pr-journey,
+.pr-card.compact .pr-starters { display: none; }
 
 /* ---------- replay chip ---------- */
 .replay-chip {
@@ -639,6 +689,16 @@ button:focus-visible, .card-head:focus-visible, input:focus-visible {
   .rc-lanes { display: none; } /* the in-game leaderboard covers this on phones */
   .follow-pill .fp-text { max-width: 56px; }
   .conn { font-size: 10px; padding: 4px 8px; }
+  /* The 4-box journey wraps awkwardly on narrow phones — go vertical: a
+     compact centered timeline with connecting arrows. */
+  .pr-journey { flex-direction: column; gap: 2px; margin: 10px 0 2px; flex-wrap: nowrap; }
+  .j-stage {
+    flex-direction: row; justify-content: center; align-items: baseline; gap: 7px;
+    width: 168px; min-width: 0; padding: 5px 10px;
+  }
+  .j-stage b { font-size: 14px; }
+  .j-stage i { margin-top: 0; font-size: 9px; }
+  .j-arrow { transform: rotate(90deg); font-size: 11px; line-height: 1; }
 }
 @media (max-width: 470px) {
   .brand-name { display: none; }

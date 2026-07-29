@@ -92,11 +92,13 @@
     <!-- Pre-race experience: shown between races over the idle 3D scene.
          Countdown, what's next, the road to the champion, and things to do. -->
     <section class="prerace" id="preRace" hidden>
-      <div class="pr-card">
+      <div class="pr-card" id="prCard">
         <div class="pr-tag">100 marbles enter. One becomes champion.</div>
-        <div class="pr-state" id="prState">Next race</div>
+        <div class="pr-state" id="prState">Between races</div>
+        <!-- Primary line: the next-race countdown (or a friendly fallback). -->
         <div class="pr-title" id="prTitle"></div>
-        <div class="pr-count" id="prCount" hidden>—</div>
+        <!-- Secondary flavor: phase label or "Lining up the next race…". -->
+        <div class="pr-flavor" id="prFlavor"></div>
         <div class="pr-journey" id="journey" role="img" aria-label="Tournament progress: 100 started, 20 advance, 5 finalists, 1 champion">
           <span class="j-stage" data-stage="heats"><b>100</b><i>started</i></span>
           <span class="j-arrow" aria-hidden="true">→</span>
@@ -107,9 +109,12 @@
           <span class="j-stage" data-stage="champion"><b>1</b><i>champion</i></span>
         </div>
         <div class="pr-starters" id="prStarters"></div>
+        <!-- Your marble: a pick button before choosing, a status card after. -->
+        <div class="pr-marble" id="prMarble"></div>
         <div class="pr-actions">
           <button class="pr-btn" id="watchLatestBtn" hidden>▶ Watch latest race</button>
         </div>
+        <button class="pr-how" id="prHow" hidden>How it works</button>
       </div>
     </section>
 
@@ -132,7 +137,7 @@
           <button id="pickerClear" class="pr-btn subtle">Unfollow</button>
         </div>
         <div class="picker-grid" id="pickerGrid"></div>
-        <div class="picker-note">Your pick is remembered on this device. The camera follows it whenever it races.</div>
+        <div class="picker-note" id="pickerNote">Your pick is remembered on this device. The camera follows it whenever it races.</div>
       </div>
     </div>
 

@@ -110,6 +110,10 @@ async function startReplay(race) {
   flashOverlay('GO!');
   announce(`${raceLabel(race)} has started.`);
   el('preRace').hidden = true;
+  // The visitor has now seen a race start — future between-races cards are
+  // compact for the rest of this browser session.
+  markOnboarded();
+  showFullOnce = false;
   if (race.key === model.currentKey) renderCurrent(race);
 }
 
@@ -151,7 +155,6 @@ function runCountdown(race) {
   const num = el('countdown');
   const arc = el('cdArc');
   cd.classList.remove('live');
-  const big = el('prCount'); // the pre-race card mirrors the exact countdown
   const tick = () => {
     if (startedRaces.has(race.key)) {
       clearInterval(countdownTimer);
@@ -160,13 +163,11 @@ function runCountdown(race) {
     const remaining = toLocal(race.scheduledStart) - Date.now();
     if (remaining <= 0) {
       num.textContent = '0.0';
-      if (big) big.textContent = 'GO!';
       arc.style.strokeDashoffset = String(RING_C);
       clearInterval(countdownTimer);
       return;
     }
     num.textContent = (remaining / 1000).toFixed(1);
-    if (big) big.textContent = (remaining / 1000).toFixed(1) + 's';
     const frac = Math.max(0, Math.min(1, remaining / leadMs));
     arc.style.strokeDashoffset = String(RING_C * (1 - frac));
   };
@@ -182,9 +183,32 @@ const shortName = (n) => (n || '').replace(/^Marble\s*/i, ''); // "Marble 083" -
 // Meaningful race labels: spectators shouldn't need to decode "Heat 4 · 7/25".
 function raceLabel(race) {
   if (!race) return '';
-  if (race.roundKey === 'final') return 'Championship Final';
-  if (race.roundKey === 'semis') return `Semifinal ${race.indexInRound + 1} of 4`;
-  return `Qualifying Race ${race.indexInRound + 1} of 20`;
+  if (race.roundKey === 'final') return 'Championship Race';
+  if (race.roundKey === 'semis') return `Semifinals · Race ${race.indexInRound + 1} of 4`;
+  return `Qualifying · Race ${race.indexInRound + 1} of 20`;
+}
+
+// The round currently being competed: the current race's round, else the first
+// round with an unfinished race, else (all done) the champion.
+function activeRound() {
+  if (model.champion) return 'champion';
+  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+  if (cur && !cur.result) return cur.roundKey;
+  const anyDone = orderedRaces().some((r) => r.result);
+  if (!anyDone && !cur) return null; // before race 1: nothing announced or run
+  const nxt = orderedRaces().find((r) => !r.result);
+  return nxt ? nxt.roundKey : 'champion';
+}
+
+// Which journey/funnel box to light up: the stage the field is racing FOR.
+// Before race 1 → "100 started"; qualifying → "20 advance"; semis →
+// "5 finalists"; the final (and a finished tournament) → "1 champion".
+function journeyStage() {
+  const round = activeRound();
+  if (round === null) return 'heats';
+  if (round === 'heats') return 'semis';
+  if (round === 'semis') return 'final';
+  return 'champion'; // 'final' or 'champion'
 }
 // Compact variant for tight rows (recent results, admin status).
 function raceLabelShort(race) {
@@ -286,11 +310,10 @@ function trackTick() {
 requestAnimationFrame(trackTick);
 
 function renderFunnel() {
-  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
   const order = ['heats', 'semis', 'final', 'champion'];
-  const activeKey = model.champion ? 'champion' : cur ? cur.roundKey : 'heats';
-  const activeIdx = order.indexOf(activeKey);
-  // Both phase strips (bracket funnel + pre-race journey) highlight together.
+  const activeIdx = order.indexOf(journeyStage());
+  // Both phase strips (bracket funnel + pre-race journey) highlight together:
+  // gold = the stage being raced for, ✓ = earned, muted = still to come.
   document.querySelectorAll('.funnel-stage, .j-stage').forEach((node) => {
     const idx = order.indexOf(node.dataset.stage);
     node.classList.toggle('active', idx === activeIdx);
@@ -578,8 +601,13 @@ function setFollow(id) {
   applyFollow(cur && !cur.result ? cur : null);
   renderPreRace();
 }
+const PICKER_NOTE_DEFAULT = 'Your pick is remembered on this device. The camera follows it whenever it races.';
+let _pkConfirm = null; // eliminated-marble id awaiting a confirming second tap
 function openPicker() {
   const ov = el('pickerModal');
+  _pkConfirm = null;
+  const note = el('pickerNote');
+  if (note) note.textContent = PICKER_NOTE_DEFAULT;
   buildPickerGrid();
   ov.hidden = false;
   const s = el('pickerSearch');
@@ -641,8 +669,112 @@ function stopReplay(restoreStage) {
 
 // ---- pre-race experience ---------------------------------------------------
 // Between races the screen shouldn't feel dead: the idle 3D stage keeps
-// playing underneath while this card says what's next, counts down exactly,
+// playing underneath while this card counts down exactly to the next start
 // and offers something to do (replay the last race, pick a marble).
+//
+// The FULL explainer (tagline, journey strip, starters) shows until the
+// visitor has watched a race start this browser session; after that a compact
+// card keeps the 3D stage visible. "How it works" reopens the full version.
+const ONBOARD_KEY = 'mrOnboarded'; // sessionStorage: '1' once a race has started
+let showFullOnce = false; // "How it works" re-expands until the next race
+function isOnboarded() {
+  try { return sessionStorage.getItem(ONBOARD_KEY) === '1'; } catch { return false; }
+}
+function markOnboarded() {
+  try { sessionStorage.setItem(ONBOARD_KEY, '1'); } catch {}
+}
+
+const fmtClock = (ms) => {
+  const s = Math.max(0, Math.ceil(ms / 1000)); // clamp: never a negative countdown
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+};
+const ordinal = (n) => {
+  const t = n % 100;
+  return n + (t >= 11 && t <= 13 ? 'th' : { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
+};
+
+// The race the countdown points at: the announced current race, else the
+// first race without a result yet.
+function nextUpcomingRace() {
+  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+  if (cur && !cur.result) return cur;
+  return orderedRaces().find((r) => !r.result) || null;
+}
+
+// The last race the marble actually ran (for the eliminated story).
+function eliminationInfo(id) {
+  const raced = orderedRaces().filter((r) => r.result && r.roster && r.roster.some((s) => s.marbleId === id));
+  const last = raced[raced.length - 1];
+  if (!last) return null;
+  const i = last.result.findIndex((x) => x.marbleId === id);
+  const row = i >= 0 ? last.result[i] : null;
+  return { label: raceLabel(last), rank: row ? row.rank || i + 1 : null };
+}
+
+// Best-known lane color for a marble (its most recent race), else gold.
+function marbleColor(id) {
+  const races = orderedRaces();
+  for (let i = races.length - 1; i >= 0; i--) {
+    const s = races[i].roster && races[i].roster.find((x) => x.marbleId === id);
+    if (s) return s.color;
+  }
+  return '#ffcf5c';
+}
+
+// The "your marble" block: a pick button before choosing, a status card after.
+function renderPrMarble() {
+  const wrap = el('prMarble');
+  if (!wrap) return;
+  if (followId == null) {
+    wrap.innerHTML = `<button class="pr-btn primary" id="prPickBtn">🔮 Pick a marble</button>`;
+    return;
+  }
+  const st = followedStanding();
+  const num = String(followId).padStart(3, '0');
+  const skin = marbleManifest && (marbleManifest[followId] || marbleManifest[String(followId)]);
+  const ballStyle = skin && skin.img
+    ? `background-image:url('${skin.img}');background-size:cover;background-position:center`
+    : `background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.92), rgba(255,255,255,0) 34%),` +
+      `radial-gradient(circle at 50% 45%, ${marbleColor(followId)} 0%, #131a2a 135%)`;
+  let status;
+  if (!st) {
+    status = "We've lost track of this one — pick another?";
+  } else if (st.status === 'champion') {
+    status = '🏆 Tournament champion!';
+  } else if (st.status === 'eliminated') {
+    const e = eliminationInfo(followId);
+    status = e ? `Eliminated in ${e.label}${e.rank ? ` · finished ${ordinal(e.rank)}` : ''}` : 'Eliminated';
+  } else {
+    const nxt = nextUpcomingRace();
+    status = nxt && nxt.roster && nxt.roster.some((s) => s.marbleId === followId) ? '✨ In the next race!' : 'Still racing';
+  }
+  wrap.innerHTML =
+    `<div class="prm${st && st.status !== 'alive' && st.status !== 'champion' ? ' out' : ''}">` +
+    `<span class="prm-ball" style="${ballStyle}" aria-hidden="true"></span>` +
+    `<span class="prm-info"><i class="prm-k">Your marble</i><b>${st ? st.name : 'Marble ' + num}</b>` +
+    `<span class="prm-status">${status}</span></span>` +
+    `<span class="prm-actions"><button class="prm-follow" id="prFollowBtn">📍 Follow</button>` +
+    `<button class="prm-change" id="prChangeBtn">Change</button></span>` +
+    `</div>`;
+}
+
+// Updates ONLY the countdown sentence — runs every second while visible.
+function tickPreRaceCountdown() {
+  const panel = el('preRace');
+  if (!panel || panel.hidden) return;
+  if (model.champion || document.body.classList.contains('paused')) return;
+  const title = el('prTitle');
+  const nxt = nextUpcomingRace();
+  if (nxt && nxt.scheduledStart) {
+    const remaining = toLocal(nxt.scheduledStart) - Date.now();
+    // Past-due but not started yet = the feed is a touch behind. Stay friendly.
+    title.textContent = remaining > 0 ? `Next race begins in ${fmtClock(remaining)}` : 'Any moment now…';
+  } else {
+    title.textContent = 'Starting shortly…';
+  }
+}
+setInterval(tickPreRaceCountdown, 1000);
+
 function renderPreRace() {
   const panel = el('preRace');
   if (!panel) return;
@@ -654,46 +786,56 @@ function renderPreRace() {
     return;
   }
   panel.hidden = false;
+
+  // Compact after onboarding (this session), except for the champion moment.
+  const compact = isOnboarded() && !showFullOnce && !model.champion;
+  el('prCard').classList.toggle('compact', compact);
+  el('prHow').hidden = !compact;
+
   const state = el('prState');
   const title = el('prTitle');
-  const count = el('prCount');
+  const flavor = el('prFlavor');
   const starters = el('prStarters');
   // Local mode drives the stage itself (fast-forward computations between
   // races), so the replay button is a server-mode feature only.
   const latest = orderedRaces().some((r) => r.result) && mode === 'server';
   el('watchLatestBtn').hidden = !latest;
+  renderPrMarble();
 
   if (model.champion) {
     state.textContent = 'Tournament complete';
     title.textContent = `🏆 ${model.champion.name} takes the crown`;
-    count.hidden = true;
+    flavor.textContent = 'A fresh tournament starts soon';
     starters.innerHTML = '';
     return;
   }
   if (document.body.classList.contains('paused')) {
     state.textContent = 'Short break';
     title.textContent = 'Racing resumes soon';
-    count.hidden = true;
+    flavor.textContent = 'The marbles are catching their breath';
     starters.innerHTML = '';
     return;
   }
-  if (cur && !cur.result && cur.scheduledStart) {
-    state.textContent = 'Starting in';
-    title.textContent = raceLabel(cur);
-    count.hidden = false; // the exact value ticks from runCountdown
-    starters.innerHTML = cur.roster
-      .map(
-        (s) =>
-          `<span class="um${s.marbleId === followId ? ' followed' : ''}">` +
-          `<span class="swatch" style="background:${s.color}"></span>${shortName(s.marbleName)}</span>`
-      )
-      .join('');
-    return;
-  }
+
   state.textContent = 'Between races';
-  title.textContent = 'Lining up the next race…';
-  count.hidden = true;
-  starters.innerHTML = '';
+  tickPreRaceCountdown(); // fills the countdown sentence immediately
+  const nxt = nextUpcomingRace();
+  const reconnecting = el('conn').dataset.state === 'reconnecting';
+  flavor.textContent = reconnecting
+    ? 'Reconnecting to the race feed…'
+    : nxt && nxt.scheduledStart
+      ? raceLabel(nxt)
+      : 'Lining up the next race…';
+  starters.innerHTML =
+    !compact && nxt && nxt.roster
+      ? nxt.roster
+          .map(
+            (s) =>
+              `<span class="um${s.marbleId === followId ? ' followed' : ''}">` +
+              `<span class="swatch" style="background:${s.color}"></span>${shortName(s.marbleName)}</span>`
+          )
+          .join('')
+      : '';
 }
 
 function renderAll() {
@@ -1408,7 +1550,21 @@ document.querySelectorAll('.card.collapsible .card-head').forEach((head) => {
     el('pickerGrid').addEventListener('click', (e) => {
       const b = e.target.closest('.pk');
       if (!b) return;
-      setFollow(Number(b.dataset.id));
+      const id = Number(b.dataset.id);
+      // Eliminated marbles need a deliberate second tap — you'd only be
+      // choosing them to follow their story, not to cheer them on.
+      if (b.classList.contains('out') && _pkConfirm !== id) {
+        _pkConfirm = id;
+        const st = model.standings.find((m) => m.id === id);
+        const note = el('pickerNote');
+        if (note)
+          note.textContent = `${st ? st.name : 'That marble'} is already out of the tournament — tap it again to pick it anyway and view its story.`;
+        return;
+      }
+      _pkConfirm = null;
+      const note = el('pickerNote');
+      if (note) note.textContent = PICKER_NOTE_DEFAULT;
+      setFollow(id);
       closePicker();
     });
   if (el('pickerRandom'))
@@ -1429,6 +1585,25 @@ document.querySelectorAll('.card.collapsible .card-head').forEach((head) => {
 // ---- pre-race actions ------------------------------------------------------
 if (el('watchLatestBtn')) el('watchLatestBtn').addEventListener('click', startLatestReplay);
 if (el('replayExit')) el('replayExit').addEventListener('click', () => stopReplay(true));
+if (el('prHow'))
+  el('prHow').addEventListener('click', () => {
+    showFullOnce = true; // re-expand until the next race starts
+    renderPreRace();
+  });
+// The "your marble" block is re-rendered per state — delegate its buttons.
+if (el('prMarble'))
+  el('prMarble').addEventListener('click', (e) => {
+    if (e.target.closest('#prPickBtn') || e.target.closest('#prChangeBtn')) {
+      openPicker();
+      return;
+    }
+    if (e.target.closest('#prFollowBtn')) {
+      const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+      applyFollow(cur && !cur.result ? cur : null);
+      const a = api();
+      if (a && a.setCamera) a.setCamera('action');
+    }
+  });
 
 // ---- controls popover ------------------------------------------------------
 {
