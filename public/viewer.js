@@ -662,7 +662,6 @@ function renderPreRace() {
   // races), so the replay button is a server-mode feature only.
   const latest = orderedRaces().some((r) => r.result) && mode === 'server';
   el('watchLatestBtn').hidden = !latest;
-  el('pickBtn').textContent = followId == null ? '🔮 Pick a marble' : '🔮 Change my marble';
 
   if (model.champion) {
     state.textContent = 'Tournament complete';
@@ -1399,7 +1398,6 @@ document.querySelectorAll('.card.collapsible .card-head').forEach((head) => {
 {
   const modal = el('pickerModal');
   if (el('followPill')) el('followPill').addEventListener('click', openPicker);
-  if (el('pickBtn')) el('pickBtn').addEventListener('click', openPicker);
   if (el('pickerClose')) el('pickerClose').addEventListener('click', closePicker);
   if (modal)
     modal.addEventListener('click', (e) => {
@@ -1441,7 +1439,16 @@ if (el('replayExit')) el('replayExit').addEventListener('click', () => stopRepla
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
   };
   if (btn && pop) {
-    btn.addEventListener('click', () => setOpen(pop.hidden));
+    btn.addEventListener('click', () => {
+      const pick = el('cpPick');
+      if (pick) pick.textContent = followId == null ? '🔮 Pick a marble' : '🔮 Change my marble';
+      setOpen(pop.hidden);
+    });
+    if (el('cpPick'))
+      el('cpPick').addEventListener('click', () => {
+        setOpen(false);
+        openPicker();
+      });
     document.addEventListener('click', (e) => {
       if (!pop.hidden && !pop.contains(e.target) && e.target !== btn && !btn.contains(e.target)) setOpen(false);
     });
