@@ -468,12 +468,33 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 }
 .controls-pop[hidden] { display: none; }
 .cp-title { font-size: 11px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
-.cp-touch { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 11px; }
+.cp-touch { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
 .cp-touch button {
   cursor: pointer; font: 700 12px/1 inherit; color: var(--text);
-  padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2);
+  padding: 12px; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2);
 }
 .cp-touch button:hover { border-color: var(--accent); color: var(--accent); }
+/* The active camera is unmistakable: gold border + gold text (plus aria-pressed). */
+.cp-touch button.active {
+  border-color: var(--accent); color: var(--accent);
+  background: linear-gradient(180deg, rgba(255, 207, 92, 0.18), var(--panel2));
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.cp-blast {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+  cursor: pointer; font: 800 12.5px/1.2 inherit; color: var(--text); text-align: left;
+  padding: 11px 13px; min-height: 44px; border-radius: 10px; margin-bottom: 9px;
+  border: 1px solid rgba(255, 157, 60, 0.45);
+  background: linear-gradient(180deg, rgba(255, 157, 60, 0.12), var(--panel2));
+}
+.cp-blast span { font-size: 10px; font-weight: 600; color: var(--muted); }
+.cp-blast:hover { border-color: var(--accent2); color: var(--accent2); }
+.cp-row { display: flex; margin-bottom: 11px; }
+.cp-pick {
+  flex: 1; cursor: pointer; font: 700 12px/1 inherit; color: var(--accent);
+  padding: 12px; min-height: 44px; border-radius: 10px;
+  border: 1px solid rgba(255, 207, 92, 0.4); background: rgba(255, 207, 92, 0.07);
+}
 .cp-keys { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; }
 .cp-keys div { display: flex; align-items: center; gap: 8px; }
 .cp-keys dt {
@@ -680,6 +701,27 @@ button:focus-visible, .card-head:focus-visible, input:focus-visible {
   .side .sheet-grip { display: block; }
 }
 .sheet-grip { display: none; width: 44px; height: 4px; border-radius: 999px; background: var(--line2); margin: 4px auto 6px; flex: none; }
+
+/* Side-panel group labels: Live is the race itself; these organize the rest. */
+.side-group {
+  font-size: 9.5px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted); padding: 4px 6px 0; opacity: 0.85;
+}
+
+/* Mobile: the Controls popover becomes a compact bottom dock (thumb reach),
+   sitting above the bracket button and respecting iPhone safe areas. */
+@media (max-width: 560px) {
+  .controls-pop {
+    top: auto; bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    left: 10px; right: 10px; width: auto;
+  }
+  .cp-touch button { flex: 1 1 30%; }
+}
+/* iPhone safe-area: keep the corner controls above the home indicator. */
+.bracket-btn { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 720px) {
+  .side { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+}
 @media (max-width: 720px) {
   .bracket-dock { height: 56vh; max-height: none; padding: 9px 10px 10px; }
   .bd-top .funnel { display: none; }

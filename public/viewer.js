@@ -184,8 +184,19 @@ const shortName = (n) => (n || '').replace(/^Marble\s*/i, ''); // "Marble 083" -
 function raceLabel(race) {
   if (!race) return '';
   if (race.roundKey === 'final') return 'Championship Race';
-  if (race.roundKey === 'semis') return `Semifinals · Race ${race.indexInRound + 1} of 4`;
+  if (race.roundKey === 'semis') return `Finals · Race ${race.indexInRound + 1} of 4`;
   return `Qualifying · Race ${race.indexInRound + 1} of 20`;
+}
+
+// The top-bar race label — SAME phase logic as the journey highlight
+// (activeRound feeds both), so the bar and the card can never disagree.
+function topLabel() {
+  const round = activeRound();
+  if (round === null) return 'Tournament starting';
+  if (round === 'champion') return 'Tournament Complete';
+  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+  const race = cur && !cur.result ? cur : orderedRaces().find((r) => !r.result);
+  return race ? raceLabel(race) : 'Tournament starting';
 }
 
 // The round currently being competed: the current race's round, else the first
@@ -213,8 +224,8 @@ function journeyStage() {
 // Compact variant for tight rows (recent results, admin status).
 function raceLabelShort(race) {
   if (!race) return '';
-  if (race.roundKey === 'final') return 'Final';
-  if (race.roundKey === 'semis') return `Semi ${race.indexInRound + 1}`;
+  if (race.roundKey === 'final') return 'Champ.';
+  if (race.roundKey === 'semis') return `Finals ${race.indexInRound + 1}`;
   return `Qual ${race.indexInRound + 1}`;
 }
 
@@ -603,9 +614,11 @@ function setFollow(id) {
 }
 const PICKER_NOTE_DEFAULT = 'Your pick is remembered on this device. The camera follows it whenever it races.';
 let _pkConfirm = null; // eliminated-marble id awaiting a confirming second tap
+let _pickerOpener = null; // element to give focus back to on close
 function openPicker() {
   const ov = el('pickerModal');
   _pkConfirm = null;
+  _pickerOpener = document.activeElement;
   const note = el('pickerNote');
   if (note) note.textContent = PICKER_NOTE_DEFAULT;
   buildPickerGrid();
@@ -615,6 +628,10 @@ function openPicker() {
 }
 function closePicker() {
   el('pickerModal').hidden = true;
+  if (_pickerOpener && document.contains(_pickerOpener)) {
+    try { _pickerOpener.focus(); } catch {}
+  }
+  _pickerOpener = null;
 }
 
 // ---- "watch latest race" replay -------------------------------------------
@@ -623,10 +640,12 @@ function closePicker() {
 // race needs the stage.
 let replaying = false;
 async function startLatestReplay() {
-  if (replaying || mode !== 'server') return;
   const done = orderedRaces().filter((r) => r.result);
-  const last = done[done.length - 1];
-  if (!last) return;
+  return startReplayOf(done[done.length - 1]);
+}
+async function startReplayOf(last) {
+  if (replaying || mode !== 'server') return;
+  if (!last || !last.result) return;
   const cur = model.currentKey && model.racesByKey.get(model.currentKey);
   // Too close to a live start? Don't steal the stage for a replay.
   if (cur && !cur.result && cur.scheduledStart && toLocal(cur.scheduledStart) - Date.now() < 8000) return;
@@ -708,7 +727,7 @@ function eliminationInfo(id) {
   if (!last) return null;
   const i = last.result.findIndex((x) => x.marbleId === id);
   const row = i >= 0 ? last.result[i] : null;
-  return { label: raceLabel(last), rank: row ? row.rank || i + 1 : null };
+  return { label: raceLabel(last), rank: row ? row.rank || i + 1 : null, race: last };
 }
 
 // Best-known lane color for a marble (its most recent race), else gold.
@@ -736,42 +755,119 @@ function renderPrMarble() {
     ? `background-image:url('${skin.img}');background-size:cover;background-position:center`
     : `background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.92), rgba(255,255,255,0) 34%),` +
       `radial-gradient(circle at 50% 45%, ${marbleColor(followId)} 0%, #131a2a 135%)`;
+  // In-roster check for a round: has this marble earned a spot there?
+  const inRound = (key) => {
+    const round = model.rounds.find((r) => r.key === key);
+    return !!(round && round.races.some((r) => r.roster && r.roster.some((s) => s.marbleId === followId)));
+  };
   let status;
+  let mainAction = `<button class="prm-follow" id="prFollowBtn">📍 Follow</button>`;
   if (!st) {
-    status = "We've lost track of this one — pick another?";
+    // Friendly fallback; the selection is retained for when data returns.
+    status = "We've lost track of this one — it'll be back";
   } else if (st.status === 'champion') {
     status = '🏆 Tournament champion!';
   } else if (st.status === 'eliminated') {
     const e = eliminationInfo(followId);
     status = e ? `Eliminated in ${e.label}${e.rank ? ` · finished ${ordinal(e.rank)}` : ''}` : 'Eliminated';
+    // An eliminated marble isn't racing — offer its final race instead of a
+    // follow camera (replays are a server-mode feature).
+    mainAction = mode === 'server' && e ? `<button class="prm-follow" id="prViewRaceBtn">▶ View race</button>` : '';
   } else {
     const nxt = nextUpcomingRace();
-    status = nxt && nxt.roster && nxt.roster.some((s) => s.marbleId === followId) ? '✨ In the next race!' : 'Still racing';
+    if (nxt && nxt.roster && nxt.roster.some((s) => s.marbleId === followId)) status = '✨ In the next race!';
+    else if (inRound('final')) status = '👑 Racing in the Championship!';
+    else if (inRound('semis')) status = '🎉 Qualified for the finals';
+    else status = 'Still racing';
   }
   wrap.innerHTML =
-    `<div class="prm${st && st.status !== 'alive' && st.status !== 'champion' ? ' out' : ''}">` +
+    `<div class="prm${st && st.status === 'eliminated' ? ' out' : ''}">` +
     `<span class="prm-ball" style="${ballStyle}" aria-hidden="true"></span>` +
     `<span class="prm-info"><i class="prm-k">Your marble</i><b>${st ? st.name : 'Marble ' + num}</b>` +
     `<span class="prm-status">${status}</span></span>` +
-    `<span class="prm-actions"><button class="prm-follow" id="prFollowBtn">📍 Follow</button>` +
+    `<span class="prm-actions">${mainAction}` +
     `<button class="prm-change" id="prChangeBtn">Change</button></span>` +
     `</div>`;
 }
 
-// Updates ONLY the countdown sentence — runs every second while visible.
-function tickPreRaceCountdown() {
-  const panel = el('preRace');
-  if (!panel || panel.hidden) return;
-  if (model.champion || document.body.classList.contains('paused')) return;
-  const title = el('prTitle');
+// ---- shared event-state model ----------------------------------------------
+// ONE source of truth for "what is happening right now". The top bar, the
+// between-races card, the countdown and the badge all read this — no component
+// re-derives event status on its own.
+// States: LOADING | BETWEEN_RACES | COUNTDOWN | STARTING | LIVE | DELAYED |
+//         RECONNECTING | OFFLINE | TOURNAMENT_COMPLETE
+function eventState() {
+  const connSt = (el('conn') && el('conn').dataset.state) || 'connecting';
+  if (connSt === 'reconnecting') return 'RECONNECTING';
+  if (model.champion) return 'TOURNAMENT_COMPLETE';
+  if (connSt === 'offline' && !model.rounds.length) return 'OFFLINE';
+  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+  if (cur && !cur.result && startedRaces.has(cur.key)) return 'LIVE';
+  if (!model.rounds.length) return 'LOADING';
   const nxt = nextUpcomingRace();
   if (nxt && nxt.scheduledStart) {
-    const remaining = toLocal(nxt.scheduledStart) - Date.now();
-    // Past-due but not started yet = the feed is a touch behind. Stay friendly.
-    title.textContent = remaining > 0 ? `Next race begins in ${fmtClock(remaining)}` : 'Any moment now…';
-  } else {
-    title.textContent = 'Starting shortly…';
+    const rem = toLocal(nxt.scheduledStart) - Date.now();
+    if (rem <= -8000) return 'DELAYED'; // start well past due, race never began
+    if (rem <= 5000) return 'STARTING';
+    return 'COUNTDOWN';
   }
+  return 'BETWEEN_RACES';
+}
+
+// The copy + countdown text for each state. `primary`/`secondary` feed the
+// between-races card; `cd` is the top-bar ring's text when no live countdown
+// ring is running (never blank, never an em dash).
+function stateView() {
+  const st = eventState();
+  const nxt = nextUpcomingRace();
+  const rem = nxt && nxt.scheduledStart ? toLocal(nxt.scheduledStart) - Date.now() : null;
+  switch (st) {
+    case 'LOADING':
+      return { st, primary: 'Warming up the track…', secondary: 'Setting up the tournament', cd: '…' };
+    case 'COUNTDOWN':
+      return { st, primary: `Next race in ${fmtClock(rem)}`, secondary: nxt ? raceLabel(nxt) : '', cd: null };
+    case 'STARTING':
+      return { st, primary: 'Starting now…', secondary: nxt ? raceLabel(nxt) : '', cd: null };
+    case 'LIVE':
+      return { st, primary: '', secondary: '', cd: null }; // card hidden; ring says LIVE
+    case 'DELAYED':
+      return { st, primary: 'Race delayed', secondary: 'Resetting the course…', cd: '…' };
+    case 'RECONNECTING':
+      return { st, primary: 'Reconnecting…', secondary: 'The tournament is still running.', cd: '…' };
+    case 'OFFLINE':
+      return { st, primary: 'Live race unavailable', secondary: 'You can still view results and the latest replay.', cd: '…' };
+    case 'TOURNAMENT_COMPLETE':
+      return {
+        st,
+        primary: model.champion ? `🏆 ${model.champion.name} takes the crown` : 'Tournament complete',
+        secondary: 'A fresh tournament starts soon',
+        cd: '🏁',
+      };
+    default:
+      return { st: 'BETWEEN_RACES', primary: 'Starting shortly…', secondary: 'Lining up the next race…', cd: '…' };
+  }
+}
+
+// Per-second update of the countdown sentence + the top-bar ring fallback.
+// Always recomputed from the scheduled timestamp (server-clock adjusted), so a
+// suspended tab that wakes up shows the right value immediately.
+function tickPreRaceCountdown() {
+  const v = stateView();
+  // Top-bar ring text for states where the 100 ms countdown ring isn't running.
+  if (v.cd !== null && !startedRacesHasCurrent()) {
+    const num = el('countdown');
+    if (num) num.textContent = v.cd;
+  }
+  const panel = el('preRace');
+  if (!panel || panel.hidden) return;
+  if (document.body.classList.contains('paused')) return;
+  if (v.st === 'TOURNAMENT_COMPLETE') return; // static copy set by renderPreRace
+  el('prTitle').textContent = v.primary;
+  el('prFlavor').textContent = v.secondary;
+}
+function startedRacesHasCurrent() {
+  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+  return !!(cur && startedRaces.has(cur.key) && !cur.result);
 }
 setInterval(tickPreRaceCountdown, 1000);
 
@@ -817,17 +913,16 @@ function renderPreRace() {
     return;
   }
 
-  state.textContent = 'Between races';
-  tickPreRaceCountdown(); // fills the countdown sentence immediately
+  const v = stateView();
+  state.textContent =
+    v.st === 'DELAYED' ? 'Hold on' : v.st === 'RECONNECTING' || v.st === 'OFFLINE' ? 'Connection' : 'Between races';
+  title.textContent = v.primary;
+  flavor.textContent = v.secondary;
+  // Replays don't make sense seconds before a live start or with no results.
+  if (v.st === 'STARTING') el('watchLatestBtn').hidden = true;
   const nxt = nextUpcomingRace();
-  const reconnecting = el('conn').dataset.state === 'reconnecting';
-  flavor.textContent = reconnecting
-    ? 'Reconnecting to the race feed…'
-    : nxt && nxt.scheduledStart
-      ? raceLabel(nxt)
-      : 'Lining up the next race…';
   starters.innerHTML =
-    !compact && nxt && nxt.roster
+    !compact && nxt && nxt.roster && (v.st === 'COUNTDOWN' || v.st === 'STARTING')
       ? nxt.roster
           .map(
             (s) =>
@@ -849,7 +944,14 @@ function renderAll() {
   renderFollowPill();
   const cur = model.currentKey && model.racesByKey.get(model.currentKey);
   if (cur) renderCurrent(cur);
-  else if (!replaying) clearLanes();
+  else {
+    // No current race: the top label still reflects the shared phase mapping
+    // ("Tournament starting" / next race / "Tournament Complete").
+    const title = el('raceTitle');
+    title.classList.remove('final');
+    title.textContent = topLabel();
+    if (!replaying) clearLanes();
+  }
   renderPreRace();
 }
 
@@ -1602,16 +1704,51 @@ if (el('prMarble'))
       applyFollow(cur && !cur.result ? cur : null);
       const a = api();
       if (a && a.setCamera) a.setCamera('action');
+      return;
+    }
+    if (e.target.closest('#prViewRaceBtn')) {
+      // Replay the eliminated marble's final race.
+      const e2 = eliminationInfo(followId);
+      if (e2 && e2.race) startReplayOf(e2.race);
     }
   });
 
-// ---- controls popover ------------------------------------------------------
+// ---- controls popover (THE unified camera bar) ------------------------------
+// One control system: Overview · Action · Follow · Top · Split view · Marble
+// Blast. The game's own camera button is hidden in embed mode, so nothing is
+// duplicated. The active camera is marked visually AND via aria-pressed.
+function syncCamButtons() {
+  const pop = el('controlsPop');
+  if (!pop) return;
+  const a = api();
+  let cam = 'overview';
+  try { if (a && a.getCamera) cam = a.getCamera() || 'overview'; } catch {}
+  pop.querySelectorAll('[data-cam]').forEach((b) => {
+    const on = b.dataset.cam === cam;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const split = el('cpSplit');
+  if (split) {
+    split.classList.toggle('active', cam === 'split');
+    split.setAttribute('aria-pressed', cam === 'split' ? 'true' : 'false');
+  }
+  // "Follow" is the action cam pointed at YOUR marble.
+  const follow = el('cpFollow');
+  if (follow) {
+    const on = cam === 'action' && followId != null;
+    follow.classList.toggle('active', on);
+    follow.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+}
 {
   const btn = el('controlsBtn');
   const pop = el('controlsPop');
   const setOpen = (open) => {
     pop.hidden = !open;
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) syncCamButtons();
+    else btn.focus(); // focus back on the trigger when the panel closes
   };
   if (btn && pop) {
     btn.addEventListener('click', () => {
@@ -1625,20 +1762,38 @@ if (el('prMarble'))
         openPicker();
       });
     document.addEventListener('click', (e) => {
-      if (!pop.hidden && !pop.contains(e.target) && e.target !== btn && !btn.contains(e.target)) setOpen(false);
+      if (!pop.hidden && !pop.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+        pop.hidden = true;
+        btn.setAttribute('aria-expanded', 'false');
+      }
     });
     pop.querySelectorAll('[data-cam]').forEach((b) =>
       b.addEventListener('click', () => {
         const a = api();
         if (a && a.setCamera) a.setCamera(b.dataset.cam);
-        setOpen(false);
+        if (a && a.setSplit) a.setSplit(false); // leaving split when picking a single cam
+        syncCamButtons();
       })
     );
+    const splitBtn = el('cpSplit');
+    if (splitBtn)
+      splitBtn.addEventListener('click', () => {
+        const a = api();
+        if (a && a.setSplit) a.setSplit();
+        syncCamButtons();
+      });
+    const blastBtn = el('cpBlast');
+    if (blastBtn)
+      blastBtn.addEventListener('click', () => {
+        const a = api();
+        if (a && a.setMarbleBlast) a.setMarbleBlast(true);
+        setOpen(false); // the game shows its own driving instructions + exit
+      });
     const followBtn = el('cpFollow');
     if (followBtn)
       followBtn.addEventListener('click', () => {
-        setOpen(false);
         if (followId == null) {
+          setOpen(false);
           openPicker();
           return;
         }
@@ -1646,6 +1801,7 @@ if (el('prMarble'))
         applyFollow(cur && !cur.result ? cur : null);
         const a = api();
         if (a && a.setCamera) a.setCamera('action');
+        syncCamButtons();
       });
   }
 }
@@ -1704,8 +1860,10 @@ whenApiReady().then(() => {
         return;
       }
       if (badge && num) {
+        // A small or zero audience reads worse than no number at all — only
+        // show the real count once it's ≥ 10. Never a placeholder, never fake.
         num.textContent = d.count;
-        badge.hidden = d.count < 1;
+        badge.hidden = !(typeof d.count === 'number' && d.count >= 10);
       }
     } catch {
       dead = true;

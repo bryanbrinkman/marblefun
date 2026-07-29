@@ -15,6 +15,9 @@
      buttons and move the remaining controls (camera, sound, fullscreen) to the
      left, above the leaderboard. */
   html.embed #startBtn, html.embed #restart { display: none !important; }
+  /* Embedded: the host viewer owns camera switching (its Controls menu), so the
+     in-game camera-cycle button is hidden to avoid duplicate controls. */
+  html.embed #actionCam { display: none !important; }
   html.embed #topMenu { top: 66px !important; left: 24px !important; right: auto !important; }
   html.embed #ui { top: 116px !important; }
   @media (max-width: 720px) {
@@ -212,6 +215,33 @@
     font-family: inherit; font-size: 10px;
     letter-spacing: 0.15em; opacity: 0.85;
   }
+  #mbHud { pointer-events: none; }
+  #mbHud #mbExit {
+    pointer-events: auto; margin-top: 7px; cursor: pointer;
+    font: bold 11px/1 inherit; letter-spacing: 0.12em;
+    color: #fff8e6; background: rgba(142, 47, 34, 0.85);
+    border: 2px solid rgba(255, 248, 230, 0.35); border-radius: 8px;
+    padding: 8px 16px; min-height: 32px;
+  }
+  /* Touch devices drive with the pad, not the keyboard — hide key hints. */
+  @media (pointer: coarse) { #mbHud .mbHints { display: none; } }
+  #mbTouch {
+    position: fixed; left: 0; right: 0; bottom: 86px; z-index: 11;
+    display: flex !important; align-items: flex-end; justify-content: space-between;
+    padding: 0 26px calc(env(safe-area-inset-bottom, 0px));
+    pointer-events: none;
+  }
+  #mbTouch[hidden] { display: none !important; }
+  #mbTouch .mbPad { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  #mbTouch .mbPadRow { display: flex; gap: 6px; }
+  #mbTouch button {
+    pointer-events: auto; width: 54px; height: 54px; border-radius: 14px;
+    font: bold 16px/1 inherit; color: #fff8e6; cursor: pointer;
+    background: rgba(58, 40, 23, 0.75); border: 2px solid rgba(255, 248, 230, 0.3);
+    touch-action: none; -webkit-user-select: none; user-select: none;
+  }
+  #mbTouch button:active { background: rgba(109, 184, 62, 0.8); }
+  #mbTouch #mbJump { width: 88px; height: 64px; border-radius: 18px; font-size: 13px; letter-spacing: 0.1em; }
 
   /* Loading overlay — full-screen cover during the initial course build. The
      marble loader: an outer conic-gradient ring fills clockwise with progress
@@ -228,6 +258,13 @@
     transition: opacity 0.5s ease;
   }
   #loadingOverlay.done { opacity: 0; pointer-events: none; }
+  #loaderRetry {
+    margin-top: 4px; cursor: pointer;
+    font: bold 12px/1 inherit; letter-spacing: 0.06em;
+    color: #4a3520; background: rgba(255, 248, 230, 0.75);
+    border: 2px solid rgba(58, 40, 23, 0.35); border-radius: 10px;
+    padding: 12px 18px; min-height: 44px;
+  }
   #loaderRing {
     --p: 0;
     width: 66px; height: 66px; border-radius: 50%;
@@ -460,11 +497,24 @@
   <div class="splitLabel" style="bottom: 12px; right: 12px;">TOP</div>
 </div>
 
-<!-- Marble-blast HUD: shown when M is pressed. A small overlay near the bottom
-     with the active key hints. -->
+<!-- Marble-blast HUD: shown ONLY while marble blast is active. Keyboard hints
+     on fine pointers; the touch pad below covers coarse pointers. -->
 <div id="mbHud" style="display:none;">
   <div class="mbTitle">MARBLE BLAST</div>
-  <div class="mbHints">WASD MOVE · SPACE JUMP · M EXIT</div>
+  <div class="mbHints">WASD / ARROWS MOVE · SPACE JUMP · ESC OR M EXIT</div>
+  <button id="mbExit" aria-label="Exit Marble Blast">✕ EXIT</button>
+</div>
+<!-- Touch driving pad: shown in blast mode on touch devices only. -->
+<div id="mbTouch" hidden>
+  <div class="mbPad">
+    <button data-mbk="w" aria-label="Forward">▲</button>
+    <div class="mbPadRow">
+      <button data-mbk="a" aria-label="Left">◀</button>
+      <button data-mbk="s" aria-label="Back">▼</button>
+      <button data-mbk="d" aria-label="Right">▶</button>
+    </div>
+  </div>
+  <button id="mbJump" data-mbk="space" aria-label="Jump">JUMP</button>
 </div>
 
 <!-- Loading overlay — covers the screen while the course builds at boot. The
@@ -479,7 +529,7 @@
   <div id="loaderBob">
     <div id="loaderRing">
       <div id="loaderMarble">
-        <div id="loaderPct">0%</div>
+        <div id="loaderPct">…</div>
       </div>
     </div>
   </div>
@@ -6269,6 +6319,23 @@ window.marbleAPI = {
     _followLane = lane || null;
     if (!_followLane && _followMarker) _followMarker.visible = false;
   },
+  // Which camera the spectator currently has — lets the host viewer's unified
+  // control bar mark the active mode ('overview'|'action'|'chase'|'top'|'split'|'blast').
+  getCamera() {
+    return currentCamMode();
+  },
+  // Toggle (or force) the 4-way split view / marble-blast driving mode from the
+  // host viewer's control bar. Cosmetic and input-side only.
+  setSplit(on) {
+    const want = on === undefined ? !STATE.splitScreen : !!on;
+    STATE.splitScreen = want;
+    const l = document.getElementById('splitLabels');
+    if (l) l.style.display = want ? 'block' : 'none';
+  },
+  setMarbleBlast(on) {
+    const want = on === undefined ? !STATE.marbleBlast : !!on;
+    if (want !== STATE.marbleBlast) toggleMarbleBlast();
+  },
   newCourse(trackSeed) {
     if (trackSeed !== undefined) {
       SEEDS.track = trackSeed >>> 0;
@@ -7250,6 +7317,12 @@ window.addEventListener('keydown', (e) => {
   // Don't capture when typing in an input/textarea
   if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
 
+  // Escape leaves marble blast (alongside M) and returns the previous camera.
+  if (e.key === 'Escape' && STATE.marbleBlast) {
+    toggleMarbleBlast();
+    return;
+  }
+
   // Marble-blast input: track WASD and Space as held keys. Movement keys produce
   // continuous force; space is single-fire per press (consumed by the physics step).
   if (STATE.marbleBlast) {
@@ -7331,6 +7404,18 @@ try {
   }
 } catch (e) {}
 
+// Which camera the spectator currently has (also exposed via marbleAPI so the
+// host viewer's control bar can mark the active one).
+function currentCamMode() {
+  if (STATE.marbleBlast) return 'blast';
+  if (STATE.splitScreen) return 'split';
+  if (STATE.actionCam) return 'action';
+  if (STATE.chaseCam) return 'chase';
+  if (STATE.topCam) return 'top';
+  return 'overview';
+}
+
+let _mbPrevCam = null; // spectator camera to restore after exiting blast
 function toggleMarbleBlast() {
   if (!STATE.marbleBlast) {
     // Pick a player marble. Prefer the FIRST non-finished marble in the lineup so
@@ -7341,6 +7426,7 @@ function toggleMarbleBlast() {
       if (!m.finished) { _mbPlayerMarble = m; break; }
     }
     if (!_mbPlayerMarble) return;
+    _mbPrevCam = currentCamMode();
     STATE.marbleBlast = true;
     // Open the gate so the player can immediately drive forward.
     STATE.gateOpen = true;
@@ -7353,9 +7439,12 @@ function toggleMarbleBlast() {
     chaseFwdX = undefined; chaseFwdZ = undefined;
     // Hide the RACE button (race is effectively "started" for the player).
     startBtn.classList.add('hidden');
-    // Show HUD with key hints.
+    // Instructions appear only now — never during normal spectating. Keyboard
+    // hints on fine pointers; the touch pad on coarse ones.
     const hud = document.getElementById('mbHud');
     if (hud) hud.style.display = 'block';
+    const pad = document.getElementById('mbTouch');
+    if (pad) pad.hidden = !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   } else {
     STATE.marbleBlast = false;
     _mbPlayerMarble = null;
@@ -7368,7 +7457,32 @@ function toggleMarbleBlast() {
     _mbInputKeys.space = false;
     const hud = document.getElementById('mbHud');
     if (hud) hud.style.display = 'none';
+    const pad = document.getElementById('mbTouch');
+    if (pad) pad.hidden = true;
+    // Give the spectator back the camera they had before driving.
+    if (_mbPrevCam && _mbPrevCam !== 'blast' && _mbPrevCam !== 'split' && typeof setCamMode === 'function') {
+      setCamMode(_mbPrevCam);
+    }
+    _mbPrevCam = null;
   }
+}
+
+// Blast controls that live outside the keyboard: the HUD exit button and the
+// touch driving pad (pointer events map straight onto the key-state object).
+{
+  const ex = document.getElementById('mbExit');
+  if (ex) ex.addEventListener('click', () => { if (STATE.marbleBlast) toggleMarbleBlast(); });
+  const pad = document.getElementById('mbTouch');
+  if (pad)
+    pad.querySelectorAll('[data-mbk]').forEach((b) => {
+      const k = b.dataset.mbk;
+      const on = (e) => { e.preventDefault(); _mbInputKeys[k] = true; };
+      const off = (e) => { e.preventDefault(); _mbInputKeys[k] = false; };
+      b.addEventListener('pointerdown', on);
+      b.addEventListener('pointerup', off);
+      b.addEventListener('pointercancel', off);
+      b.addEventListener('pointerleave', off);
+    });
 }
 
 // Initial build — runs the staged async build so the loading overlay paints
@@ -7406,11 +7520,30 @@ updateOrthoCamera();
       quipEl.textContent = QUIPS[quipIdx];
       quipEl.style.opacity = '1';
     }, 250);
-  }, 1700);
+  }, 2400);
   if (quipEl) quipEl.textContent = QUIPS[quipIdx];
 
+  // Slow-device safety nets: a retry action if the build is still going after
+  // 15 s, and a friendlier "still working" fallback at 30 s. Both are cleared
+  // the moment the build completes — fast devices never see them.
+  const retryTimer = setTimeout(() => {
+    if (overlay.classList.contains('done') || document.getElementById('loaderRetry')) return;
+    const b = document.createElement('button');
+    b.id = 'loaderRetry';
+    b.textContent = '↻ Taking a while — tap to retry';
+    b.addEventListener('click', () => location.reload());
+    overlay.appendChild(b);
+  }, 15000);
+  const fallbackTimer = setTimeout(() => {
+    if (overlay.classList.contains('done')) return;
+    labelEl.textContent = 'STILL WORKING';
+    if (quipEl) quipEl.textContent = 'This device is taking the scenic route — hang tight or tap retry.';
+  }, 30000);
+
   await buildWorldAsync((pct, label) => {
-    if (pct !== null && pct !== undefined) {
+    // A number only when there's real measurable progress; the bobbing marble
+    // and quips carry the indeterminate phase.
+    if (pct !== null && pct !== undefined && pct > 0) {
       ring.style.setProperty('--p', pct);
       pctEl.textContent = pct + '%';
     }
@@ -7419,6 +7552,8 @@ updateOrthoCamera();
   // Fade the overlay out, then remove it from the DOM entirely so its
   // backdrop never costs the compositor anything again.
   clearInterval(quipTimer);
+  clearTimeout(retryTimer);
+  clearTimeout(fallbackTimer);
   overlay.classList.add('done');
   setTimeout(() => overlay.remove(), 600);
 })();

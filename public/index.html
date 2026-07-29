@@ -40,7 +40,7 @@
             <circle class="cd-bg" cx="32" cy="32" r="28" />
             <circle class="cd-fg" id="cdArc" cx="32" cy="32" r="28" />
           </svg>
-          <div class="cd-num" id="countdown">—</div>
+          <div class="cd-num" id="countdown">…</div>
         </div>
         <div class="rc-info">
           <div class="race-title" id="raceTitle">Warming up the track…</div>
@@ -69,22 +69,28 @@
       </div>
     </header>
 
-    <!-- Controls popover: touch camera buttons + keyboard cheatsheet. -->
+    <!-- Controls popover: THE camera control bar (the embedded game's own
+         camera button is hidden in embed mode so controls exist only here). -->
     <div class="controls-pop" id="controlsPop" hidden>
-      <div class="cp-title">Cameras &amp; controls</div>
-      <div class="cp-touch">
-        <button data-cam="overview">🗺 Overview</button>
-        <button data-cam="action">🎥 Action cam</button>
-        <button id="cpFollow">📍 Follow my marble</button>
-        <button id="cpPick">🔮 Pick a marble</button>
+      <div class="cp-title">Cameras</div>
+      <div class="cp-touch" role="group" aria-label="Camera modes">
+        <button data-cam="overview" aria-pressed="false">🗺 Overview</button>
+        <button data-cam="action" aria-pressed="false">🎥 Action</button>
+        <button id="cpFollow" aria-pressed="false">📍 Follow</button>
+        <button data-cam="top" aria-pressed="false">⬇ Top</button>
+        <button id="cpSplit" aria-pressed="false">🔲 Split view</button>
       </div>
+      <button class="cp-blast" id="cpBlast" title="Drive a marble yourself">
+        🚀 Marble Blast <span>drive a marble yourself</span>
+      </button>
+      <div class="cp-row"><button id="cpPick" class="cp-pick">🔮 Pick a marble</button></div>
       <dl class="cp-keys">
         <div><dt>C</dt><dd>chase camera</dd></div>
-        <div><dt>X</dt><dd>4-way split screen</dd></div>
+        <div><dt>X</dt><dd>split view</dd></div>
         <div><dt>B</dt><dd>tilt-shift blur on/off</dd></div>
         <div><dt>S</dt><dd>sound on/off</dd></div>
         <div><dt>G</dt><dd>glass display case</dd></div>
-        <div><dt>M</dt><dd>marble-blast (drive one yourself)</dd></div>
+        <div><dt>M</dt><dd>Marble Blast on/off</dd></div>
       </dl>
       <div class="cp-note">Keys work after clicking or tapping the race once.</div>
     </div>
@@ -151,18 +157,13 @@
         <div class="champ-name" id="championName"></div>
       </div>
 
+      <!-- Tournament: who's in, what's next, where we are. -->
+      <div class="side-group">Tournament</div>
       <div class="card collapsible" id="upnextCard" hidden>
         <button class="card-head" type="button" aria-expanded="false">
           <span class="ch-title">Up Next</span><span class="caret" aria-hidden="true">▾</span>
         </button>
         <div class="card-body"><div class="upnext-body" id="upnextBody"></div></div>
-      </div>
-
-      <div class="card collapsible" id="recentCard" hidden>
-        <button class="card-head" type="button" aria-expanded="false">
-          <span class="ch-title">Recent Results</span><span class="caret" aria-hidden="true">▾</span>
-        </button>
-        <div class="card-body"><div class="recent" id="recent"></div></div>
       </div>
 
       <div class="card collapsible" id="fieldCard">
@@ -177,6 +178,15 @@
           </div>
           <div class="standings" id="standings"></div>
         </div>
+      </div>
+
+      <!-- Results: what already happened. -->
+      <div class="side-group">Results</div>
+      <div class="card collapsible" id="recentCard" hidden>
+        <button class="card-head" type="button" aria-expanded="false">
+          <span class="ch-title">Recent Results</span><span class="caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="card-body"><div class="recent" id="recent"></div></div>
       </div>
 
       <div class="card collapsible" id="champsCard" hidden>
