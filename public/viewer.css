@@ -480,15 +480,21 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
   background: linear-gradient(180deg, rgba(255, 207, 92, 0.18), var(--panel2));
   box-shadow: 0 0 0 1px var(--accent);
 }
-.cp-blast {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
-  cursor: pointer; font: 800 12.5px/1.2 inherit; color: var(--text); text-align: left;
-  padding: 11px 13px; min-height: 44px; border-radius: 10px; margin-bottom: 9px;
-  border: 1px solid rgba(255, 157, 60, 0.45);
-  background: linear-gradient(180deg, rgba(255, 157, 60, 0.12), var(--panel2));
+/* Small key hints on the camera buttons; the full list is in the details. */
+.cp-touch button kbd {
+  font: 800 9px/1 ui-monospace, Menlo, Consolas, monospace; color: var(--muted);
+  background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line); border-radius: 4px;
+  padding: 2px 4px; margin-left: 4px; vertical-align: 1px;
 }
-.cp-blast span { font-size: 10px; font-weight: 600; color: var(--muted); }
-.cp-blast:hover { border-color: var(--accent2); color: var(--accent2); }
+.cp-touch button.active kbd { color: var(--accent); }
+.cp-kbd { margin-top: 2px; }
+.cp-kbd summary {
+  cursor: pointer; font-size: 11px; font-weight: 700; color: var(--muted);
+  padding: 8px 2px; list-style-position: inside;
+}
+.cp-kbd summary:hover { color: var(--text); }
+.cp-kbd[open] summary { color: var(--accent); }
+.cp-kbd .cp-keys { margin-top: 4px; }
 .cp-row { display: flex; margin-bottom: 11px; }
 .cp-pick {
   flex: 1; cursor: pointer; font: 700 12px/1 inherit; color: var(--accent);
@@ -503,7 +509,6 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
   border-radius: 5px; padding: 4px 5px;
 }
 .cp-keys dd { margin: 0; font-size: 11px; color: var(--muted); }
-.cp-note { margin-top: 10px; font-size: 10.5px; color: var(--muted); font-style: italic; }
 
 /* ---------- pre-race experience ---------- */
 .prerace {

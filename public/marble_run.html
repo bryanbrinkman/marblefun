@@ -15,9 +15,6 @@
      buttons and move the remaining controls (camera, sound, fullscreen) to the
      left, above the leaderboard. */
   html.embed #startBtn, html.embed #restart { display: none !important; }
-  /* Embedded: the host viewer owns camera switching (its Controls menu), so the
-     in-game camera-cycle button is hidden to avoid duplicate controls. */
-  html.embed #actionCam { display: none !important; }
   html.embed #topMenu { top: 66px !important; left: 24px !important; right: auto !important; }
   html.embed #ui { top: 116px !important; }
   @media (max-width: 720px) {
@@ -6225,24 +6222,41 @@ function resetRace() {
 // the actual fullscreen state via the `fullscreenchange` event — so the icon
 // updates correctly even if the user exits via the Esc key.
 const fsBtn = document.getElementById('fsBtn');
+// When embedded, fullscreen the PARENT viewer document (same-origin) instead of
+// just this iframe — that keeps the tournament top bar and menus visible in
+// fullscreen. Standalone play falls back to this document as before.
+function _fsDoc() {
+  try {
+    if (document.documentElement.classList.contains('embed') && window.parent && window.parent.document) {
+      return window.parent.document;
+    }
+  } catch (e) {}
+  return document;
+}
 function _isFullscreen() {
-  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const d = _fsDoc();
+  return !!(d.fullscreenElement || d.webkitFullscreenElement);
 }
 function _syncFsIcon() {
   fsBtn.classList.toggle('expanded', _isFullscreen());
 }
 fsBtn.addEventListener('click', () => {
+  const d = _fsDoc();
   if (_isFullscreen()) {
-    if (document.exitFullscreen) document.exitFullscreen();
-    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    if (d.exitFullscreen) d.exitFullscreen();
+    else if (d.webkitExitFullscreen) d.webkitExitFullscreen();
   } else {
-    const el = document.documentElement;
+    const el = d.documentElement;
     if (el.requestFullscreen) el.requestFullscreen();
     else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   }
 });
 document.addEventListener('fullscreenchange', _syncFsIcon);
 document.addEventListener('webkitfullscreenchange', _syncFsIcon);
+try {
+  _fsDoc().addEventListener('fullscreenchange', _syncFsIcon);
+  _fsDoc().addEventListener('webkitfullscreenchange', _syncFsIcon);
+} catch (e) {}
 
 // Low-quality toggle: flip the flag, persist it, and re-apply (recompiling
 // materials so shadows drop/return immediately).
@@ -7356,11 +7370,21 @@ window.addEventListener('keydown', (e) => {
     // un-collapse. NEW COURSE rebuilds everything fresh.
     triggerCollapse();
   } else if (e.key === 'm' || e.key === 'M') {
-    // Toggle marble-blast mode — single-marble player control.
+    // Toggle marble-blast mode — single-marble player control. Kept out of the
+    // menus on purpose: it's an easter egg.
     toggleMarbleBlast();
-  } else if (e.key === 't' || e.key === 'T') {
-    // Preview a custom marble wrap on every ball (test skin).
+  } else if (e.key === 'T' && e.shiftKey) {
+    // Shift+T: preview a custom marble wrap on every ball (dev easter egg).
     toggleTestSkin();
+  } else if (e.key === 't' || e.key === 'T') {
+    setCamMode('top');
+  } else if (e.key === 'o' || e.key === 'O') {
+    setCamMode('overview');
+  } else if (e.key === 'a' || e.key === 'A') {
+    setCamMode('action');
+  } else if (e.key === 'f' || e.key === 'F') {
+    // Follow: the action cam locked onto the followed marble (or the leader).
+    setCamMode('action');
   }
 });
 
@@ -7500,7 +7524,10 @@ updateOrthoCamera();
   // assembles. Fades between lines; purely decorative.
   const quipEl = document.getElementById('loaderQuip');
   const QUIPS = [
+    'Plotting the course…',
     'Polishing the marbles…',
+    'Checking the finish line…',
+    'Calibrating the ramps…',
     'Sanding off the splinters…',
     'Teaching marbles to corner…',
     'Tightening the guardrails…',

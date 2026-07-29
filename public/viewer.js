@@ -703,10 +703,9 @@ function markOnboarded() {
   try { sessionStorage.setItem(ONBOARD_KEY, '1'); } catch {}
 }
 
-const fmtClock = (ms) => {
-  const s = Math.max(0, Math.ceil(ms / 1000)); // clamp: never a negative countdown
-  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
-};
+// Clock/countdown formatting + display strings live in the shared, unit-tested
+// module (public/event-state.js) so browser UI and node tests agree exactly.
+const fmtClock = window.UIState.fmtClock;
 const ordinal = (n) => {
   const t = n % 100;
   return n + (t >= 11 && t <= 13 ? 'th' : { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
@@ -764,9 +763,11 @@ function renderPrMarble() {
   let mainAction = `<button class="prm-follow" id="prFollowBtn">📍 Follow</button>`;
   if (!st) {
     // Friendly fallback; the selection is retained for when data returns.
-    status = "We've lost track of this one — it'll be back";
+    status = 'Marble status temporarily unavailable';
+    mainAction = '';
   } else if (st.status === 'champion') {
     status = '🏆 Tournament champion!';
+    mainAction = `<button class="prm-follow" id="prWatchFinishBtn">🏆 Watch finish</button>`;
   } else if (st.status === 'eliminated') {
     const e = eliminationInfo(followId);
     status = e ? `Eliminated in ${e.label}${e.rank ? ` · finished ${ordinal(e.rank)}` : ''}` : 'Eliminated';
@@ -814,49 +815,72 @@ function eventState() {
   return 'BETWEEN_RACES';
 }
 
-// The copy + countdown text for each state. `primary`/`secondary` feed the
-// between-races card; `cd` is the top-bar ring's text when no live countdown
-// ring is running (never blank, never an em dash).
+// The presentation mapping for each state: eyebrow, primary (from the shared,
+// tested formatter — never blank, never an em dash), secondary copy, and the
+// top-bar ring's fallback text when no live countdown ring is running.
 function stateView() {
   const st = eventState();
   const nxt = nextUpcomingRace();
-  const rem = nxt && nxt.scheduledStart ? toLocal(nxt.scheduledStart) - Date.now() : null;
+  const at = nxt && nxt.scheduledStart ? toLocal(nxt.scheduledStart) : null;
+  const primary = window.UIState.getNextRaceDisplay({ eventState: st, nextRaceAt: at, now: Date.now() });
   switch (st) {
     case 'LOADING':
-      return { st, primary: 'Warming up the track…', secondary: 'Setting up the tournament', cd: '…' };
+      return { st, eyebrow: 'Warming up', primary, secondary: 'Setting up the tournament', cd: '…' };
     case 'COUNTDOWN':
-      return { st, primary: `Next race in ${fmtClock(rem)}`, secondary: nxt ? raceLabel(nxt) : '', cd: null };
+      return { st, eyebrow: 'Between races', primary, secondary: nxt ? raceLabel(nxt) : 'Warming up the track…', cd: null };
     case 'STARTING':
-      return { st, primary: 'Starting now…', secondary: nxt ? raceLabel(nxt) : '', cd: null };
+      return { st, eyebrow: 'Between races', primary, secondary: nxt ? raceLabel(nxt) : '', cd: null };
     case 'LIVE':
-      return { st, primary: '', secondary: '', cd: null }; // card hidden; ring says LIVE
+      return { st, eyebrow: '', primary, secondary: '', cd: null }; // card hidden; ring says LIVE
     case 'DELAYED':
-      return { st, primary: 'Race delayed', secondary: 'Resetting the course…', cd: '…' };
+      return { st, eyebrow: 'Race delayed', primary, secondary: 'Resetting the course…', cd: '…' };
     case 'RECONNECTING':
-      return { st, primary: 'Reconnecting…', secondary: 'The tournament is still running.', cd: '…' };
+      return { st, eyebrow: 'Connection', primary, secondary: 'The tournament is still running.', cd: '…' };
     case 'OFFLINE':
-      return { st, primary: 'Live race unavailable', secondary: 'You can still view results and the latest replay.', cd: '…' };
+      return { st, eyebrow: 'Offline', primary, secondary: 'Results and the latest replay are still available.', cd: '…' };
     case 'TOURNAMENT_COMPLETE':
       return {
         st,
-        primary: model.champion ? `🏆 ${model.champion.name} takes the crown` : 'Tournament complete',
+        eyebrow: 'Tournament complete',
+        primary: model.champion ? `🏆 ${model.champion.name} takes the crown` : primary,
         secondary: 'A fresh tournament starts soon',
         cd: '🏁',
       };
     default:
-      return { st: 'BETWEEN_RACES', primary: 'Starting shortly…', secondary: 'Lining up the next race…', cd: '…' };
+      return { st: 'BETWEEN_RACES', eyebrow: 'Between races', primary, secondary: 'Warming up the track…', cd: '…' };
   }
 }
 
 // Per-second update of the countdown sentence + the top-bar ring fallback.
 // Always recomputed from the scheduled timestamp (server-clock adjusted), so a
 // suspended tab that wakes up shows the right value immediately.
+//
+// Screen-reader policy: the ticking text is NOT a live region. Only meaningful
+// milestones are announced, once each per race: one minute out, ten seconds
+// out, and the start itself (announced from startReplay).
+let _announced = { key: null, min: false, ten: false };
 function tickPreRaceCountdown() {
   const v = stateView();
   // Top-bar ring text for states where the 100 ms countdown ring isn't running.
   if (v.cd !== null && !startedRacesHasCurrent()) {
     const num = el('countdown');
     if (num) num.textContent = v.cd;
+  }
+  // Countdown milestone announcements.
+  if (v.st === 'COUNTDOWN' || v.st === 'STARTING') {
+    const nxt = nextUpcomingRace();
+    if (nxt && nxt.scheduledStart) {
+      if (_announced.key !== nxt.key) _announced = { key: nxt.key, min: false, ten: false };
+      const rem = toLocal(nxt.scheduledStart) - Date.now();
+      if (!_announced.min && rem <= 60000 && rem > 55000) {
+        _announced.min = true;
+        announce(`One minute to ${raceLabel(nxt)}.`);
+      }
+      if (!_announced.ten && rem <= 10000 && rem > 5000) {
+        _announced.ten = true;
+        announce('Ten seconds to the next race.');
+      }
+    }
   }
   const panel = el('preRace');
   if (!panel || panel.hidden) return;
@@ -914,8 +938,7 @@ function renderPreRace() {
   }
 
   const v = stateView();
-  state.textContent =
-    v.st === 'DELAYED' ? 'Hold on' : v.st === 'RECONNECTING' || v.st === 'OFFLINE' ? 'Connection' : 'Between races';
+  state.textContent = v.eyebrow;
   title.textContent = v.primary;
   flavor.textContent = v.secondary;
   // Replays don't make sense seconds before a live start or with no results.
@@ -1710,6 +1733,11 @@ if (el('prMarble'))
       // Replay the eliminated marble's final race.
       const e2 = eliminationInfo(followId);
       if (e2 && e2.race) startReplayOf(e2.race);
+      return;
+    }
+    if (e.target.closest('#prWatchFinishBtn')) {
+      // Re-run the champion celebration for your marble's big moment.
+      if (model.champion) showChampionCelebration(model.champion);
     }
   });
 
@@ -1782,13 +1810,7 @@ function syncCamButtons() {
         if (a && a.setSplit) a.setSplit();
         syncCamButtons();
       });
-    const blastBtn = el('cpBlast');
-    if (blastBtn)
-      blastBtn.addEventListener('click', () => {
-        const a = api();
-        if (a && a.setMarbleBlast) a.setMarbleBlast(true);
-        setOpen(false); // the game shows its own driving instructions + exit
-      });
+    // (Marble Blast has no menu entry on purpose — it's an easter egg on M.)
     const followBtn = el('cpFollow');
     if (followBtn)
       followBtn.addEventListener('click', () => {
@@ -1861,9 +1883,10 @@ whenApiReady().then(() => {
       }
       if (badge && num) {
         // A small or zero audience reads worse than no number at all — only
-        // show the real count once it's ≥ 10. Never a placeholder, never fake.
+        // show the real count once it's ≥ 10 (shared shouldShowViewerCount:
+        // invalid/missing/low all hide the element entirely, never a fake).
         num.textContent = d.count;
-        badge.hidden = !(typeof d.count === 'number' && d.count >= 10);
+        badge.hidden = !window.UIState.shouldShowViewerCount(d.count);
       }
     } catch {
       dead = true;

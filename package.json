@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "headless": "node headless_test.js",
-    "test": "node test/determinism.test.js"
+    "test": "node test/ui-state.test.js && node test/determinism.test.js"
   },
   "engines": { "node": ">=22.5.0" },
   "comments": {
