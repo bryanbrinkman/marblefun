@@ -6717,7 +6717,9 @@ function updateRollSounds(dt) {
       const spd = m.vel.length();
       // Rolling contact ≈ moving but not free-falling (big |vy| vs speed = airborne).
       if (spd > 0.7 && Math.abs(m.vel.y) < Math.max(2.2, spd * 0.55)) {
-        target = Math.min(0.11, 0.015 + spd * 0.011);
+        // Kept low — at full tilt this windy rumble should sit well under the
+        // clacks, not compete with them.
+        target = Math.min(0.055, 0.008 + spd * 0.0055);
         ch.filt.frequency.value = 350 + Math.min(1900, spd * 150);
         ch.src.playbackRate.value = 0.85 + Math.min(0.5, spd * 0.035) + i * 0.03;
         if (ch.pan) ch.pan.pan.value = _panForPos(m.pos);
