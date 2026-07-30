@@ -77,17 +77,16 @@
       <div class="cp-touch" role="group" aria-label="Camera modes">
         <button data-cam="overview" aria-pressed="false">🗺 Overview <kbd>O</kbd></button>
         <button data-cam="action" aria-pressed="false">🎥 Action <kbd>A</kbd></button>
-        <button id="cpFollow" aria-pressed="false">📍 Follow <kbd>F</kbd></button>
+        <button id="cpFollow" aria-pressed="false">📍 Chase Cam <kbd>C</kbd></button>
         <button data-cam="top" aria-pressed="false">⬇ Top <kbd>T</kbd></button>
         <button id="cpSplit" aria-pressed="false">🔲 Split view <kbd>X</kbd></button>
       </div>
-      <div class="cp-row"><button id="cpPick" class="cp-pick">🔮 Pick a marble</button></div>
       <details class="cp-kbd">
         <summary>Keyboard shortcuts</summary>
         <dl class="cp-keys">
           <div><dt>O</dt><dd>Overview</dd></div>
           <div><dt>A</dt><dd>Action</dd></div>
-          <div><dt>F</dt><dd>Follow</dd></div>
+          <div><dt>C</dt><dd>Chase Cam</dd></div>
           <div><dt>T</dt><dd>Top</dd></div>
           <div><dt>X</dt><dd>Split view</dd></div>
           <div><dt>S</dt><dd>Sound</dd></div>
@@ -114,6 +113,7 @@
           <span class="j-arrow" aria-hidden="true">→</span>
           <span class="j-stage" data-stage="champion"><b>1</b><i>champion</i></span>
         </div>
+        <div class="pr-guess" id="prGuessLabel" hidden>🎯 Call the winner — tap a marble to back it</div>
         <div class="pr-starters" id="prStarters"></div>
         <!-- Your marble: a pick button before choosing, a status card after. -->
         <div class="pr-marble" id="prMarble"></div>

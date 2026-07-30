@@ -468,11 +468,13 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 }
 .controls-pop[hidden] { display: none; }
 .cp-title { font-size: 11px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
-.cp-touch { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
+.cp-touch { display: flex; flex-direction: column; gap: 6px; margin-bottom: 9px; }
 .cp-touch button {
+  display: flex; align-items: center; width: 100%; text-align: left;
   cursor: pointer; font: 700 12px/1 inherit; color: var(--text);
-  padding: 12px; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2);
+  padding: 12px 13px; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2);
 }
+.cp-touch button kbd { margin-left: auto; }
 .cp-touch button:hover { border-color: var(--accent); color: var(--accent); }
 /* The active camera is unmistakable: gold border + gold text (plus aria-pressed). */
 .cp-touch button.active {
@@ -495,12 +497,6 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 .cp-kbd summary:hover { color: var(--text); }
 .cp-kbd[open] summary { color: var(--accent); }
 .cp-kbd .cp-keys { margin-top: 4px; }
-.cp-row { display: flex; margin-bottom: 11px; }
-.cp-pick {
-  flex: 1; cursor: pointer; font: 700 12px/1 inherit; color: var(--accent);
-  padding: 12px; min-height: 44px; border-radius: 10px;
-  border: 1px solid rgba(255, 207, 92, 0.4); background: rgba(255, 207, 92, 0.07);
-}
 .cp-keys { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; }
 .cp-keys div { display: flex; align-items: center; gap: 8px; }
 .cp-keys dt {
@@ -550,10 +546,23 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 /* Upcoming: muted. */
 .j-stage:not(.active):not(.done) { opacity: 0.55; }
 .j-arrow { color: var(--line2); font-size: 13px; }
-.pr-starters { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-top: 9px; min-height: 0; }
-.pr-starters .um { display: flex; align-items: center; gap: 5px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; font-size: 11px; font-variant-numeric: tabular-nums; }
-.pr-starters .um .swatch { width: 10px; height: 10px; border-radius: 50%; }
-.pr-starters .um.followed { border-color: var(--accent); color: var(--accent); font-weight: 800; }
+.pr-guess { font-size: 11px; font-weight: 700; color: var(--muted); margin-top: 11px; }
+.pr-guess[hidden] { display: none; }
+.pr-starters { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 7px; min-height: 0; }
+.pr-starters .um {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 11px; min-height: 38px; font: 700 11.5px/1 inherit; color: var(--text);
+  font-variant-numeric: tabular-nums; transition: border-color 0.15s, transform 0.1s;
+}
+.pr-starters .um:hover { border-color: var(--accent); color: var(--accent); }
+.pr-starters .um:active { transform: translateY(1px); }
+.pr-starters .um .swatch { width: 11px; height: 11px; border-radius: 50%; }
+.pr-starters .um.followed {
+  border-color: var(--accent); color: var(--accent); font-weight: 800;
+  background: linear-gradient(180deg, rgba(255, 207, 92, 0.16), var(--panel2));
+  box-shadow: 0 0 0 1px var(--accent);
+}
 .pr-actions { display: flex; gap: 9px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
 .pr-btn {
   cursor: pointer; font: 800 13px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -609,9 +618,9 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 
 /* Compact between-races card: countdown + label + actions only. */
 .pr-card.compact { padding: 15px 18px 12px; width: min(390px, 92vw); }
+/* Compact keeps the starters — calling the winner is the between-races game. */
 .pr-card.compact .pr-tag,
-.pr-card.compact .pr-journey,
-.pr-card.compact .pr-starters { display: none; }
+.pr-card.compact .pr-journey { display: none; }
 
 /* ---------- replay chip ---------- */
 .replay-chip {
@@ -720,7 +729,6 @@ button:focus-visible, .card-head:focus-visible, input:focus-visible {
     top: auto; bottom: calc(64px + env(safe-area-inset-bottom, 0px));
     left: 10px; right: 10px; width: auto;
   }
-  .cp-touch button { flex: 1 1 30%; }
 }
 /* iPhone safe-area: keep the corner controls above the home indicator. */
 .bracket-btn { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }

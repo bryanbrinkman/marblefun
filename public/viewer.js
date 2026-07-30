@@ -943,17 +943,43 @@ function renderPreRace() {
   flavor.textContent = v.secondary;
   // Replays don't make sense seconds before a live start or with no results.
   if (v.st === 'STARTING') el('watchLatestBtn').hidden = true;
+  // Call-the-winner: the five starters are tappable — backing one makes it
+  // your followed marble (same persistence as the picker). Shown in the
+  // compact card too; guessing is the between-races game.
   const nxt = nextUpcomingRace();
-  starters.innerHTML =
-    !compact && nxt && nxt.roster && (v.st === 'COUNTDOWN' || v.st === 'STARTING')
-      ? nxt.roster
-          .map(
-            (s) =>
-              `<span class="um${s.marbleId === followId ? ' followed' : ''}">` +
-              `<span class="swatch" style="background:${s.color}"></span>${shortName(s.marbleName)}</span>`
-          )
-          .join('')
-      : '';
+  const showStarters = nxt && nxt.roster && (v.st === 'COUNTDOWN' || v.st === 'STARTING');
+  el('prGuessLabel').hidden = !showStarters;
+  starters.innerHTML = showStarters
+    ? nxt.roster
+        .map((s) => {
+          const mine = s.marbleId === followId;
+          return (
+            `<button class="um${mine ? ' followed' : ''}" data-guess="${s.marbleId}"` +
+            ` aria-pressed="${mine ? 'true' : 'false'}" title="Back ${s.marbleName} to win">` +
+            `<span class="swatch" style="background:${s.color}"></span>${shortName(s.marbleName)}` +
+            (mine ? ' 🎯' : '') +
+            `</button>`
+          );
+        })
+        .join('')
+    : '';
+}
+
+// ---- call-the-winner bookkeeping -------------------------------------------
+// Backing a starter follows it AND records the guess for that race, so we can
+// celebrate a correct call when the result lands.
+function recordGuess(raceKey, marbleId) {
+  try { localStorage.setItem('marbleGuess', JSON.stringify({ raceKey, marbleId })); } catch {}
+}
+function checkGuess(race) {
+  let g = null;
+  try { g = JSON.parse(localStorage.getItem('marbleGuess') || 'null'); } catch {}
+  if (!g || !race || g.raceKey !== race.key || !race.result || !race.result[0]) return;
+  try { localStorage.removeItem('marbleGuess'); } catch {}
+  if (race.result[0].marbleId === g.marbleId) {
+    flashOverlay('🎯 CALLED IT!');
+    announce(`You called it — ${race.result[0].marbleName} wins!`);
+  }
 }
 
 function renderAll() {
@@ -1219,6 +1245,7 @@ function onMessage(msg) {
       justRevealed = null;
       if (race && race.result && race.result[0])
         announce(`${race.result[0].marbleName} wins ${raceLabel(race)}.`);
+      checkGuess(race);
       break;
     }
     case 'paused':
@@ -1503,6 +1530,7 @@ async function runLocalRace(T, race, aborted) {
   renderAll();
   justRevealed = null;
   if (order && order[0]) announce(`${order[0].marbleName} wins ${raceLabel(race)}.`);
+  checkGuess(race);
   await sleep(LOCAL_GAP_MS);
 }
 
@@ -1715,6 +1743,16 @@ if (el('prHow'))
     showFullOnce = true; // re-expand until the next race starts
     renderPreRace();
   });
+// Call-the-winner: tapping a starter backs it (follow + recorded guess).
+if (el('prStarters'))
+  el('prStarters').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-guess]');
+    if (!b) return;
+    const id = Number(b.dataset.guess);
+    const nxt = nextUpcomingRace();
+    if (nxt) recordGuess(nxt.key, id);
+    setFollow(id); // becomes your marble by default (persisted, camera, marker)
+  });
 // The "your marble" block is re-rendered per state — delegate its buttons.
 if (el('prMarble'))
   el('prMarble').addEventListener('click', (e) => {
@@ -1761,10 +1799,10 @@ function syncCamButtons() {
     split.classList.toggle('active', cam === 'split');
     split.setAttribute('aria-pressed', cam === 'split' ? 'true' : 'false');
   }
-  // "Follow" is the action cam pointed at YOUR marble.
+  // "Chase Cam" rides behind your marble (or the leader if none is picked).
   const follow = el('cpFollow');
   if (follow) {
-    const on = cam === 'action' && followId != null;
+    const on = cam === 'chase';
     follow.classList.toggle('active', on);
     follow.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
@@ -1779,16 +1817,7 @@ function syncCamButtons() {
     else btn.focus(); // focus back on the trigger when the panel closes
   };
   if (btn && pop) {
-    btn.addEventListener('click', () => {
-      const pick = el('cpPick');
-      if (pick) pick.textContent = followId == null ? '🔮 Pick a marble' : '🔮 Change my marble';
-      setOpen(pop.hidden);
-    });
-    if (el('cpPick'))
-      el('cpPick').addEventListener('click', () => {
-        setOpen(false);
-        openPicker();
-      });
+    btn.addEventListener('click', () => setOpen(pop.hidden));
     document.addEventListener('click', (e) => {
       if (!pop.hidden && !pop.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
         pop.hidden = true;
@@ -1814,15 +1843,12 @@ function syncCamButtons() {
     const followBtn = el('cpFollow');
     if (followBtn)
       followBtn.addEventListener('click', () => {
-        if (followId == null) {
-          setOpen(false);
-          openPicker();
-          return;
-        }
+        // Behind-the-marble chase cam. It rides YOUR marble when one is picked
+        // and racing (via the game's follow-lane), otherwise the leader.
         const cur = model.currentKey && model.racesByKey.get(model.currentKey);
         applyFollow(cur && !cur.result ? cur : null);
         const a = api();
-        if (a && a.setCamera) a.setCamera('action');
+        if (a && a.setCamera) a.setCamera('chase');
         syncCamButtons();
       });
   }
