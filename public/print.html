@@ -104,6 +104,7 @@
       <span>Channel width <b id="stChan">–</b></span>
       <span>Fits marbles up to <b id="stMarble">–</b></span>
       <span>Breakaway supports <b id="stSupports">–</b></span>
+      <span>Hollowed blocks <b id="stHollow">–</b></span>
     </div>
   </div>
 
@@ -115,6 +116,9 @@
       <button id="dlFull">⬇ Whole track, one file (.stl)</button>
       <label style="align-self:center;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">
         <input type="checkbox" id="addSupports" checked /> bake breakaway supports
+      </label>
+      <label style="align-self:center;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">
+        <input type="checkbox" id="hollowBlocks" checked /> hollow big blocks
       </label>
       <label style="align-self:center;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">
         <input type="checkbox" id="incScenery" /> include table &amp; scenery
@@ -135,6 +139,7 @@
       <li><b>Scale:</b> at 40&nbsp;mm/cell the channel fits a standard 16&nbsp;mm marble. Check "assembled size" before committing — these courses are tall towers.</li>
       <li><b>Slicing:</b> pieces are overlapping closed shells — modern slicers (Bambu Studio, PrusaSlicer, Cura) union them automatically. If yours complains, enable merge-overlapping-volumes or run its repair tool.</li>
       <li><b>Supports:</b> anything that would print in mid-air (banner bars, arch tops, floating decorations) gets a slim 3&nbsp;mm breakaway pillar baked in — gray in the preview. Print with slicer supports OFF, then snap the pillars off after printing. Untick "bake breakaway supports" if you'd rather use your slicer's own.</li>
+      <li><b>Plastic:</b> chunky tower blocks are hollowed into square tubes — an open shaft straight through, so there's no infill and no bridging inside, and stacked blocks line up into one continuous channel. Floors and walls stay solid (a marble track with holes in the floor is a different game). Untick "hollow big blocks" for solid pieces.</li>
       <li><b>Orientation:</b> files are Z-up with each piece resting at Z=0.</li>
       <li>The same seed always builds the same track — print the course your favorite race ran on. 🏁</li>
     </ul>
@@ -209,6 +214,7 @@ $('scale').addEventListener('change', () => { if (data) refresh(); });
 $('printer').addEventListener('change', () => { if (data) refresh(); });
 $('incScenery').addEventListener('change', () => { if (data) refresh(); });
 $('addSupports').addEventListener('change', () => { if (data) refresh(); });
+$('hollowBlocks').addEventListener('change', () => { if (data) refresh(); });
 
 function refresh() {
   mmPerUnit = Number($('scale').value) / data.cellSize;
@@ -236,12 +242,15 @@ function computeModules() {
   const bedMM = Number($('printer').value);
   const limit = bedMM / mmPerUnit; // in game units, applies to all 3 axes
   modules = [];
+  _hollowCount = 0;
+  _hollowSavedMM3 = 0;
   const cells = data.cells.filter((c) => (c.idx >= 0 ? true : $('incScenery').checked));
   for (const c of cells) {
     const base = c.idx === -1 ? 'scenery_table' : `${String(c.idx + 1).padStart(2, '0')}_${c.type}`;
     const color = c.idx === -1 ? '#3a4258' : PALETTE[c.idx % PALETTE.length];
     // Greedy pack whole meshes (sorted bottom-up) into height-limited segments.
-    const parts = c.parts.slice().sort((a, b) => a.minY - b.minY);
+    const hollow = $('hollowBlocks').checked && c.idx >= 0;
+    const parts = c.parts.map((p) => (hollow ? maybeHollow(p) : p)).sort((a, b) => a.minY - b.minY);
     const segs = [];
     let seg = null;
     for (const p of parts) {
@@ -296,6 +305,82 @@ function supportBox(cx, cz, y0, y1, w) {
   T.forEach((p, i) => { tris[i * 3] = p[0]; tris[i * 3 + 1] = p[1]; tris[i * 3 + 2] = p[2]; });
   return { tris, minX: x0, maxX: x1, minY: y0, maxY: y1, minZ: z0, maxZ: z1, support: true };
 }
+// ---- hollowing ------------------------------------------------------------
+// The bulk of a piece's plastic is its support-tower cubes: large axis-
+// aligned solid boxes. Chunky, roughly cubic boxes become square tubes — a
+// vertical shaft straight through, with ring faces top and bottom keeping the
+// mesh a closed manifold. The shaft prints with zero infill and zero bridges
+// (it runs straight down), and stacked cubes line their shafts up into one
+// continuous channel. Floor slabs and walls are left solid: a floor with a
+// hole in it is not a marble track.
+let _hollowCount = 0;
+let _hollowSavedMM3 = 0;
+function isAxisBox(p) {
+  const t = p.tris;
+  if (t.length !== 108) return false; // 12 triangles = a plain box
+  const ex = (p.maxX - p.minX) * 1e-3 + 1e-6;
+  const ey = (p.maxY - p.minY) * 1e-3 + 1e-6;
+  const ez = (p.maxZ - p.minZ) * 1e-3 + 1e-6;
+  for (let i = 0; i < t.length; i += 3) {
+    if (Math.abs(t[i] - p.minX) > ex && Math.abs(t[i] - p.maxX) > ex) return false;
+    if (Math.abs(t[i + 1] - p.minY) > ey && Math.abs(t[i + 1] - p.maxY) > ey) return false;
+    if (Math.abs(t[i + 2] - p.minZ) > ez && Math.abs(t[i + 2] - p.maxZ) > ez) return false;
+  }
+  return true;
+}
+function maybeHollow(p) {
+  const dx = p.maxX - p.minX, dy = p.maxY - p.minY, dz = p.maxZ - p.minZ;
+  const mm = (v) => v * mmPerUnit;
+  // Only chunky, tower-cube-like boxes: tall enough relative to their footprint
+  // (excludes floor slabs), big enough for a useful shaft, and truly axis-aligned.
+  if (mm(dx) < 10 || mm(dz) < 10 || mm(dy) < 8) return p;
+  if (dy < 0.45 * Math.max(dx, dz)) return p;
+  if (!isAxisBox(p)) return p;
+  const w = Math.max(1.6 / mmPerUnit, Math.min(2.4 / mmPerUnit, 0.2 * Math.min(dx, dz)));
+  if (mm(dx - 2 * w) < 3 || mm(dz - 2 * w) < 3) return p;
+  const x0 = p.minX, x1 = p.maxX, y0 = p.minY, y1 = p.maxY, z0 = p.minZ, z1 = p.maxZ;
+  const ix0 = x0 + w, ix1 = x1 - w, iz0 = z0 + w, iz1 = z1 - w;
+  const V = [];
+  const tri = (a, b, c) => V.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+  // outer side walls (outward normals — same patterns as supportBox)
+  // -Z outer
+  tri([x0,y0,z0],[x1,y1,z0],[x1,y0,z0]); tri([x0,y0,z0],[x0,y1,z0],[x1,y1,z0]);
+  // +Z outer
+  tri([x0,y0,z1],[x1,y0,z1],[x1,y1,z1]); tri([x0,y0,z1],[x1,y1,z1],[x0,y1,z1]);
+  // -X outer
+  tri([x0,y0,z0],[x0,y0,z1],[x0,y1,z1]); tri([x0,y0,z0],[x0,y1,z1],[x0,y1,z0]);
+  // +X outer
+  tri([x1,y0,z0],[x1,y1,z1],[x1,y0,z1]); tri([x1,y0,z0],[x1,y1,z0],[x1,y1,z1]);
+  // inner shaft walls (outward from the solid = facing the shaft)
+  // +X at ix0 (solid is x<ix0)
+  tri([ix0,y0,iz0],[ix0,y1,iz1],[ix0,y0,iz1]); tri([ix0,y0,iz0],[ix0,y1,iz0],[ix0,y1,iz1]);
+  // -X at ix1
+  tri([ix1,y0,iz0],[ix1,y0,iz1],[ix1,y1,iz1]); tri([ix1,y0,iz0],[ix1,y1,iz1],[ix1,y1,iz0]);
+  // +Z at iz0 (solid is z<iz0)
+  tri([ix0,y0,iz0],[ix1,y0,iz0],[ix1,y1,iz0]); tri([ix0,y0,iz0],[ix1,y1,iz0],[ix0,y1,iz0]);
+  // -Z at iz1
+  tri([ix0,y0,iz1],[ix1,y1,iz1],[ix1,y0,iz1]); tri([ix0,y0,iz1],[ix0,y1,iz1],[ix1,y1,iz1]);
+  // top ring (+Y) and bottom ring (−Y): four strips each
+  const ringY = (y, up) => {
+    const strips = [
+      [x0, x1, z0, iz0],
+      [x0, x1, iz1, z1],
+      [x0, ix0, iz0, iz1],
+      [ix1, x1, iz0, iz1],
+    ];
+    for (const [xa, xb, za, zb] of strips) {
+      const A = [xa, y, za], B = [xb, y, za], C = [xb, y, zb], D = [xa, y, zb];
+      if (up) { tri(A, C, B); tri(A, D, C); }
+      else { tri(A, B, C); tri(A, C, D); }
+    }
+  };
+  ringY(y1, true);
+  ringY(y0, false);
+  _hollowCount++;
+  _hollowSavedMM3 += (dx - 2 * w) * dy * (dz - 2 * w) * mmPerUnit * mmPerUnit * mmPerUnit;
+  return { tris: new Float32Array(V), minX: x0, maxX: x1, minY: y0, maxY: y1, minZ: z0, maxZ: z1 };
+}
+
 // Per-part column map: colKey -> [minY, maxY] of the part's surface in that
 // ~1.5 mm column, from the real triangles (plane-interpolated at the column
 // center; near-vertical triangles conservatively cover their footprint).
@@ -446,6 +531,9 @@ function renderStats() {
   $('stChan').textContent = chan.toFixed(0) + ' mm';
   $('stMarble').textContent = Math.floor(chan * 0.8) + ' mm';
   $('stSupports').textContent = modules.reduce((s, m) => s + m.parts.filter((p) => p.support).length, 0);
+  $('stHollow').textContent = _hollowCount
+    ? `${_hollowCount} (−${Math.round(_hollowSavedMM3 / 1000)} cm³ solid)`
+    : '0';
   $('stats').hidden = false;
   const over = modules.filter((m) => m.over).length;
   $('fitWarn').hidden = over === 0;
