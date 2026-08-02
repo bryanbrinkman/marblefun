@@ -6374,21 +6374,22 @@ window.marbleAPI = {
         const n = index ? index.count : pos.count;
         const out = new Float32Array(n * 3);
         let o = 0;
-        let minY = Infinity, maxY = -Infinity;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
         for (let i = 0; i < n; i++) {
           v.fromBufferAttribute(pos, index ? index.getX(i) : i).applyMatrix4(node.matrixWorld);
           out[o++] = v.x; out[o++] = v.y; out[o++] = v.z;
-          if (v.y < minY) minY = v.y;
-          if (v.y > maxY) maxY = v.y;
+          if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+          if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
+          if (v.z < minZ) minZ = v.z; if (v.z > maxZ) maxZ = v.z;
         }
         const key = node.userData.cellIdx !== undefined ? node.userData.cellIdx : -1;
         let entry = groups.get(key);
         if (!entry) { entry = []; groups.set(key, entry); }
-        // Whole meshes with their height range: the print page packs these
-        // into printer-height segments along natural seams (a support tower
-        // is a stack of individual cubes), so every piece stays a closed
-        // solid — no triangle cutting anywhere.
-        entry.push({ tris: out, minY, maxY });
+        // Whole meshes with their bounds: the print page packs these into
+        // printer-height segments along natural seams (a support tower is a
+        // stack of individual cubes) and uses the boxes to ground-check parts
+        // for breakaway supports — no triangle cutting anywhere.
+        entry.push({ tris: out, minX, maxX, minY, maxY, minZ, maxZ });
       });
     }
     const cells = [];

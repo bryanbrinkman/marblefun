@@ -103,6 +103,7 @@
       <span>Assembled size <b id="stSize">–</b></span>
       <span>Channel width <b id="stChan">–</b></span>
       <span>Fits marbles up to <b id="stMarble">–</b></span>
+      <span>Breakaway supports <b id="stSupports">–</b></span>
     </div>
   </div>
 
@@ -112,6 +113,9 @@
     <div class="row" style="margin-top:10px">
       <button class="primary" id="dlZip">⬇ All pieces (.zip)</button>
       <button id="dlFull">⬇ Whole track, one file (.stl)</button>
+      <label style="align-self:center;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">
+        <input type="checkbox" id="addSupports" checked /> bake breakaway supports
+      </label>
       <label style="align-self:center;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">
         <input type="checkbox" id="incScenery" /> include table &amp; scenery
       </label>
@@ -130,7 +134,8 @@
       <li><b>Modular:</b> pieces are numbered in track order (01, 02, …) and segments stack bottom-up (a under b under c). Print, stack, glue, race.</li>
       <li><b>Scale:</b> at 40&nbsp;mm/cell the channel fits a standard 16&nbsp;mm marble. Check "assembled size" before committing — these courses are tall towers.</li>
       <li><b>Slicing:</b> pieces are overlapping closed shells — modern slicers (Bambu Studio, PrusaSlicer, Cura) union them automatically. If yours complains, enable merge-overlapping-volumes or run its repair tool.</li>
-      <li><b>Orientation:</b> files are Z-up with each piece resting at Z=0. Most print support-free; spirals and step-ramps may want tree supports.</li>
+      <li><b>Supports:</b> anything that would print in mid-air (banner bars, arch tops, floating decorations) gets a slim 3&nbsp;mm breakaway pillar baked in — gray in the preview. Print with slicer supports OFF, then snap the pillars off after printing. Untick "bake breakaway supports" if you'd rather use your slicer's own.</li>
+      <li><b>Orientation:</b> files are Z-up with each piece resting at Z=0.</li>
       <li>The same seed always builds the same track — print the course your favorite race ran on. 🏁</li>
     </ul>
   </div>
@@ -203,6 +208,7 @@ $('buildBtn').addEventListener('click', async () => {
 $('scale').addEventListener('change', () => { if (data) refresh(); });
 $('printer').addEventListener('change', () => { if (data) refresh(); });
 $('incScenery').addEventListener('change', () => { if (data) refresh(); });
+$('addSupports').addEventListener('change', () => { if (data) refresh(); });
 
 function refresh() {
   mmPerUnit = Number($('scale').value) / data.cellSize;
@@ -248,18 +254,100 @@ function computeModules() {
       seg.maxY = Math.max(seg.maxY, p.maxY);
     }
     segs.forEach((s, si) => {
-      const b = partsBounds(s.parts);
+      const parts = s.parts.slice();
+      if ($('addSupports').checked && c.idx >= 0) addBreakawaySupports(parts);
+      const b = partsBounds(parts);
       const dims = [(b.mx[0] - b.mn[0]) * mmPerUnit, (b.mx[2] - b.mn[2]) * mmPerUnit, (b.mx[1] - b.mn[1]) * mmPerUnit];
       modules.push({
         cellIdx: c.idx,
         name: base + (segs.length > 1 ? '_' + String.fromCharCode(97 + si) : ''),
-        parts: s.parts,
+        parts,
         color,
         dims,
         over: dims.some((d) => d > bedMM + 0.01),
       });
     });
   }
+}
+
+// ---- baked-in breakaway supports ------------------------------------------
+// Each piece prints from its own flat bottom. Any mesh with nothing beneath
+// it (a banner bar, an arch top, a floating decoration) would print in air —
+// so we ground-check every part and drop slim square pillars from the piece's
+// base up to anything left hanging. Pillars are ~3 mm square at print scale
+// (thin enough to snap off) and fuse 0.4 mm into the part above.
+function xyTouch(a, b, eps) {
+  return a.minX <= b.maxX + eps && a.maxX >= b.minX - eps && a.minZ <= b.maxZ + eps && a.maxZ >= b.minZ - eps;
+}
+function supportBox(cx, cz, y0, y1, w) {
+  const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - w / 2, z1 = cz + w / 2;
+  // 8 corners: abcd bottom, efgh top (matching order); 12 outward-wound tris.
+  const a = [x0, y0, z0], b = [x1, y0, z0], c = [x1, y0, z1], d = [x0, y0, z1];
+  const e = [x0, y1, z0], f = [x1, y1, z0], g = [x1, y1, z1], h = [x0, y1, z1];
+  const T = [
+    a, b, c, a, c, d,       // bottom (-Y)
+    e, g, f, e, h, g,       // top (+Y)
+    a, f, b, a, e, f,       // -Z
+    d, c, g, d, g, h,       // +Z
+    a, d, h, a, h, e,       // -X
+    b, g, c, b, f, g,       // +X
+  ];
+  const tris = new Float32Array(T.length * 3);
+  T.forEach((p, i) => { tris[i * 3] = p[0]; tris[i * 3 + 1] = p[1]; tris[i * 3 + 2] = p[2]; });
+  return { tris, minX: x0, maxX: x1, minY: y0, maxY: y1, minZ: z0, maxZ: z1, support: true };
+}
+function addBreakawaySupports(parts) {
+  const eps = 0.03;
+  let base = Infinity;
+  for (const p of parts) if (p.minY < base) base = p.minY;
+  const grounded = parts.map((p) => p.minY <= base + eps);
+  // Spread groundedness through touching parts (a wall on a tile on a tower…).
+  const propagate = () => {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let i = 0; i < parts.length; i++) {
+        if (grounded[i]) continue;
+        const p = parts[i];
+        for (let j = 0; j < parts.length; j++) {
+          if (i === j || !grounded[j] || parts[j].support) continue;
+          const q = parts[j];
+          // connected when boxes touch and q rises to (or past) p's underside
+          if (q.maxY >= p.minY - eps && xyTouch(p, q, eps)) { grounded[i] = true; changed = true; break; }
+        }
+      }
+    }
+  };
+  const supports = [];
+  const w = 3 / mmPerUnit; // 3 mm square pillars at print scale
+  // Support the LOWEST hanging part, re-propagate (things resting on it are
+  // now held too), repeat until nothing floats.
+  for (;;) {
+    propagate();
+    let low = -1;
+    for (let i = 0; i < parts.length; i++)
+      if (!grounded[i] && (low === -1 || parts[i].minY < parts[low].minY)) low = i;
+    if (low === -1) break;
+    const p = parts[low];
+    grounded[low] = true;
+    const gap = p.minY - base;
+    if (gap * mmPerUnit < 1) continue; // practically touching — no pillar needed
+    const sx = p.maxX - p.minX, sz = p.maxZ - p.minZ;
+    const pw = Math.min(w, Math.max(0.8 / mmPerUnit, Math.min(sx, sz) * 0.8));
+    const top = p.minY + Math.min(0.4 / mmPerUnit, (p.maxY - p.minY) * 0.4); // fuse into the part
+    // long parts get a pillar near each end; compact ones a single center post
+    if (Math.max(sx, sz) > Math.min(sx, sz) * 3 && Math.max(sx, sz) * mmPerUnit > 24) {
+      const alongX = sx >= sz;
+      const c1 = alongX ? p.minX + sx * 0.2 : p.minZ + sz * 0.2;
+      const c2 = alongX ? p.minX + sx * 0.8 : p.minZ + sz * 0.8;
+      const mid = alongX ? (p.minZ + p.maxZ) / 2 : (p.minX + p.maxX) / 2;
+      supports.push(supportBox(alongX ? c1 : mid, alongX ? mid : c1, base, top, pw));
+      supports.push(supportBox(alongX ? c2 : mid, alongX ? mid : c2, base, top, pw));
+    } else {
+      supports.push(supportBox((p.minX + p.maxX) / 2, (p.minZ + p.maxZ) / 2, base, top, pw));
+    }
+  }
+  parts.push(...supports);
 }
 
 function renderStats() {
@@ -273,6 +361,7 @@ function renderStats() {
   const chan = data.trackWidth * mmPerUnit;
   $('stChan').textContent = chan.toFixed(0) + ' mm';
   $('stMarble').textContent = Math.floor(chan * 0.8) + ' mm';
+  $('stSupports').textContent = modules.reduce((s, m) => s + m.parts.filter((p) => p.support).length, 0);
   $('stats').hidden = false;
   const over = modules.filter((m) => m.over).length;
   $('fitWarn').hidden = over === 0;
@@ -327,21 +416,25 @@ function renderPreview() {
   if (pv.group) { pv.scene.remove(pv.group); pv.group.traverse((n) => { if (n.geometry) n.geometry.dispose(); if (n.material) n.material.dispose(); }); }
   const group = new THREE.Group();
   const byCell = new Map();
+  const supportParts = [];
   for (const m of modules) {
     let arr = byCell.get(m.cellIdx);
     if (!arr) { arr = { color: m.color, parts: [] }; byCell.set(m.cellIdx, arr); }
-    arr.parts.push(...m.parts);
+    for (const p of m.parts) (p.support ? supportParts : arr.parts).push(p);
   }
-  for (const [, entry] of byCell) {
-    const total = entry.parts.reduce((s, p) => s + p.tris.length, 0);
+  const addMerged = (parts, color) => {
+    if (!parts.length) return;
+    const total = parts.reduce((s, p) => s + p.tris.length, 0);
     const tris = new Float32Array(total);
     let off = 0;
-    for (const p of entry.parts) { tris.set(p.tris, off); off += p.tris.length; }
+    for (const p of parts) { tris.set(p.tris, off); off += p.tris.length; }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(tris, 3));
     g.computeVertexNormals();
-    group.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: entry.color })));
-  }
+    group.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color })));
+  };
+  for (const [, entry] of byCell) addMerged(entry.parts, entry.color);
+  addMerged(supportParts, '#5a6478'); // baked supports read as gray scaffolding
   pv.scene.add(group);
   pv.group = group;
   const b = partsBounds(modules.flatMap((m) => m.parts));
