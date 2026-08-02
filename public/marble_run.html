@@ -6374,24 +6374,27 @@ window.marbleAPI = {
         const n = index ? index.count : pos.count;
         const out = new Float32Array(n * 3);
         let o = 0;
+        let minY = Infinity, maxY = -Infinity;
         for (let i = 0; i < n; i++) {
           v.fromBufferAttribute(pos, index ? index.getX(i) : i).applyMatrix4(node.matrixWorld);
           out[o++] = v.x; out[o++] = v.y; out[o++] = v.z;
+          if (v.y < minY) minY = v.y;
+          if (v.y > maxY) maxY = v.y;
         }
         const key = node.userData.cellIdx !== undefined ? node.userData.cellIdx : -1;
         let entry = groups.get(key);
         if (!entry) { entry = []; groups.set(key, entry); }
-        entry.push(out);
+        // Whole meshes with their height range: the print page packs these
+        // into printer-height segments along natural seams (a support tower
+        // is a stack of individual cubes), so every piece stays a closed
+        // solid — no triangle cutting anywhere.
+        entry.push({ tris: out, minY, maxY });
       });
     }
     const cells = [];
     for (const [idx, parts] of groups) {
-      const total = parts.reduce((s, a) => s + a.length, 0);
-      const tris = new Float32Array(total);
-      let off = 0;
-      for (const p of parts) { tris.set(p, off); off += p.length; }
       const cell = idx >= 0 && pathCells[idx] ? pathCells[idx] : null;
-      cells.push({ idx, type: cell ? cell.type : idx === -1 ? 'scenery' : 'piece', tris });
+      cells.push({ idx, type: cell ? cell.type : idx === -1 ? 'scenery' : 'piece', parts });
     }
     cells.sort((a, b) => a.idx - b.idx);
     return {

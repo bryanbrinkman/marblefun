@@ -8,7 +8,7 @@
   :root {
     --bg: #0a0d14; --panel: rgba(20, 26, 40, 0.72); --panel2: rgba(27, 34, 51, 0.8);
     --line: rgba(120, 140, 175, 0.22); --text: #eaf0f8; --muted: #97a4ba;
-    --accent: #ffcf5c; --live: #35d07f;
+    --accent: #ffcf5c; --live: #35d07f; --warn: #ff7d6b;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text);
@@ -22,11 +22,11 @@
   header .back { margin-left: auto; font-size: 12px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
     padding: 14px 16px; margin-bottom: 12px; }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
   label { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
   input[type=number], select {
     background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--line);
-    border-radius: 9px; padding: 10px 12px; font: inherit; width: 150px;
+    border-radius: 9px; padding: 10px 12px; font: inherit; width: 170px;
   }
   button {
     cursor: pointer; font: 800 13px/1 inherit; color: var(--text);
@@ -40,14 +40,19 @@
   .stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
   .stats b { color: var(--text); font-variant-numeric: tabular-nums; }
   #status { font-size: 12.5px; color: var(--accent); min-height: 18px; }
+  #fitWarn { font-size: 12.5px; color: var(--warn); }
+  #fitWarn[hidden] { display: none; }
   #preview { width: 100%; height: 420px; border-radius: 12px; background: #05070c;
     border: 1px solid var(--line); display: block; touch-action: none; }
-  .modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 7px; }
+  .modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 7px; }
   .mod { display: flex; align-items: center; gap: 8px; background: var(--panel2);
     border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12px; }
+  .mod.over { border-color: var(--warn); }
   .mod .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
   .mod .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-variant-numeric: tabular-nums; }
+  .mod .sz { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mod.over .sz { color: var(--warn); font-weight: 700; }
   .mod button { min-height: 32px; padding: 7px 10px; font-size: 11px; border-radius: 8px; }
   .notes { font-size: 12.5px; color: var(--muted); }
   .notes li { margin-bottom: 5px; }
@@ -79,25 +84,34 @@
           <option value="80">80 mm / cell (XL)</option>
         </select>
       </div>
-      <div style="align-self:flex-end"><button id="liveBtn">📡 Use the live track</button></div>
-      <div style="align-self:flex-end"><button id="buildBtn" class="primary">🔨 Build for print</button></div>
+      <div><label>Printer</label><br />
+        <select id="printer">
+          <option value="256" selected>Bambu Lab X1 Carbon (256³ mm)</option>
+          <option value="180">Bambu Lab A1 mini (180³ mm)</option>
+          <option value="220">Ender-3 class (220 mm)</option>
+          <option value="999999">No limit (display model)</option>
+        </select>
+      </div>
+      <div><button id="liveBtn">📡 Use the live track</button></div>
+      <div><button id="buildBtn" class="primary">🔨 Build for print</button></div>
     </div>
     <p id="status"></p>
+    <p id="fitWarn" hidden></p>
     <div class="stats" id="stats" hidden>
-      <span>Modules <b id="stModules">–</b></span>
-      <span>Triangles <b id="stTris">–</b></span>
-      <span>Printed footprint <b id="stSize">–</b></span>
+      <span>Pieces <b id="stModules">–</b></span>
+      <span>Largest piece <b id="stLargest">–</b></span>
+      <span>Assembled size <b id="stSize">–</b></span>
       <span>Channel width <b id="stChan">–</b></span>
       <span>Fits marbles up to <b id="stMarble">–</b></span>
     </div>
   </div>
 
   <div class="card" id="previewCard" hidden>
-    <h2>Preview <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:600">— drag to orbit, wheel to zoom; each color is one printable module</span></h2>
+    <h2>Preview <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:600">— drag to orbit, wheel to zoom; each color is one course module</span></h2>
     <canvas id="preview"></canvas>
     <div class="row" style="margin-top:10px">
-      <button class="primary" id="dlFull">⬇ Full track (.stl)</button>
-      <button id="dlZip">⬇ All modules (.zip)</button>
+      <button class="primary" id="dlZip">⬇ All pieces (.zip)</button>
+      <button id="dlFull">⬇ Whole track, one file (.stl)</button>
       <label style="align-self:center;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">
         <input type="checkbox" id="incScenery" /> include table &amp; scenery
       </label>
@@ -105,17 +119,18 @@
   </div>
 
   <div class="card" id="modulesCard" hidden>
-    <h2>Modules</h2>
+    <h2>Pieces <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:600">— tall modules are split into a/b/c… segments that each fit your printer</span></h2>
     <div class="modules" id="modules"></div>
   </div>
 
   <div class="card notes">
     <h2>Print notes</h2>
     <ul>
-      <li><b>Modular:</b> each course cell exports as its own piece, numbered in track order — print them one at a time and assemble in sequence (the preview colors match the list below).</li>
-      <li><b>Scale:</b> at 40&nbsp;mm/cell the channel fits a standard 16&nbsp;mm marble. Courses are TALL — check the printed-footprint figure before committing; 20&nbsp;mm/cell makes a desk-sized display piece (with ~8&nbsp;mm mini marbles).</li>
-      <li><b>Slicing:</b> pieces are exported as overlapping closed shells — modern slicers (PrusaSlicer, Cura, Bambu) union these automatically. If your slicer complains, enable "union/merge overlapping volumes" or run the piece through its repair tool.</li>
-      <li><b>Orientation:</b> files come Z-up with each module resting at Z=0. Most pieces print support-free; spirals and step-ramps may want tree supports.</li>
+      <li><b>Bed fit:</b> pieces are automatically segmented so every one fits the selected printer (256&nbsp;mm on the X1&nbsp;Carbon). Splits happen at natural block seams — every segment stays a closed solid. Anything that still can't fit is flagged red; drop the piece size a notch.</li>
+      <li><b>Modular:</b> pieces are numbered in track order (01, 02, …) and segments stack bottom-up (a under b under c). Print, stack, glue, race.</li>
+      <li><b>Scale:</b> at 40&nbsp;mm/cell the channel fits a standard 16&nbsp;mm marble. Check "assembled size" before committing — these courses are tall towers.</li>
+      <li><b>Slicing:</b> pieces are overlapping closed shells — modern slicers (Bambu Studio, PrusaSlicer, Cura) union them automatically. If yours complains, enable merge-overlapping-volumes or run its repair tool.</li>
+      <li><b>Orientation:</b> files are Z-up with each piece resting at Z=0. Most print support-free; spirals and step-ramps may want tree supports.</li>
       <li>The same seed always builds the same track — print the course your favorite race ran on. 🏁</li>
     </ul>
   </div>
@@ -128,8 +143,9 @@
 'use strict';
 const $ = (id) => document.getElementById(id);
 const gameFrame = $('game');
-let data = null;       // getPrintGeometry() result
-let mmPerUnit = 15;    // scale factor: game units → mm
+let data = null;      // getPrintGeometry() result (cells with whole-mesh parts)
+let modules = [];     // printable pieces after segmentation at current scale/printer
+let mmPerUnit = 10;   // game units → mm
 const PALETTE = ['#e87560','#7fd4ef','#7ed07e','#f6c46a','#c9a2e8','#f4a4c0','#9ad0b8','#e8c19a'];
 
 function api() { try { return gameFrame.contentWindow && gameFrame.contentWindow.marbleAPI; } catch { return null; } }
@@ -175,48 +191,97 @@ $('buildBtn').addEventListener('click', async () => {
   try {
     const a = await whenApiReady();
     a.newCourse(seed);
-    await new Promise((r) => setTimeout(r, 120)); // let the build settle
+    await new Promise((r) => setTimeout(r, 120));
     data = a.getPrintGeometry();
-    mmPerUnit = Number($('scale').value) / data.cellSize;
-    renderStats();
-    renderModules();
-    renderPreview();
-    setStatus(`Track ${data.trackSeed} ready — ${data.cells.filter((c) => c.idx >= 0).length} printable modules.`);
+    refresh();
+    setStatus(`Track ${data.trackSeed} ready — ${modules.length} printable pieces.`);
   } catch (e) {
     setStatus('Build failed: ' + (e && e.message ? e.message : e));
   }
   $('buildBtn').disabled = false;
 });
-$('scale').addEventListener('change', () => { if (data) { mmPerUnit = Number($('scale').value) / data.cellSize; renderStats(); } });
+$('scale').addEventListener('change', () => { if (data) refresh(); });
+$('printer').addEventListener('change', () => { if (data) refresh(); });
+$('incScenery').addEventListener('change', () => { if (data) refresh(); });
 
-function includedCells() {
-  const scen = $('incScenery').checked;
-  return data.cells.filter((c) => (scen ? true : c.idx >= 0));
+function refresh() {
+  mmPerUnit = Number($('scale').value) / data.cellSize;
+  computeModules();
+  renderStats();
+  renderModules();
+  renderPreview();
 }
-function bounds(cells) {
+
+// ---- segmentation --------------------------------------------------------
+// A course module = one cell's tile + everything under it (support tower).
+// Tall modules get packed into printer-height segments along whole-mesh
+// boundaries (the towers are stacks of individual cubes), so no mesh is ever
+// cut and every piece stays a closed solid.
+function partsBounds(parts) {
   let mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
-  for (const c of cells) {
-    const t = c.tris;
-    for (let i = 0; i < t.length; i += 3) {
+  for (const p of parts) {
+    const t = p.tris;
+    for (let i = 0; i < t.length; i += 3)
       for (let k = 0; k < 3; k++) { const v = t[i + k]; if (v < mn[k]) mn[k] = v; if (v > mx[k]) mx[k] = v; }
-    }
   }
   return { mn, mx };
 }
+function computeModules() {
+  const bedMM = Number($('printer').value);
+  const limit = bedMM / mmPerUnit; // in game units, applies to all 3 axes
+  modules = [];
+  const cells = data.cells.filter((c) => (c.idx >= 0 ? true : $('incScenery').checked));
+  for (const c of cells) {
+    const base = c.idx === -1 ? 'scenery_table' : `${String(c.idx + 1).padStart(2, '0')}_${c.type}`;
+    const color = c.idx === -1 ? '#3a4258' : PALETTE[c.idx % PALETTE.length];
+    // Greedy pack whole meshes (sorted bottom-up) into height-limited segments.
+    const parts = c.parts.slice().sort((a, b) => a.minY - b.minY);
+    const segs = [];
+    let seg = null;
+    for (const p of parts) {
+      if (!seg || Math.max(seg.maxY, p.maxY) - Math.min(seg.minY, p.minY) > limit) {
+        seg = { parts: [], minY: p.minY, maxY: p.maxY };
+        segs.push(seg);
+      }
+      seg.parts.push(p);
+      seg.minY = Math.min(seg.minY, p.minY);
+      seg.maxY = Math.max(seg.maxY, p.maxY);
+    }
+    segs.forEach((s, si) => {
+      const b = partsBounds(s.parts);
+      const dims = [(b.mx[0] - b.mn[0]) * mmPerUnit, (b.mx[2] - b.mn[2]) * mmPerUnit, (b.mx[1] - b.mn[1]) * mmPerUnit];
+      modules.push({
+        cellIdx: c.idx,
+        name: base + (segs.length > 1 ? '_' + String.fromCharCode(97 + si) : ''),
+        parts: s.parts,
+        color,
+        dims,
+        over: dims.some((d) => d > bedMM + 0.01),
+      });
+    });
+  }
+}
+
 function renderStats() {
-  const cells = includedCells();
-  const tris = cells.reduce((s, c) => s + c.tris.length / 9, 0);
-  const b = bounds(cells);
-  $('stModules').textContent = cells.filter((c) => c.idx >= 0).length;
-  $('stTris').textContent = tris.toLocaleString();
+  const all = modules.flatMap((m) => m.parts);
+  const b = partsBounds(all);
+  let largest = [0, 0, 0];
+  for (const m of modules) if (m.dims[2] > largest[2] || m.dims.some((d, i) => d > largest[i])) largest = m.dims.map((d, i) => Math.max(d, largest[i]));
+  $('stModules').textContent = modules.length;
+  $('stLargest').textContent = largest.map((d) => Math.round(d)).join(' × ') + ' mm';
   $('stSize').textContent = `${Math.round((b.mx[0]-b.mn[0])*mmPerUnit)} × ${Math.round((b.mx[2]-b.mn[2])*mmPerUnit)} × ${Math.round((b.mx[1]-b.mn[1])*mmPerUnit)} mm`;
   const chan = data.trackWidth * mmPerUnit;
   $('stChan').textContent = chan.toFixed(0) + ' mm';
   $('stMarble').textContent = Math.floor(chan * 0.8) + ' mm';
   $('stats').hidden = false;
+  const over = modules.filter((m) => m.over).length;
+  $('fitWarn').hidden = over === 0;
+  $('fitWarn').textContent = over
+    ? `⚠️ ${over} piece${over > 1 ? 's' : ''} still exceed${over > 1 ? '' : 's'} the ${$('printer').value} mm bed at this scale — pick a smaller piece size.`
+    : '';
 }
 
-// ---- preview (its own tiny THREE scene) ---------------------------------
+// ---- preview -------------------------------------------------------------
 let pv = null;
 function renderPreview() {
   $('previewCard').hidden = false;
@@ -233,7 +298,6 @@ function renderPreview() {
     sun.position.set(60, 120, 40);
     scene.add(sun);
     pv = { renderer, scene, cam, group: null, yaw: 0.7, pitch: 0.9, dist: 120, target: new THREE.Vector3() };
-    // drag-orbit + wheel zoom + touch
     let drag = null;
     canvas.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
     canvas.addEventListener('pointermove', (e) => {
@@ -248,13 +312,13 @@ function renderPreview() {
       requestAnimationFrame(loop);
       if (document.hidden) return;
       const w = canvas.clientWidth, h = canvas.clientHeight;
-      if (canvas.width !== w * renderer.getPixelRatio()) { renderer.setSize(w, h, false); }
+      if (canvas.width !== w * renderer.getPixelRatio()) renderer.setSize(w, h, false);
       pv.cam.aspect = w / h;
       pv.cam.updateProjectionMatrix();
       pv.cam.position.set(
         pv.target.x + Math.cos(pv.pitch) * Math.sin(pv.yaw) * pv.dist,
         pv.target.y + Math.sin(pv.pitch) * pv.dist,
-        pv.target.z + Math.cos(pv.pitch) * Math.cos(pv.yaw) * pv.dist
+        pv.target.z + Math.cos(pv.pitch) * pv.dist * Math.cos(pv.yaw)
       );
       pv.cam.lookAt(pv.target);
       renderer.render(scene, pv.cam);
@@ -262,75 +326,78 @@ function renderPreview() {
   }
   if (pv.group) { pv.scene.remove(pv.group); pv.group.traverse((n) => { if (n.geometry) n.geometry.dispose(); if (n.material) n.material.dispose(); }); }
   const group = new THREE.Group();
-  const cells = includedCells();
-  cells.forEach((c, i) => {
+  const byCell = new Map();
+  for (const m of modules) {
+    let arr = byCell.get(m.cellIdx);
+    if (!arr) { arr = { color: m.color, parts: [] }; byCell.set(m.cellIdx, arr); }
+    arr.parts.push(...m.parts);
+  }
+  for (const [, entry] of byCell) {
+    const total = entry.parts.reduce((s, p) => s + p.tris.length, 0);
+    const tris = new Float32Array(total);
+    let off = 0;
+    for (const p of entry.parts) { tris.set(p.tris, off); off += p.tris.length; }
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(c.tris, 3));
+    g.setAttribute('position', new THREE.BufferAttribute(tris, 3));
     g.computeVertexNormals();
-    const mat = new THREE.MeshLambertMaterial({ color: c.idx === -1 ? '#3a4258' : PALETTE[c.idx % PALETTE.length] });
-    group.add(new THREE.Mesh(g, mat));
-  });
+    group.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: entry.color })));
+  }
   pv.scene.add(group);
   pv.group = group;
-  const b = bounds(cells);
+  const b = partsBounds(modules.flatMap((m) => m.parts));
   pv.target.set((b.mn[0] + b.mx[0]) / 2, (b.mn[1] + b.mx[1]) / 2, (b.mn[2] + b.mx[2]) / 2);
   pv.dist = Math.max(b.mx[0] - b.mn[0], b.mx[1] - b.mn[1], b.mx[2] - b.mn[2]) * 1.4 + 10;
 }
 
-// ---- module list --------------------------------------------------------
-function modName(c) {
-  return c.idx === -1 ? 'scenery_table' : `${String(c.idx + 1).padStart(2, '0')}_${c.type}`;
-}
+// ---- piece list ----------------------------------------------------------
 function renderModules() {
   const wrap = $('modules');
   wrap.innerHTML = '';
-  for (const c of data.cells) {
-    if (c.idx === -1) continue;
+  for (const m of modules) {
     const div = document.createElement('div');
-    div.className = 'mod';
+    div.className = 'mod' + (m.over ? ' over' : '');
     div.innerHTML =
-      `<span class="sw" style="background:${PALETTE[c.idx % PALETTE.length]}"></span>` +
-      `<span class="nm">${modName(c)}</span>`;
+      `<span class="sw" style="background:${m.color}"></span>` +
+      `<span class="nm">${m.name}</span>` +
+      `<span class="sz">${m.dims.map((d) => Math.round(d)).join('×')}</span>`;
     const b = document.createElement('button');
     b.textContent = '.stl';
-    b.addEventListener('click', () => download(`${modName(c)}.stl`, stlForCells([c], true)));
+    b.addEventListener('click', () => download(`${m.name}.stl`, stlForParts(m.parts, true)));
     div.appendChild(b);
     wrap.appendChild(div);
   }
 }
 
-// ---- STL + ZIP ----------------------------------------------------------
+// ---- STL + ZIP -----------------------------------------------------------
 // Binary STL. Game is Y-up; printers are Z-up → rotate (x,y,z)→(x,−z,y)
 // (a proper rotation: winding and outward normals survive). recenter=true
-// drops the module's min corner to the origin so it sits on the plate.
-function stlForCells(cells, recenter) {
+// drops the piece's min corner to the origin so it sits on the plate.
+function stlForParts(parts, recenter) {
   let triCount = 0;
-  for (const c of cells) triCount += c.tris.length / 9;
-  const b = bounds(cells);
+  for (const p of parts) triCount += p.tris.length / 9;
+  const b = partsBounds(parts);
   const ox = recenter ? b.mn[0] : 0, oy = recenter ? b.mn[1] : 0, oz = recenter ? b.mx[2] : 0;
   const buf = new ArrayBuffer(84 + triCount * 50);
   const dv = new DataView(buf);
   new Uint8Array(buf, 0, 80).set(new TextEncoder().encode('marblerun.fun track ' + (data ? data.trackSeed : '')).slice(0, 80));
   dv.setUint32(80, triCount, true);
   let off = 84;
-  const p = new Float64Array(9);
-  for (const c of cells) {
-    const t = c.tris;
+  const p9 = new Float64Array(9);
+  for (const part of parts) {
+    const t = part.tris;
     for (let i = 0; i < t.length; i += 9) {
-      // rotate + scale + recenter each vertex: (x,y,z) → (x−ox, −(z−oz), y−oy) * mm
       for (let k = 0; k < 3; k++) {
-        p[k * 3 + 0] = (t[i + k * 3 + 0] - ox) * mmPerUnit;
-        p[k * 3 + 1] = -(t[i + k * 3 + 2] - oz) * mmPerUnit;
-        p[k * 3 + 2] = (t[i + k * 3 + 1] - oy) * mmPerUnit;
+        p9[k * 3 + 0] = (t[i + k * 3 + 0] - ox) * mmPerUnit;
+        p9[k * 3 + 1] = -(t[i + k * 3 + 2] - oz) * mmPerUnit;
+        p9[k * 3 + 2] = (t[i + k * 3 + 1] - oy) * mmPerUnit;
       }
-      // normal = (v1-v0) × (v2-v0)
-      const ux = p[3] - p[0], uy = p[4] - p[1], uz = p[5] - p[2];
-      const vx = p[6] - p[0], vy = p[7] - p[1], vz = p[8] - p[2];
+      const ux = p9[3] - p9[0], uy = p9[4] - p9[1], uz = p9[5] - p9[2];
+      const vx = p9[6] - p9[0], vy = p9[7] - p9[1], vz = p9[8] - p9[2];
       let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
       const len = Math.hypot(nx, ny, nz) || 1;
       dv.setFloat32(off, nx / len, true); dv.setFloat32(off + 4, ny / len, true); dv.setFloat32(off + 8, nz / len, true);
       off += 12;
-      for (let k = 0; k < 9; k++) { dv.setFloat32(off, p[k], true); off += 4; }
+      for (let k = 0; k < 9; k++) { dv.setFloat32(off, p9[k], true); off += 4; }
       dv.setUint16(off, 0, true); off += 2;
     }
   }
@@ -344,10 +411,10 @@ function download(name, bytes) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 $('dlFull').addEventListener('click', () => {
-  if (data) download(`marblerun_track_${data.trackSeed}.stl`, stlForCells(includedCells(), true));
+  if (data) download(`marblerun_track_${data.trackSeed}.stl`, stlForParts(modules.flatMap((m) => m.parts), true));
 });
 
-// Store-only ZIP (no compression) — enough to bundle the module STLs.
+// Store-only ZIP (no compression) — enough to bundle the piece STLs.
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -372,10 +439,9 @@ function makeZip(files) {
     const crc = crc32(f.bytes);
     const local = new ArrayBuffer(30);
     const dv = new DataView(local);
-    dv.setUint32(0, 0x04034b50, true); dv.setUint16(4, 20, true); dv.setUint16(6, 0, true);
-    dv.setUint16(8, 0, true); dv.setUint16(10, 0, true); dv.setUint16(12, 0, true);
+    dv.setUint32(0, 0x04034b50, true); dv.setUint16(4, 20, true);
     dv.setUint32(14, crc, true); dv.setUint32(18, f.bytes.length, true); dv.setUint32(22, f.bytes.length, true);
-    dv.setUint16(26, name.length, true); dv.setUint16(28, 0, true);
+    dv.setUint16(26, name.length, true);
     chunks.push(new Uint8Array(local), name, f.bytes);
     const cd = new ArrayBuffer(46);
     const c = new DataView(cd);
@@ -401,15 +467,12 @@ function makeZip(files) {
   return out;
 }
 $('dlZip').addEventListener('click', () => {
-  if (!data) return;
-  setStatus('Bundling module STLs…');
-  const files = data.cells
-    .filter((c) => c.idx >= 0 || ($('incScenery').checked && c.idx === -1))
-    .map((c) => ({ name: `${modName(c)}.stl`, bytes: stlForCells([c], true) }));
-  download(`marblerun_track_${data.trackSeed}_modules.zip`, makeZip(files));
-  setStatus('Module bundle downloaded.');
+  if (!modules.length) return;
+  setStatus('Bundling piece STLs…');
+  const files = modules.map((m) => ({ name: `${m.name}.stl`, bytes: stlForParts(m.parts, true) }));
+  download(`marblerun_track_${data.trackSeed}_pieces.zip`, makeZip(files));
+  setStatus('Piece bundle downloaded.');
 });
-$('incScenery').addEventListener('change', () => { if (data) { renderStats(); renderPreview(); } });
 </script>
 </body>
 </html>
