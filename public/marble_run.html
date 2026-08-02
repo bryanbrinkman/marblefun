@@ -6350,6 +6350,58 @@ window.marbleAPI = {
     const want = on === undefined ? !STATE.marbleBlast : !!on;
     if (want !== STATE.marbleBlast) toggleMarbleBlast();
   },
+  // ---- 3D-print export (used by /print) ----------------------------------
+  // Returns the built course as world-space triangle soup, grouped into
+  // per-cell modules (every course mesh is stamped with userData.cellIdx at
+  // build time). Purely a read of the render geometry — nothing about the
+  // sim changes. Scenery without a cell (table, fence) lands in idx -1 so the
+  // print page can leave it out. Skips flat planes (shadows/splashes),
+  // transparent materials (glass/ghosts) and sprites — those aren't solids.
+  getPrintGeometry() {
+    const groups = new Map();
+    const v = new THREE.Vector3();
+    for (const obj of worldObjects) {
+      obj.updateMatrixWorld(true);
+      obj.traverse((node) => {
+        if (!node.isMesh || !node.geometry) return;
+        const g = node.geometry;
+        if (/Plane/.test(g.type)) return;
+        const mats = Array.isArray(node.material) ? node.material : [node.material];
+        if (mats.some((m) => m && m.transparent && m.opacity < 0.9)) return;
+        const pos = g.attributes && g.attributes.position;
+        if (!pos) return;
+        const index = g.index;
+        const n = index ? index.count : pos.count;
+        const out = new Float32Array(n * 3);
+        let o = 0;
+        for (let i = 0; i < n; i++) {
+          v.fromBufferAttribute(pos, index ? index.getX(i) : i).applyMatrix4(node.matrixWorld);
+          out[o++] = v.x; out[o++] = v.y; out[o++] = v.z;
+        }
+        const key = node.userData.cellIdx !== undefined ? node.userData.cellIdx : -1;
+        let entry = groups.get(key);
+        if (!entry) { entry = []; groups.set(key, entry); }
+        entry.push(out);
+      });
+    }
+    const cells = [];
+    for (const [idx, parts] of groups) {
+      const total = parts.reduce((s, a) => s + a.length, 0);
+      const tris = new Float32Array(total);
+      let off = 0;
+      for (const p of parts) { tris.set(p, off); off += p.length; }
+      const cell = idx >= 0 && pathCells[idx] ? pathCells[idx] : null;
+      cells.push({ idx, type: cell ? cell.type : idx === -1 ? 'scenery' : 'piece', tris });
+    }
+    cells.sort((a, b) => a.idx - b.idx);
+    return {
+      trackSeed: SEEDS.track,
+      cellSize: CONFIG.cellSize,
+      trackWidth: CONFIG.trackWidth,
+      marbleRadius: CONFIG.marbleRadius,
+      cells,
+    };
+  },
   newCourse(trackSeed) {
     if (trackSeed !== undefined) {
       SEEDS.track = trackSeed >>> 0;

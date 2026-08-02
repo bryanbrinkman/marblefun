@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>marblerun.fun — 3D-print a track</title>
+<style>
+  :root {
+    --bg: #0a0d14; --panel: rgba(20, 26, 40, 0.72); --panel2: rgba(27, 34, 51, 0.8);
+    --line: rgba(120, 140, 175, 0.22); --text: #eaf0f8; --muted: #97a4ba;
+    --accent: #ffcf5c; --live: #35d07f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  a { color: var(--accent); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 18px 16px 60px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  header img { height: 34px; }
+  header h1 { font-size: 18px; font-weight: 900; margin: 0; letter-spacing: .4px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header .back { margin-left: auto; font-size: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 12px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  label { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  input[type=number], select {
+    background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--line);
+    border-radius: 9px; padding: 10px 12px; font: inherit; width: 150px;
+  }
+  button {
+    cursor: pointer; font: 800 13px/1 inherit; color: var(--text);
+    padding: 12px 16px; min-height: 44px; border-radius: 11px;
+    border: 1px solid var(--line); background: var(--panel2);
+  }
+  button:hover { border-color: var(--muted); }
+  button.primary { color: var(--accent); border-color: rgba(255,207,92,.55);
+    background: linear-gradient(180deg, rgba(255,207,92,.2), rgba(255,207,92,.06)); }
+  button:disabled { opacity: .45; cursor: default; }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+  .stats b { color: var(--text); font-variant-numeric: tabular-nums; }
+  #status { font-size: 12.5px; color: var(--accent); min-height: 18px; }
+  #preview { width: 100%; height: 420px; border-radius: 12px; background: #05070c;
+    border: 1px solid var(--line); display: block; touch-action: none; }
+  .modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 7px; }
+  .mod { display: flex; align-items: center; gap: 8px; background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12px; }
+  .mod .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+  .mod .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-variant-numeric: tabular-nums; }
+  .mod button { min-height: 32px; padding: 7px 10px; font-size: 11px; border-radius: 8px; }
+  .notes { font-size: 12.5px; color: var(--muted); }
+  .notes li { margin-bottom: 5px; }
+  h2 { font-size: 12px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+  #frameBox { position: fixed; width: 10px; height: 10px; left: -9999px; top: 0; overflow: hidden; }
+  #frameBox iframe { width: 900px; height: 700px; border: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="logo.png" alt="" onerror="this.hidden=true" />
+    <div>
+      <h1>3D-print a track</h1>
+      <div class="sub">Turn any deterministic course into modular, printable pieces</div>
+    </div>
+    <a class="back" href="/">← back to the races</a>
+  </header>
+
+  <div class="card">
+    <div class="row">
+      <div><label>Track seed</label><br /><input id="seed" type="number" min="0" step="1" /></div>
+      <div><label>Piece size</label><br />
+        <select id="scale">
+          <option value="20">20 mm / cell (desk toy)</option>
+          <option value="30">30 mm / cell (compact)</option>
+          <option value="40" selected>40 mm / cell (standard)</option>
+          <option value="60">60 mm / cell (large)</option>
+          <option value="80">80 mm / cell (XL)</option>
+        </select>
+      </div>
+      <div style="align-self:flex-end"><button id="liveBtn">📡 Use the live track</button></div>
+      <div style="align-self:flex-end"><button id="buildBtn" class="primary">🔨 Build for print</button></div>
+    </div>
+    <p id="status"></p>
+    <div class="stats" id="stats" hidden>
+      <span>Modules <b id="stModules">–</b></span>
+      <span>Triangles <b id="stTris">–</b></span>
+      <span>Printed footprint <b id="stSize">–</b></span>
+      <span>Channel width <b id="stChan">–</b></span>
+      <span>Fits marbles up to <b id="stMarble">–</b></span>
+    </div>
+  </div>
+
+  <div class="card" id="previewCard" hidden>
+    <h2>Preview <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:600">— drag to orbit, wheel to zoom; each color is one printable module</span></h2>
+    <canvas id="preview"></canvas>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="dlFull">⬇ Full track (.stl)</button>
+      <button id="dlZip">⬇ All modules (.zip)</button>
+      <label style="align-self:center;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">
+        <input type="checkbox" id="incScenery" /> include table &amp; scenery
+      </label>
+    </div>
+  </div>
+
+  <div class="card" id="modulesCard" hidden>
+    <h2>Modules</h2>
+    <div class="modules" id="modules"></div>
+  </div>
+
+  <div class="card notes">
+    <h2>Print notes</h2>
+    <ul>
+      <li><b>Modular:</b> each course cell exports as its own piece, numbered in track order — print them one at a time and assemble in sequence (the preview colors match the list below).</li>
+      <li><b>Scale:</b> at 40&nbsp;mm/cell the channel fits a standard 16&nbsp;mm marble. Courses are TALL — check the printed-footprint figure before committing; 20&nbsp;mm/cell makes a desk-sized display piece (with ~8&nbsp;mm mini marbles).</li>
+      <li><b>Slicing:</b> pieces are exported as overlapping closed shells — modern slicers (PrusaSlicer, Cura, Bambu) union these automatically. If your slicer complains, enable "union/merge overlapping volumes" or run the piece through its repair tool.</li>
+      <li><b>Orientation:</b> files come Z-up with each module resting at Z=0. Most pieces print support-free; spirals and step-ramps may want tree supports.</li>
+      <li>The same seed always builds the same track — print the course your favorite race ran on. 🏁</li>
+    </ul>
+  </div>
+</div>
+
+<div id="frameBox"><iframe id="game" src="marble_run.html?embed=1"></iframe></div>
+
+<script src="vendor/three.min.js"></script>
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const gameFrame = $('game');
+let data = null;       // getPrintGeometry() result
+let mmPerUnit = 15;    // scale factor: game units → mm
+const PALETTE = ['#e87560','#7fd4ef','#7ed07e','#f6c46a','#c9a2e8','#f4a4c0','#9ad0b8','#e8c19a'];
+
+function api() { try { return gameFrame.contentWindow && gameFrame.contentWindow.marbleAPI; } catch { return null; } }
+function whenApiReady() {
+  return new Promise((res) => {
+    const t = () => { const a = api(); if (a && a.getPrintGeometry) res(a); else setTimeout(t, 150); };
+    t();
+  });
+}
+function setStatus(s) { $('status').textContent = s; }
+
+// Prefill the seed: ?seed= wins, else the live server's current track.
+(async function initSeed() {
+  const q = new URLSearchParams(location.search).get('seed');
+  if (q) { $('seed').value = q >>> 0; return; }
+  const s = await fetchLiveSeed();
+  $('seed').value = s !== null ? s : Math.floor(Math.random() * 0xffffffff);
+})();
+async function fetchLiveSeed() {
+  try {
+    const r = await fetch('/api/state', { cache: 'no-store' });
+    if (!r.ok) return null;
+    const s = await r.json();
+    if (!s || !s.rounds) return null;
+    const races = s.rounds.flatMap((rd) => rd.races || []);
+    const cur = s.current && races.find((x) => x.key === s.current.raceKey);
+    const pick = cur || races.find((x) => !x.result) || races[races.length - 1];
+    return pick ? pick.trackSeed >>> 0 : null;
+  } catch { return null; }
+}
+$('liveBtn').addEventListener('click', async () => {
+  setStatus('Fetching the live track seed…');
+  const s = await fetchLiveSeed();
+  if (s === null) setStatus('No live server reachable — enter a seed by hand.');
+  else { $('seed').value = s; setStatus('Live track seed loaded — hit Build.'); }
+});
+
+// ---- build --------------------------------------------------------------
+$('buildBtn').addEventListener('click', async () => {
+  const seed = ($('seed').value || 0) >>> 0;
+  $('buildBtn').disabled = true;
+  setStatus('Building the course (the same deterministic build the game runs)…');
+  try {
+    const a = await whenApiReady();
+    a.newCourse(seed);
+    await new Promise((r) => setTimeout(r, 120)); // let the build settle
+    data = a.getPrintGeometry();
+    mmPerUnit = Number($('scale').value) / data.cellSize;
+    renderStats();
+    renderModules();
+    renderPreview();
+    setStatus(`Track ${data.trackSeed} ready — ${data.cells.filter((c) => c.idx >= 0).length} printable modules.`);
+  } catch (e) {
+    setStatus('Build failed: ' + (e && e.message ? e.message : e));
+  }
+  $('buildBtn').disabled = false;
+});
+$('scale').addEventListener('change', () => { if (data) { mmPerUnit = Number($('scale').value) / data.cellSize; renderStats(); } });
+
+function includedCells() {
+  const scen = $('incScenery').checked;
+  return data.cells.filter((c) => (scen ? true : c.idx >= 0));
+}
+function bounds(cells) {
+  let mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+  for (const c of cells) {
+    const t = c.tris;
+    for (let i = 0; i < t.length; i += 3) {
+      for (let k = 0; k < 3; k++) { const v = t[i + k]; if (v < mn[k]) mn[k] = v; if (v > mx[k]) mx[k] = v; }
+    }
+  }
+  return { mn, mx };
+}
+function renderStats() {
+  const cells = includedCells();
+  const tris = cells.reduce((s, c) => s + c.tris.length / 9, 0);
+  const b = bounds(cells);
+  $('stModules').textContent = cells.filter((c) => c.idx >= 0).length;
+  $('stTris').textContent = tris.toLocaleString();
+  $('stSize').textContent = `${Math.round((b.mx[0]-b.mn[0])*mmPerUnit)} × ${Math.round((b.mx[2]-b.mn[2])*mmPerUnit)} × ${Math.round((b.mx[1]-b.mn[1])*mmPerUnit)} mm`;
+  const chan = data.trackWidth * mmPerUnit;
+  $('stChan').textContent = chan.toFixed(0) + ' mm';
+  $('stMarble').textContent = Math.floor(chan * 0.8) + ' mm';
+  $('stats').hidden = false;
+}
+
+// ---- preview (its own tiny THREE scene) ---------------------------------
+let pv = null;
+function renderPreview() {
+  $('previewCard').hidden = false;
+  $('modulesCard').hidden = false;
+  const canvas = $('preview');
+  if (!pv) {
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x05070c);
+    const cam = new THREE.PerspectiveCamera(45, 2, 0.1, 4000);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+    sun.position.set(60, 120, 40);
+    scene.add(sun);
+    pv = { renderer, scene, cam, group: null, yaw: 0.7, pitch: 0.9, dist: 120, target: new THREE.Vector3() };
+    // drag-orbit + wheel zoom + touch
+    let drag = null;
+    canvas.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      pv.yaw += (e.clientX - drag[0]) * 0.008;
+      pv.pitch = Math.min(1.5, Math.max(0.1, pv.pitch + (e.clientY - drag[1]) * 0.006));
+      drag = [e.clientX, e.clientY];
+    });
+    canvas.addEventListener('pointerup', () => (drag = null));
+    canvas.addEventListener('wheel', (e) => { e.preventDefault(); pv.dist *= e.deltaY > 0 ? 1.1 : 0.9; }, { passive: false });
+    (function loop() {
+      requestAnimationFrame(loop);
+      if (document.hidden) return;
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      if (canvas.width !== w * renderer.getPixelRatio()) { renderer.setSize(w, h, false); }
+      pv.cam.aspect = w / h;
+      pv.cam.updateProjectionMatrix();
+      pv.cam.position.set(
+        pv.target.x + Math.cos(pv.pitch) * Math.sin(pv.yaw) * pv.dist,
+        pv.target.y + Math.sin(pv.pitch) * pv.dist,
+        pv.target.z + Math.cos(pv.pitch) * Math.cos(pv.yaw) * pv.dist
+      );
+      pv.cam.lookAt(pv.target);
+      renderer.render(scene, pv.cam);
+    })();
+  }
+  if (pv.group) { pv.scene.remove(pv.group); pv.group.traverse((n) => { if (n.geometry) n.geometry.dispose(); if (n.material) n.material.dispose(); }); }
+  const group = new THREE.Group();
+  const cells = includedCells();
+  cells.forEach((c, i) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(c.tris, 3));
+    g.computeVertexNormals();
+    const mat = new THREE.MeshLambertMaterial({ color: c.idx === -1 ? '#3a4258' : PALETTE[c.idx % PALETTE.length] });
+    group.add(new THREE.Mesh(g, mat));
+  });
+  pv.scene.add(group);
+  pv.group = group;
+  const b = bounds(cells);
+  pv.target.set((b.mn[0] + b.mx[0]) / 2, (b.mn[1] + b.mx[1]) / 2, (b.mn[2] + b.mx[2]) / 2);
+  pv.dist = Math.max(b.mx[0] - b.mn[0], b.mx[1] - b.mn[1], b.mx[2] - b.mn[2]) * 1.4 + 10;
+}
+
+// ---- module list --------------------------------------------------------
+function modName(c) {
+  return c.idx === -1 ? 'scenery_table' : `${String(c.idx + 1).padStart(2, '0')}_${c.type}`;
+}
+function renderModules() {
+  const wrap = $('modules');
+  wrap.innerHTML = '';
+  for (const c of data.cells) {
+    if (c.idx === -1) continue;
+    const div = document.createElement('div');
+    div.className = 'mod';
+    div.innerHTML =
+      `<span class="sw" style="background:${PALETTE[c.idx % PALETTE.length]}"></span>` +
+      `<span class="nm">${modName(c)}</span>`;
+    const b = document.createElement('button');
+    b.textContent = '.stl';
+    b.addEventListener('click', () => download(`${modName(c)}.stl`, stlForCells([c], true)));
+    div.appendChild(b);
+    wrap.appendChild(div);
+  }
+}
+
+// ---- STL + ZIP ----------------------------------------------------------
+// Binary STL. Game is Y-up; printers are Z-up → rotate (x,y,z)→(x,−z,y)
+// (a proper rotation: winding and outward normals survive). recenter=true
+// drops the module's min corner to the origin so it sits on the plate.
+function stlForCells(cells, recenter) {
+  let triCount = 0;
+  for (const c of cells) triCount += c.tris.length / 9;
+  const b = bounds(cells);
+  const ox = recenter ? b.mn[0] : 0, oy = recenter ? b.mn[1] : 0, oz = recenter ? b.mx[2] : 0;
+  const buf = new ArrayBuffer(84 + triCount * 50);
+  const dv = new DataView(buf);
+  new Uint8Array(buf, 0, 80).set(new TextEncoder().encode('marblerun.fun track ' + (data ? data.trackSeed : '')).slice(0, 80));
+  dv.setUint32(80, triCount, true);
+  let off = 84;
+  const p = new Float64Array(9);
+  for (const c of cells) {
+    const t = c.tris;
+    for (let i = 0; i < t.length; i += 9) {
+      // rotate + scale + recenter each vertex: (x,y,z) → (x−ox, −(z−oz), y−oy) * mm
+      for (let k = 0; k < 3; k++) {
+        p[k * 3 + 0] = (t[i + k * 3 + 0] - ox) * mmPerUnit;
+        p[k * 3 + 1] = -(t[i + k * 3 + 2] - oz) * mmPerUnit;
+        p[k * 3 + 2] = (t[i + k * 3 + 1] - oy) * mmPerUnit;
+      }
+      // normal = (v1-v0) × (v2-v0)
+      const ux = p[3] - p[0], uy = p[4] - p[1], uz = p[5] - p[2];
+      const vx = p[6] - p[0], vy = p[7] - p[1], vz = p[8] - p[2];
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      dv.setFloat32(off, nx / len, true); dv.setFloat32(off + 4, ny / len, true); dv.setFloat32(off + 8, nz / len, true);
+      off += 12;
+      for (let k = 0; k < 9; k++) { dv.setFloat32(off, p[k], true); off += 4; }
+      dv.setUint16(off, 0, true); off += 2;
+    }
+  }
+  return new Uint8Array(buf);
+}
+function download(name, bytes) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+$('dlFull').addEventListener('click', () => {
+  if (data) download(`marblerun_track_${data.trackSeed}.stl`, stlForCells(includedCells(), true));
+});
+
+// Store-only ZIP (no compression) — enough to bundle the module STLs.
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function makeZip(files) {
+  const enc = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name);
+    const crc = crc32(f.bytes);
+    const local = new ArrayBuffer(30);
+    const dv = new DataView(local);
+    dv.setUint32(0, 0x04034b50, true); dv.setUint16(4, 20, true); dv.setUint16(6, 0, true);
+    dv.setUint16(8, 0, true); dv.setUint16(10, 0, true); dv.setUint16(12, 0, true);
+    dv.setUint32(14, crc, true); dv.setUint32(18, f.bytes.length, true); dv.setUint32(22, f.bytes.length, true);
+    dv.setUint16(26, name.length, true); dv.setUint16(28, 0, true);
+    chunks.push(new Uint8Array(local), name, f.bytes);
+    const cd = new ArrayBuffer(46);
+    const c = new DataView(cd);
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true);
+    c.setUint32(16, crc, true); c.setUint32(20, f.bytes.length, true); c.setUint32(24, f.bytes.length, true);
+    c.setUint16(28, name.length, true);
+    c.setUint32(42, offset, true);
+    central.push(new Uint8Array(cd), name);
+    offset += 30 + name.length + f.bytes.length;
+  }
+  let cdSize = 0;
+  for (const c of central) cdSize += c.length;
+  const end = new ArrayBuffer(22);
+  const e = new DataView(end);
+  e.setUint32(0, 0x06054b50, true);
+  e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+  e.setUint32(12, cdSize, true); e.setUint32(16, offset, true);
+  const out = new Uint8Array(offset + cdSize + 22);
+  let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  for (const c of central) { out.set(c, o); o += c.length; }
+  out.set(new Uint8Array(end), o);
+  return out;
+}
+$('dlZip').addEventListener('click', () => {
+  if (!data) return;
+  setStatus('Bundling module STLs…');
+  const files = data.cells
+    .filter((c) => c.idx >= 0 || ($('incScenery').checked && c.idx === -1))
+    .map((c) => ({ name: `${modName(c)}.stl`, bytes: stlForCells([c], true) }));
+  download(`marblerun_track_${data.trackSeed}_modules.zip`, makeZip(files));
+  setStatus('Module bundle downloaded.');
+});
+$('incScenery').addEventListener('change', () => { if (data) { renderStats(); renderPreview(); } });
+</script>
+</body>
+</html>
