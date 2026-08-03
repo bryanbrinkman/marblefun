@@ -2708,11 +2708,13 @@ function buildBlocks() {
     post.castShadow = true;
     post.receiveShadow = true;
     post.userData.isBase = true;   // stanchions are part of the display base, not the course
+    post.userData.noPrint = true;  // decorative — excluded from 3D-print export
     addToWorld(post);
     const cap = new THREE.Mesh(capGeo, capMat);
     cap.position.set(p.x, tableTopY + postH + postR * 0.6, p.z);
     cap.castShadow = true;
     cap.userData.isBase = true;
+    cap.userData.noPrint = true;
     addToWorld(cap);
   }
 
@@ -2744,6 +2746,7 @@ function buildBlocks() {
     rope.castShadow = true;
     rope.receiveShadow = true;
     rope.userData.isBase = true;   // perimeter rope is part of the base display, not the course
+    rope.userData.noPrint = true;  // decorative — excluded from 3D-print export
     addToWorld(rope);
   }
 }
@@ -6364,6 +6367,7 @@ window.marbleAPI = {
       obj.updateMatrixWorld(true);
       obj.traverse((node) => {
         if (!node.isMesh || !node.geometry) return;
+        if (node.userData.noPrint) return; // decorative flair (velvet ropes etc.)
         const g = node.geometry;
         if (/Plane/.test(g.type)) return;
         const mats = Array.isArray(node.material) ? node.material : [node.material];
