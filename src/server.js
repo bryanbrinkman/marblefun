@@ -68,7 +68,14 @@ function toCSV(rows) {
 }
 
 function sendJSON(res, code, obj) {
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.writeHead(code, {
+    'Content-Type': 'application/json; charset=utf-8',
+    // The read API is public so third parties can build on top of the
+    // tournament (predictions, overlays, bots). Admin routes still require
+    // the token; CORS just lets browsers make the call.
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'content-type, x-admin-token',
+  });
   res.end(JSON.stringify(obj));
 }
 
@@ -214,8 +221,46 @@ async function main() {
 
   const httpServer = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    if (req.method === 'OPTIONS' && url.pathname.startsWith('/api/')) {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'content-type, x-admin-token',
+        'Access-Control-Max-Age': '86400',
+      });
+      return res.end();
+    }
     if (url.pathname === '/api/state') {
       return sendJSON(res, 200, scheduler ? scheduler.snapshot() : { type: simFailed ? 'no_tournament' : 'starting' });
+    }
+    if (url.pathname === '/api/next') {
+      // Convenience for builders: just the upcoming/current race with its
+      // seeds, roster and scheduled start — the betting-window essentials.
+      if (!scheduler) return sendJSON(res, 200, { type: simFailed ? 'no_tournament' : 'starting' });
+      const snap = scheduler.snapshot();
+      const races = snap.rounds.flatMap((r) => r.races);
+      const cur = snap.current && races.find((x) => x.key === snap.current.raceKey);
+      const race = (cur && !cur.result ? cur : races.find((x) => !x.result)) || null;
+      return sendJSON(res, 200, {
+        type: 'next_race',
+        serverNow: snap.serverNow,
+        announceLeadMs: snap.announceLeadMs,
+        phase: snap.current ? snap.current.phase : null,
+        tournamentId: snap.tournament.id,
+        champion: snap.tournament.champion,
+        race,
+      });
+    }
+    if (url.pathname === '/api/history') {
+      // Recent completed races (seeds + full results), newest first.
+      let races = [];
+      try {
+        const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit')) || 50));
+        if (db) races = db.recentRaces(limit);
+      } catch (e) {
+        console.error('[api] history failed:', e && e.message);
+      }
+      return sendJSON(res, 200, { races });
     }
     if (url.pathname === '/api/champions') {
       // Public hall of fame: recent tournament winners, newest first.

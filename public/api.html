@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>marblerun.fun — Developer API</title>
+<style>
+  :root {
+    --bg: #0a0d14; --panel: rgba(20, 26, 40, 0.72); --panel2: rgba(27, 34, 51, 0.8);
+    --line: rgba(120, 140, 175, 0.22); --text: #eaf0f8; --muted: #97a4ba;
+    --accent: #ffcf5c; --live: #35d07f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  a { color: var(--accent); }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 18px 16px 80px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
+  header img { height: 34px; }
+  header h1 { font-size: 19px; font-weight: 900; margin: 0; letter-spacing: .4px; }
+  header .back { margin-left: auto; font-size: 12px; }
+  .lede { color: var(--muted); margin: 4px 0 18px; max-width: 640px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px 18px; margin-bottom: 14px; }
+  h2 { font-size: 12px; letter-spacing: 1.8px; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
+  h3 { font-size: 14px; margin: 18px 0 6px; }
+  h3:first-of-type { margin-top: 0; }
+  p, li { color: var(--text); }
+  .muted { color: var(--muted); }
+  code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  code { background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+  pre { background: rgba(0,0,0,.4); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; overflow-x: auto; line-height: 1.5; margin: 8px 0 4px; }
+  pre code { background: none; border: 0; padding: 0; }
+  .ep { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .ep:first-child { margin-top: 0; }
+  .method { font: 800 10.5px/1 ui-monospace, Menlo, monospace; letter-spacing: .5px; padding: 4px 8px;
+    border-radius: 6px; background: rgba(53,208,127,.15); color: var(--live); border: 1px solid rgba(53,208,127,.4); }
+  .method.ws { background: rgba(255,207,92,.13); color: var(--accent); border-color: rgba(255,207,92,.4); }
+  .path { font: 700 13.5px/1 ui-monospace, Menlo, monospace; }
+  .timeline { display: flex; flex-direction: column; gap: 0; margin: 8px 0; }
+  .tl { display: flex; gap: 12px; }
+  .tl .dot { display: flex; flex-direction: column; align-items: center; width: 14px; flex: none; }
+  .tl .dot i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; margin-top: 4px; }
+  .tl .dot::after { content: ''; width: 2px; flex: 1; background: var(--line); }
+  .tl:last-child .dot::after { display: none; }
+  .tl .body { padding-bottom: 16px; }
+  .tl b { font-size: 13px; }
+  .tl .when { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  td, th { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="logo.png" alt="" onerror="this.hidden=true" />
+    <h1>Developer API</h1>
+    <a class="back" href="/">← back to the races</a>
+  </header>
+  <p class="lede">
+    marblerun.fun runs a nonstop, <b>provably-fair</b> marble tournament: 100 marbles,
+    25 deterministic races, one champion, forever. Everything the viewer knows is
+    available over a free public API — build a prediction game, a stats site, a
+    stream overlay, a Discord bot, whatever rolls your marbles.
+  </p>
+
+  <div class="card">
+    <h2>Why it's build-on-able</h2>
+    <p>
+      Every race is a <b>pure function of two published integers</b>: a track seed
+      (builds the course) and a race seed (drives the physics). Both are broadcast
+      ~30 seconds <i>before</i> the race runs, and the server, every viewer, and your
+      code can reproduce the exact same finishing order from them — the sim is
+      deterministic and open source
+      (<a href="https://github.com/bryanbrinkman/marblefun" rel="noopener">github.com/bryanbrinkman/marblefun</a>).
+      Nobody — including the house — can change an outcome without changing the
+      seeds everyone already saw. That's the whole trust model, and it's verifiable.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>The race lifecycle (a.k.a. your betting window)</h2>
+    <div class="timeline">
+      <div class="tl"><div class="dot"><i></i></div><div class="body">
+        <b>race_announced</b> <span class="when">T−30s</span><br />
+        <span class="muted">Seeds, the 5-marble roster, and <code>scheduledStart</code> (epoch ms) go public.
+        Open your prediction window here.</span>
+      </div></div>
+      <div class="tl"><div class="dot"><i></i></div><div class="body">
+        <b>race_start</b> <span class="when">T+0</span><br />
+        <span class="muted">The gate opens. Close your window — the outcome is now
+        physically unfolding (and was always determined by the seeds).</span>
+      </div></div>
+      <div class="tl"><div class="dot"><i></i></div><div class="body">
+        <b>race_result</b> <span class="when">≈ T+60–120s</span><br />
+        <span class="muted">Official finishing order with times, revealed after the marbles
+        visibly cross the line. Settle up. Ranks 1–5; a stuck marble records a
+        <code>timeSec: null</code> DNF.</span>
+      </div></div>
+      <div class="tl"><div class="dot"><i></i></div><div class="body">
+        <b>tournament_complete</b> <span class="when">every ~25 races</span><br />
+        <span class="muted">A champion is crowned; a fresh 100-marble tournament starts
+        about 30 seconds later, forever.</span>
+      </div></div>
+    </div>
+    <p class="muted">Timing tip: compare <code>scheduledStart</code> against the <code>serverNow</code>
+    included in every message — never your local clock alone.</p>
+  </div>
+
+  <div class="card">
+    <h2>Quick start</h2>
+<pre><code>// What's racing next?
+const next = await fetch('https://marblefun.fly.dev/api/next').then(r =&gt; r.json());
+console.log(next.race.raceKey, next.race.roster, new Date(next.race.scheduledStart));
+
+// Live events
+const ws = new WebSocket('wss://marblefun.fly.dev/ws');
+ws.onmessage = (e) =&gt; {
+  const msg = JSON.parse(e.data);
+  if (msg.type === 'race_announced') openWindow(msg.race);   // seeds + roster + start time
+  if (msg.type === 'race_start')     closeWindow(msg.raceKey);
+  if (msg.type === 'race_result')    settle(msg.raceKey, msg.result); // [{rank, marbleId, …}]
+};</code></pre>
+    <p class="muted">CORS is open (<code>Access-Control-Allow-Origin: *</code>) on all
+    <code>/api/*</code> endpoints, so this works straight from a browser.</p>
+  </div>
+
+  <div class="card">
+    <h2>REST endpoints</h2>
+
+    <div class="ep"><span class="method">GET</span><span class="path">/api/state</span></div>
+    <p class="muted">The full tournament snapshot — same payload a fresh viewer boots from:
+    all rounds and races (seeds, rosters, results so far), standings for all 100 marbles,
+    the current race phase, the champion if crowned, <code>serverNow</code> and
+    <code>announceLeadMs</code>.</p>
+
+    <div class="ep"><span class="method">GET</span><span class="path">/api/next</span></div>
+    <p class="muted">Just the upcoming (or in-progress) race — the essentials for a prediction window:</p>
+<pre><code>{
+  "type": "next_race",
+  "serverNow": 1786000000000,
+  "announceLeadMs": 30000,
+  "phase": "announced",            // announced | running | paused | null
+  "tournamentId": 41,
+  "champion": null,
+  "race": {
+    "key": "heats:7",
+    "roundKey": "heats",           // heats = qualifying, semis = finals, final = championship
+    "indexInRound": 7,
+    "trackSeed": 1970251534,       // course = f(trackSeed)
+    "raceSeed": 3324241325,        // outcome = f(trackSeed, raceSeed)
+    "scheduledStart": 1786000023456,
+    "status": "announced",
+    "roster": [
+      { "slot": 0, "marbleId": 42, "marbleName": "Marble 042", "lane": "RED", "color": "#c94a36" },
+      …4 more
+    ],
+    "result": null                 // filled in once revealed
+  }
+}</code></pre>
+
+    <div class="ep"><span class="method">GET</span><span class="path">/api/history?limit=50</span></div>
+    <p class="muted">Recent completed races across tournaments, newest first (max 200).
+    Each entry has the seeds, timing, and full results — everything needed to settle
+    or audit after the fact:</p>
+<pre><code>{ "races": [ {
+  "tournamentId": 41, "raceKey": "heats:6", "roundKey": "heats", "indexInRound": 6,
+  "trackSeed": 2094821771, "raceSeed": 912004183,
+  "scheduledStart": 1785999900000, "startedAt": 1785999900012, "revealedAt": 1785999978450,
+  "results": [
+    { "rank": 1, "marbleId": 73, "marbleName": "Marble 073", "lane": "GREEN", "color": "#4d9c56", "timeSec": 58.3 },
+    …
+  ]
+} ] }</code></pre>
+
+    <div class="ep"><span class="method">GET</span><span class="path">/api/champions</span></div>
+    <p class="muted">The hall of fame — recent tournament winners, newest first.</p>
+  </div>
+
+  <div class="card">
+    <h2>WebSocket events — <span class="path" style="color:var(--text)">wss://marblefun.fly.dev/ws</span></h2>
+    <table>
+      <tr><th>type</th><th>when</th><th>payload highlights</th></tr>
+      <tr><td><code>snapshot</code></td><td>on connect</td><td>same shape as <code>/api/state</code></td></tr>
+      <tr><td><code>round_built</code></td><td>a round's bracket forms</td><td><code>round.races[]</code> with seeds + rosters</td></tr>
+      <tr><td><code>race_announced</code></td><td>T−30s</td><td><code>race</code> (seeds, roster, <code>scheduledStart</code>), <code>serverNow</code></td></tr>
+      <tr><td><code>race_start</code></td><td>gate opens</td><td><code>raceKey</code>, <code>serverNow</code></td></tr>
+      <tr><td><code>race_result</code></td><td>after the finish</td><td><code>raceKey</code>, <code>result[]</code> (ranks/times), fresh <code>standings</code></td></tr>
+      <tr><td><code>paused</code></td><td>admin pause/resume</td><td><code>paused: true|false</code></td></tr>
+      <tr><td><code>tournament_complete</code></td><td>champion crowned</td><td><code>champion {id, name}</code></td></tr>
+    </table>
+    <p class="muted" style="margin-top:8px">Reconnect with backoff and re-sync from
+    <code>/api/state</code> — snapshots are idempotent.</p>
+  </div>
+
+  <div class="card">
+    <h2>Verifying a result yourself</h2>
+    <p class="muted">Clone the repo, serve <code>public/</code>, load the game, and replay any race
+    from its seeds — the returned order will match the API's result byte for byte:</p>
+<pre><code>// with public/marble_run.html loaded in a same-origin iframe or window
+marbleAPI.newCourse(1970251534);          // trackSeed from the API
+const sim = marbleAPI.simulateRace(3324241325);  // raceSeed from the API
+console.log(sim.results);                 // identical order + times to race_result</code></pre>
+    <p class="muted">This is what the server itself does — it has no other source of truth.</p>
+  </div>
+
+  <div class="card">
+    <h2>House rules</h2>
+    <ul class="muted">
+      <li><b>Fair use:</b> prefer the WebSocket over polling; if you must poll, keep it to
+        one <code>/api/state</code> every few seconds. Be gentle — this runs on a small box.</li>
+      <li><b>No keys, no signup:</b> the read API is open. If your project gets serious
+        traffic, <a href="https://twitter.com/bryanbrinkman" rel="noopener">say hi</a> so we don't mistake you for a runaway script.</li>
+      <li><b>Stability:</b> payload shapes above are intended to stay stable; new fields may
+        appear — ignore what you don't recognize.</li>
+      <li><b>Legal:</b> if you build real-money anything on top of this, the laws of your
+        jurisdiction are entirely your problem. The marbles accept no liability. 🏁</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

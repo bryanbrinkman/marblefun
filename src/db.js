@@ -262,6 +262,45 @@ class DB {
   // Wipe ALL history. Order respects the implicit result->race->tournament
   // relationships. The caller is expected to immediately start a fresh
   // tournament so the DB isn't left empty.
+  // Public API: recent completed races (newest first) with seeds + results —
+  // everything a third-party site needs to settle predictions and verify
+  // outcomes against the deterministic sim.
+  recentRaces(limit = 50) {
+    const races = this.db
+      .prepare(
+        `SELECT id, tournament_id, race_key, round_key, index_in_round,
+                track_seed, race_seed, scheduled_start, started_at, revealed_at
+           FROM races
+          WHERE revealed_at IS NOT NULL
+          ORDER BY revealed_at DESC, id DESC
+          LIMIT ?`
+      )
+      .all(limit);
+    const resStmt = this.db.prepare(
+      `SELECT rank, slot, marble_id, marble_name, lane, color, time_sec
+         FROM results WHERE race_id = ? ORDER BY rank`
+    );
+    return races.map((r) => ({
+      tournamentId: r.tournament_id,
+      raceKey: r.race_key,
+      roundKey: r.round_key,
+      indexInRound: r.index_in_round,
+      trackSeed: r.track_seed,
+      raceSeed: r.race_seed,
+      scheduledStart: r.scheduled_start,
+      startedAt: r.started_at,
+      revealedAt: r.revealed_at,
+      results: resStmt.all(r.id).map((x) => ({
+        rank: x.rank,
+        marbleId: x.marble_id,
+        marbleName: x.marble_name,
+        lane: x.lane,
+        color: x.color,
+        timeSec: x.time_sec,
+      })),
+    }));
+  }
+
   resetAllHistory() {
     this.db.exec('BEGIN');
     try {
