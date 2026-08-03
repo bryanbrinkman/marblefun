@@ -93,6 +93,7 @@
         </select>
       </div>
       <div><button id="liveBtn">📡 Use the live track</button></div>
+      <div><button id="randomBtn">🎲 Random track</button></div>
       <div><button id="buildBtn" class="primary">🔨 Build for print</button></div>
     </div>
     <p id="status"></p>
@@ -193,10 +194,19 @@ $('liveBtn').addEventListener('click', async () => {
   else { $('seed').value = s; setStatus('Live track seed loaded — hit Build.'); }
 });
 
+// One-click roulette: roll a fresh seed and build it straight away, so you
+// can spin through courses until one looks worth printing.
+$('randomBtn').addEventListener('click', () => {
+  if ($('buildBtn').disabled) return; // a build is already running
+  $('seed').value = Math.floor(Math.random() * 0xffffffff) >>> 0;
+  $('buildBtn').click();
+});
+
 // ---- build --------------------------------------------------------------
 $('buildBtn').addEventListener('click', async () => {
   const seed = ($('seed').value || 0) >>> 0;
   $('buildBtn').disabled = true;
+  $('randomBtn').disabled = true;
   setStatus('Building the course (the same deterministic build the game runs)…');
   try {
     const a = await whenApiReady();
@@ -209,6 +219,7 @@ $('buildBtn').addEventListener('click', async () => {
     setStatus('Build failed: ' + (e && e.message ? e.message : e));
   }
   $('buildBtn').disabled = false;
+  $('randomBtn').disabled = false;
 });
 $('scale').addEventListener('change', () => { if (data) refresh(); });
 $('printer').addEventListener('change', () => { if (data) refresh(); });
