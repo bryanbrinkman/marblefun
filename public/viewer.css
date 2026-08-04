@@ -732,6 +732,26 @@ button:focus-visible, .card-head:focus-visible, input:focus-visible {
 }
 /* iPhone safe-area: keep the corner controls above the home indicator. */
 .bracket-btn { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+
+/* ---------- corner links (bottom-left: print + API) ---------- */
+.corner-links {
+  position: fixed; left: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 39;
+  display: flex; gap: 8px;
+}
+.corner-links a {
+  display: flex; align-items: center; gap: 6px; text-decoration: none;
+  padding: 9px 13px; border-radius: 12px; white-space: nowrap;
+  background: var(--panel2); color: var(--muted); border: 1px solid var(--line);
+  font: 700 11.5px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  letter-spacing: 0.5px;
+  -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
+  box-shadow: var(--shadow); transition: border-color 0.2s, color 0.2s;
+}
+.corner-links a:hover { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 560px) {
+  .corner-links a span { display: none; } /* icon-only chips on phones */
+  .corner-links a { padding: 10px 14px; min-height: 44px; }
+}
 @media (max-width: 720px) {
   .side { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
 }

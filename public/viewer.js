@@ -235,6 +235,9 @@ function renderCurrent(race) {
   title.classList.toggle('final', isFinal);
   title.textContent = raceLabel(race);
   el('seedline').textContent = `track ${race.trackSeed} · race ${race.raceSeed}`;
+  // The corner print link always exports the course on screen.
+  const pl = el('printLink');
+  if (pl) pl.href = '/print?seed=' + race.trackSeed;
   renderLanes(race);
   renderRoster(race);
 }
