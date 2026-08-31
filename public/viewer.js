@@ -1000,7 +1000,13 @@ function tickPreRaceCountdown() {
     }
   }
   const panel = el('preRace');
-  if (!panel || panel.hidden) return;
+  if (!panel) return;
+  if (panel.hidden) {
+    // If the card is only waiting out the construction show, re-evaluate as
+    // soon as the last piece has popped into place.
+    if (v.st !== 'LIVE' && !courseAssembling()) renderPreRace();
+    if (panel.hidden) return;
+  }
   if (document.body.classList.contains('paused')) return;
   if (v.st === 'TOURNAMENT_COMPLETE') return; // static copy set by renderPreRace
   el('prTitle').textContent = v.primary;
@@ -1012,6 +1018,17 @@ function startedRacesHasCurrent() {
 }
 setInterval(tickPreRaceCountdown, 1000);
 
+// True while the game is still building a course or popping its pieces into
+// place — the info card waits so the construction show plays unobstructed.
+function courseAssembling() {
+  try {
+    const a = api();
+    return !!(a && a.isConstructing && a.isConstructing());
+  } catch {
+    return false;
+  }
+}
+
 function renderPreRace() {
   const panel = el('preRace');
   if (!panel) return;
@@ -1019,6 +1036,12 @@ function renderPreRace() {
   const live = cur && !cur.result && startedRaces.has(cur.key);
   const celebrating = !el('champOverlay').hidden;
   if (live || replaying || celebrating) {
+    panel.hidden = true;
+    return;
+  }
+  // Let the construct-up ripple finish before covering it with the card
+  // (the 1s tick below re-checks and shows it as soon as the show is over).
+  if (courseAssembling()) {
     panel.hidden = true;
     return;
   }

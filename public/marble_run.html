@@ -3555,7 +3555,13 @@ const GATE_T = 0.009;
 function buildStartGate() {
   startGateMesh = null;
   const p = curve.getPointAt(GATE_T);
-  const tangent = curve.getTangentAt(GATE_T).normalize();
+  // Flatten the travel direction onto the horizontal plane. The raw curve tangent
+  // has a downhill Y component, and makeBasis(tangent, up, right) with a
+  // non-horizontal tangent is NOT orthonormal — it skews the quaternion and the
+  // gate renders tilted on courses whose first tile slopes steeply.
+  const rawTan = curve.getTangentAt(GATE_T);
+  const tangent = new THREE.Vector3(rawTan.x, 0, rawTan.z);
+  if (tangent.lengthSq() < 1e-6) tangent.set(1, 0, 0); else tangent.normalize();
   const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0,1,0)).normalize();
   const up = new THREE.Vector3(0, 1, 0);
 
@@ -4403,6 +4409,8 @@ async function buildWorldAsync(onProgress) {
   const nextFrame = () => new Promise(r => requestAnimationFrame(r));
   const serial = _buildSerial;
   _introCount = 0;
+  _constructing = true;
+  try {
   for (const s of BUILD_STEPS) {
     if (onProgress) onProgress(null, s.label);
     await nextFrame();   // paint the label + current pct before the sync chunk
@@ -4410,9 +4418,11 @@ async function buildWorldAsync(onProgress) {
     // we were awaiting a frame, it already built the real course — abort so we
     // don't clear it and stack a second one on top.
     if (_buildSerial !== serial) return;
-    _constructing = true;
-    try { s.fn(); } finally { _constructing = false; }
+    s.fn();
     if (onProgress) onProgress(s.pct, null);
+  }
+  } finally {
+    _constructing = false;
   }
   await nextFrame();     // paint the final 100% before the overlay fades
 }
@@ -6467,6 +6477,12 @@ window.marbleAPI = {
   setMarbleBlast(on) {
     const want = on === undefined ? !STATE.marbleBlast : !!on;
     if (want !== STATE.marbleBlast) toggleMarbleBlast();
+  },
+  // True while a course build is running or its construct-up intro is still
+  // popping pieces into place — hosts can hold their overlays until the show
+  // finishes.
+  isConstructing() {
+    return !!(_constructing || _introActive);
   },
   // ---- 3D-print export (used by /print) ----------------------------------
   // Returns the built course as world-space triangle soup, grouped into
