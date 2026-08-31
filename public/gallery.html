@@ -97,6 +97,13 @@
     cursor: pointer; text-decoration: none;
   }
   .cheer:hover { filter: brightness(1.08); }
+  .d-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .share2 {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 12px; padding: 11px 16px; font: 800 13.5px system-ui, sans-serif;
+    cursor: pointer;
+  }
+  .share2:hover { border-color: var(--accent); color: var(--accent); }
 
   @media (max-width: 470px) {
     .grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
@@ -139,7 +146,10 @@
     <div class="d-owner" id="dOwner"></div>
     <div class="statgrid" id="dStats"></div>
     <div class="d-line" id="dLine"></div>
-    <a class="cheer" id="dCheer" href="/">📍 Cheer for this marble</a>
+    <div class="d-actions">
+      <a class="cheer" id="dCheer" href="/">📍 Cheer for this marble</a>
+      <button class="share2" id="dShare">🔗 Share</button>
+    </div>
   </div>
 </div>
 
@@ -251,7 +261,9 @@
   // ---- detail modal --------------------------------------------------------
   const veil = document.getElementById('veil');
   let lastFocus = null;
+  let openId = null; // marble currently shown in the modal (for deep links + late data)
   function openDetail(id) {
+    openId = id;
     const c = carOf(id);
     const owner = ownerOf(id);
     document.getElementById('dBall').style.cssText = ballStyle(id, skinOf(id)) +
@@ -277,14 +289,38 @@
       try { localStorage.setItem('marbleFollow', String(id)); } catch {}
       // href="/" performs the navigation.
     };
+    const share = document.getElementById('dShare');
+    share.textContent = '🔗 Share';
+    share.onclick = async () => {
+      const url = location.origin + '/gallery#' + id;
+      const payload = { title: nameFor(id) + ' — MarbleRun.fun', url };
+      try {
+        if (navigator.share) { await navigator.share(payload); return; }
+      } catch { return; } // user dismissed the share sheet — not a failure
+      try {
+        await navigator.clipboard.writeText(url);
+        share.textContent = '✓ Copied';
+        setTimeout(() => { share.textContent = '🔗 Share'; }, 1600);
+      } catch {}
+    };
+    // Deep-linkable: /gallery#42 opens this marble. replaceState avoids both
+    // scroll-jumps and polluting history with every card click.
+    try { history.replaceState(null, '', '#' + id); } catch {}
     lastFocus = document.activeElement;
     veil.hidden = false;
     document.getElementById('dClose').focus();
   }
   function closeDetail() {
+    openId = null;
     veil.hidden = true;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch {}
     if (lastFocus && lastFocus.focus) lastFocus.focus();
   }
+  function openFromHash() {
+    const id = parseInt(location.hash.slice(1), 10);
+    if (Number.isInteger(id) && id >= 1 && id <= TOTAL) openDetail(id);
+  }
+  window.addEventListener('hashchange', openFromHash);
   document.getElementById('dClose').addEventListener('click', closeDetail);
   veil.addEventListener('click', (e) => { if (e.target === veil) closeDetail(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !veil.hidden) closeDetail(); });
@@ -304,6 +340,10 @@
 
   // ---- load ----------------------------------------------------------------
   render(); // instant paint with names + colors; stats fill in when fetches land
+  openFromHash(); // deep link: /gallery#42
+
+  // A deep-linked modal may have opened before the fetches landed — refresh it.
+  const refreshOpenDetail = () => { if (openId != null && !veil.hidden) openDetail(openId); };
 
   fetch('/api/careers', { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
@@ -318,13 +358,14 @@
           `${titles} championship${titles === 1 ? '' : 's'} decided.`;
       }
       render();
+      refreshOpenDetail();
     })
     .catch(() => {});
 
   fetch('/marbles/manifest.json', { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
     .then((m) => {
-      if (m && typeof m === 'object') { manifest = m; render(); }
+      if (m && typeof m === 'object') { manifest = m; render(); refreshOpenDetail(); }
     })
     .catch(() => {});
 })();
