@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marble Gallery — MarbleRun.fun</title>
+<meta name="description" content="Meet all 100 marbles: names, career stats, championships and owners.">
+<style>
+  :root {
+    --bg: #0a0d14; --panel: rgba(20, 26, 40, 0.72); --panel2: rgba(27, 34, 51, 0.8);
+    --line: rgba(120, 140, 175, 0.22); --text: #eaf0f8; --muted: #97a4ba;
+    --accent: #ffcf5c; --live: #35d07f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  a { color: var(--accent); }
+
+  .top {
+    position: sticky; top: 0; z-index: 5;
+    background: linear-gradient(rgba(10,13,20,.97), rgba(10,13,20,.88));
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    padding: 14px 18px 12px;
+  }
+  .top-inner { max-width: 1060px; margin: 0 auto; }
+  .crumbs { font-size: 12px; margin-bottom: 4px; }
+  .crumbs a { text-decoration: none; color: var(--muted); }
+  .crumbs a:hover { color: var(--accent); }
+  h1 { margin: 0 0 2px; font-size: 22px; letter-spacing: .3px; }
+  .sub { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+  .toolbar input, .toolbar select {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 11px; font: 600 13px system-ui, sans-serif;
+    outline: none; min-height: 38px;
+  }
+  .toolbar input { flex: 1 1 180px; min-width: 140px; }
+  .toolbar input:focus, .toolbar select:focus { border-color: var(--accent); }
+  .count { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 16px 18px 60px; }
+
+  .grid {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 10px 12px; text-align: center; cursor: pointer;
+    transition: border-color .15s, transform .15s;
+  }
+  .card:hover, .card:focus-visible { border-color: var(--accent); transform: translateY(-2px); outline: none; }
+  .ball {
+    width: 62px; height: 62px; border-radius: 50%; margin: 0 auto 9px;
+    background-size: cover; background-position: center;
+    box-shadow: inset -6px -8px 14px rgba(0,0,0,.45), 0 4px 10px rgba(0,0,0,.4);
+  }
+  .m-num { font-size: 10.5px; color: var(--muted); letter-spacing: 1px; font-weight: 700; }
+  .m-name { font-weight: 800; font-size: 13.5px; margin: 1px 0 5px; }
+  .m-stats { font-size: 11px; color: var(--muted); }
+  .m-stats b { color: var(--text); }
+  .m-owner { font-size: 10.5px; color: var(--muted); margin-top: 5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .m-owner.claimed { color: var(--live); }
+  .m-titles { display: inline-block; margin-top: 5px; font-size: 10.5px; font-weight: 800;
+    color: #1c1607; background: var(--accent); border-radius: 999px; padding: 2px 8px; }
+
+  .empty { text-align: center; color: var(--muted); padding: 50px 0; }
+
+  /* Detail modal */
+  .veil { position: fixed; inset: 0; z-index: 20; background: rgba(5, 8, 14, 0.72);
+    display: flex; align-items: center; justify-content: center; padding: 18px; }
+  .veil[hidden] { display: none; }
+  .sheet {
+    background: #141a28; border: 1px solid var(--line); border-radius: 18px;
+    width: min(400px, 100%); max-height: 88vh; overflow: auto;
+    padding: 26px 22px 20px; text-align: center; position: relative;
+    box-shadow: 0 18px 60px rgba(0,0,0,.6);
+  }
+  .sheet .x { position: absolute; top: 10px; right: 10px; background: none; border: none;
+    color: var(--muted); font-size: 18px; cursor: pointer; padding: 6px 10px; }
+  .sheet .x:hover { color: var(--text); }
+  .sheet .ball { width: 118px; height: 118px; margin-bottom: 14px; }
+  .sheet h2 { margin: 0 0 2px; font-size: 21px; }
+  .d-owner { font-size: 12.5px; color: var(--muted); margin: 4px 0 14px; }
+  .d-owner a { font-weight: 700; }
+  .statgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 14px; }
+  .stat { background: var(--panel2); border: 1px solid var(--line); border-radius: 11px; padding: 9px 4px; }
+  .stat b { display: block; font-size: 17px; }
+  .stat i { font-style: normal; font-size: 9.5px; color: var(--muted); letter-spacing: .6px;
+    text-transform: uppercase; }
+  .d-line { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+  .cheer {
+    display: inline-block; background: var(--accent); color: #1c1607; border: none;
+    border-radius: 12px; padding: 11px 20px; font: 800 13.5px system-ui, sans-serif;
+    cursor: pointer; text-decoration: none;
+  }
+  .cheer:hover { filter: brightness(1.08); }
+
+  @media (max-width: 470px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+    .ball { width: 52px; height: 52px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="/">← Back to the races</a></div>
+    <h1>🔮 Marble Gallery</h1>
+    <p class="sub" id="subLine">All 100 competitors — every name, career record and owner.</p>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Search name or number…" aria-label="Search marbles">
+      <select id="sort" aria-label="Sort marbles">
+        <option value="num">By number</option>
+        <option value="wins">Most wins</option>
+        <option value="podiums">Most podiums</option>
+        <option value="titles">Most titles</option>
+        <option value="races">Most races</option>
+      </select>
+      <span class="count" id="count"></span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="grid" id="grid" role="list"></div>
+  <div class="empty" id="empty" hidden>No marbles match that search.</div>
+</main>
+
+<div class="veil" id="veil" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dName">
+    <button class="x" id="dClose" aria-label="Close">✕</button>
+    <div class="ball" id="dBall"></div>
+    <div class="m-num" id="dNum"></div>
+    <h2 id="dName"></h2>
+    <div class="d-owner" id="dOwner"></div>
+    <div class="statgrid" id="dStats"></div>
+    <div class="d-line" id="dLine"></div>
+    <a class="cheer" id="dCheer" href="/">📍 Cheer for this marble</a>
+  </div>
+</div>
+
+<script src="/tournament-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  const TOTAL = 100;
+  const nameFor = window.TournamentCore.Tournament.marbleNameFor;
+  const pad = (id) => String(id).padStart(3, '0');
+
+  // Stable cosmetic color per marble, keyed to its name's adjective so
+  // "Purple Orbit" actually looks purple. Marbles sharing an adjective
+  // (ids 1, 11, 21, …) get slight hue/lightness variation per noun. Race lane
+  // colors are per-slot, not per-marble, so the gallery keeps its own palette.
+  const ADJ_HSL = [
+    [272, 68, 60], // Purple
+    [44, 90, 58],  // Golden
+    [248, 70, 62], // Cosmic (indigo)
+    [16, 88, 56],  // Turbo (hot orange)
+    [226, 55, 42], // Midnight (deep navy)
+    [350, 78, 52], // Ruby
+    [192, 65, 74], // Frosty (pale ice)
+    [203, 95, 55], // Electric (vivid azure)
+    [135, 62, 50], // Lucky (green)
+    [280, 14, 36], // Shadow (murky gray-violet)
+  ];
+  function hueColor(id) {
+    const idx = (((id - 1) % 100) + 100) % 100;
+    const [h, s, l] = ADJ_HSL[idx % 10];
+    const v = Math.floor(idx / 10); // noun index 0-9
+    const hh = (h + (v - 4.5) * 4 + 360) % 360;
+    const ll = Math.max(26, Math.min(82, l + ((v * 7) % 13) - 6));
+    return `hsl(${hh.toFixed(1)}, ${s}%, ${ll}%)`;
+  }
+  function ballStyle(id, skin) {
+    if (skin && skin.img) {
+      return `background-image:url('${skin.img.replace(/'/g, '%27')}')`;
+    }
+    return `background:` +
+      `radial-gradient(circle at 32% 28%, rgba(255,255,255,.92), rgba(255,255,255,0) 34%),` +
+      `radial-gradient(circle at 50% 45%, ${hueColor(id)} 0%, #131a2a 135%)`;
+  }
+
+  // ---- data ----------------------------------------------------------------
+  let careers = new Map();   // id -> {races, wins, podiums, titles}
+  let manifest = {};         // id -> {img?, glb?, owner?, ownerLink?}
+  const skinOf = (id) => manifest[id] || manifest[String(id)] || null;
+  const carOf = (id) => careers.get(id) || { races: 0, wins: 0, podiums: 0, titles: 0 };
+  function ownerOf(id) {
+    const sk = skinOf(id);
+    if (!sk || !sk.owner) return null;
+    return { name: String(sk.owner), link: sk.ownerLink ? String(sk.ownerLink) : null };
+  }
+
+  // ---- grid ----------------------------------------------------------------
+  const grid = document.getElementById('grid');
+  const empty = document.getElementById('empty');
+  const countEl = document.getElementById('count');
+  const q = document.getElementById('q');
+  const sortSel = document.getElementById('sort');
+
+  function matches(id, needle) {
+    if (!needle) return true;
+    return nameFor(id).toLowerCase().includes(needle) ||
+      String(id).includes(needle) || pad(id).includes(needle);
+  }
+
+  function render() {
+    const needle = q.value.trim().toLowerCase();
+    const ids = [];
+    for (let i = 1; i <= TOTAL; i++) if (matches(i, needle)) ids.push(i);
+    const key = sortSel.value;
+    if (key !== 'num') {
+      ids.sort((a, b) => (carOf(b)[key] - carOf(a)[key]) || (a - b));
+    }
+    const frag = document.createDocumentFragment();
+    for (const id of ids) {
+      const c = carOf(id);
+      const owner = ownerOf(id);
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.setAttribute('role', 'listitem');
+      card.tabIndex = 0;
+      card.dataset.id = id;
+      card.innerHTML =
+        `<div class="ball" style="${ballStyle(id, skinOf(id))}"></div>` +
+        `<div class="m-num">#${pad(id)}</div>` +
+        `<div class="m-name">${nameFor(id)}</div>` +
+        `<div class="m-stats">${
+          c.races
+            ? `<b>${c.wins}</b> wins · <b>${c.podiums}</b> podiums · ${c.races} races`
+            : 'No races yet'
+        }</div>` +
+        (c.titles ? `<span class="m-titles">🏆 ${c.titles === 1 ? 'Champion' : c.titles + '× Champion'}</span>` : '') +
+        `<div class="m-owner${owner ? ' claimed' : ''}">${owner ? '👤 ' + esc(owner.name) : 'Unclaimed'}</div>`;
+      frag.appendChild(card);
+    }
+    grid.replaceChildren(frag);
+    empty.hidden = ids.length > 0;
+    countEl.textContent = needle ? `${ids.length} of ${TOTAL}` : `${TOTAL} marbles`;
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (ch) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  }
+
+  // ---- detail modal --------------------------------------------------------
+  const veil = document.getElementById('veil');
+  let lastFocus = null;
+  function openDetail(id) {
+    const c = carOf(id);
+    const owner = ownerOf(id);
+    document.getElementById('dBall').style.cssText = ballStyle(id, skinOf(id)) +
+      ';background-size:cover;background-position:center';
+    document.getElementById('dNum').textContent = '#' + pad(id);
+    document.getElementById('dName').textContent = nameFor(id);
+    document.getElementById('dOwner').innerHTML = owner
+      ? ('Owned by ' + (owner.link
+          ? `<a href="${esc(owner.link)}" target="_blank" rel="noopener">${esc(owner.name)}</a>`
+          : `<b>${esc(owner.name)}</b>`))
+      : 'Unclaimed — this marble is looking for an owner';
+    const winPct = c.races ? Math.round((c.wins / c.races) * 100) : 0;
+    document.getElementById('dStats').innerHTML =
+      `<div class="stat"><b>${c.races}</b><i>Races</i></div>` +
+      `<div class="stat"><b>${c.wins}</b><i>Wins</i></div>` +
+      `<div class="stat"><b>${c.podiums}</b><i>Podiums</i></div>` +
+      `<div class="stat"><b>${c.titles}</b><i>Titles</i></div>`;
+    document.getElementById('dLine').textContent = c.races
+      ? `Wins ${winPct}% of the races it enters.`
+      : 'This marble hasn’t raced yet — its story starts soon.';
+    const cheer = document.getElementById('dCheer');
+    cheer.onclick = () => {
+      try { localStorage.setItem('marbleFollow', String(id)); } catch {}
+      // href="/" performs the navigation.
+    };
+    lastFocus = document.activeElement;
+    veil.hidden = false;
+    document.getElementById('dClose').focus();
+  }
+  function closeDetail() {
+    veil.hidden = true;
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  document.getElementById('dClose').addEventListener('click', closeDetail);
+  veil.addEventListener('click', (e) => { if (e.target === veil) closeDetail(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !veil.hidden) closeDetail(); });
+
+  grid.addEventListener('click', (e) => {
+    const card = e.target.closest('.card');
+    if (card) openDetail(Number(card.dataset.id));
+  });
+  grid.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const card = e.target.closest('.card');
+    if (card) { e.preventDefault(); openDetail(Number(card.dataset.id)); }
+  });
+
+  q.addEventListener('input', render);
+  sortSel.addEventListener('change', render);
+
+  // ---- load ----------------------------------------------------------------
+  render(); // instant paint with names + colors; stats fill in when fetches land
+
+  fetch('/api/careers', { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (!d || !Array.isArray(d.careers)) return;
+      careers = new Map(d.careers.map((c) => [Number(c.id), c]));
+      let races = 0, titles = 0;
+      for (const c of d.careers) { races += c.races || 0; titles += c.titles || 0; }
+      if (races) {
+        document.getElementById('subLine').textContent =
+          `All 100 competitors · ${races.toLocaleString()} race entries recorded · ` +
+          `${titles} championship${titles === 1 ? '' : 's'} decided.`;
+      }
+      render();
+    })
+    .catch(() => {});
+
+  fetch('/marbles/manifest.json', { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((m) => {
+      if (m && typeof m === 'object') { manifest = m; render(); }
+    })
+    .catch(() => {});
+})();
+</script>
+</body>
+</html>

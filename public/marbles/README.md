@@ -57,6 +57,24 @@ Absolute `https://` URLs work, but the host **must send CORS headers**
 cross-origin textures/models without them. Assets served from this same site
 (`marbles/…`) need no special setup.
 
+## Owners (Marble Gallery)
+
+The gallery page at [`/gallery`](/gallery) shows every marble's name, career
+stats and **owner**. Ownership is cosmetic metadata in the same manifest —
+add `owner` (display name) and optionally `ownerLink` (profile/site URL) to
+any entry:
+
+```json
+{
+  "7": { "img": "marbles/007.jpg", "owner": "Bryan", "ownerLink": "https://example.com" },
+  "12": { "owner": "Alice" }
+}
+```
+
+An entry may have owner info without a skin (like `12` above) — the marble
+keeps its default color but shows as claimed in the gallery. Marbles with no
+`owner` show as **Unclaimed**.
+
 ## Files here
 
 | File | What it is |
