@@ -69,10 +69,13 @@ class Tournament {
   constructor(masterSeed) {
     this.masterSeed = masterSeed >>> 0;
 
-    // 100 marbles with stable ids and display names.
+    // 100 marbles with stable ids and display names. Names are DETERMINISTIC
+    // and permanent: 10 adjectives × 10 nouns = exactly 100 unique combos, so
+    // marble #37 is the same name in every tournament, forever. The identical
+    // table lives in public/tournament-core.js — keep them in sync.
     this.marbles = [];
     for (let i = 1; i <= MARBLE_COUNT; i++) {
-      this.marbles.push({ id: i, name: 'Marble ' + String(i).padStart(3, '0') });
+      this.marbles.push({ id: i, name: Tournament.marbleNameFor(i) });
     }
 
     this.rounds = []; // filled incrementally
@@ -80,9 +83,18 @@ class Tournament {
     this._buildHeats();
   }
 
+  // id (1..100) → its permanent name. idx%10 picks the adjective, idx/10 the
+  // noun, so every combination appears exactly once across the field.
+  static marbleNameFor(id) {
+    const ADJ = ['Purple', 'Golden', 'Cosmic', 'Turbo', 'Midnight', 'Ruby', 'Frosty', 'Electric', 'Lucky', 'Shadow'];
+    const NOUN = ['Orbit', 'Comet', 'Thunder', 'Pebble', 'Rocket', 'Whirl', 'Blaze', 'Drifter', 'Nova', 'Bandit'];
+    const idx = (((id - 1) % 100) + 100) % 100;
+    return ADJ[idx % 10] + ' ' + NOUN[Math.floor(idx / 10)];
+  }
+
   marbleName(id) {
     const m = this.marbles.find((x) => x.id === id);
-    return m ? m.name : 'Marble ' + id;
+    return m ? m.name : Tournament.marbleNameFor(id);
   }
 
   // Create a race object for a round given its participant marble ids.

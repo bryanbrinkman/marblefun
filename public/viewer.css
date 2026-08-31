@@ -679,10 +679,58 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 .pk.followed { border-color: var(--accent); background: rgba(255, 207, 92, 0.14); color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .picker-note { margin-top: 10px; font-size: 10.5px; color: var(--muted); text-align: center; }
 
+/* ---------- mid-race toast + live intro ---------- */
+.race-toast {
+  position: fixed; top: 60px; left: 50%; transform: translateX(-50%) translateY(-6px); z-index: 26;
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 16px; border-radius: 999px; white-space: nowrap;
+  background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  font-size: 13px; font-weight: 800; letter-spacing: 0.3px;
+  -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
+  box-shadow: var(--shadow); opacity: 0; transition: opacity 0.25s, transform 0.25s;
+  pointer-events: none;
+}
+.race-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.race-toast[hidden] { display: none; }
+.race-toast .swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.35); }
+
+.live-intro {
+  position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 27;
+  display: flex; align-items: center; gap: 9px; max-width: 92vw;
+  padding: 8px 8px 8px 14px; border-radius: 999px;
+  background: var(--panel); border: 1px solid rgba(53, 208, 127, 0.45); color: var(--text);
+  font-size: 12.5px; font-weight: 700;
+  -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass); box-shadow: var(--shadow);
+}
+.live-intro[hidden] { display: none; }
+.live-intro .li-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--live); box-shadow: 0 0 8px var(--live); flex: none; animation: pulse 2s ease-in-out infinite; }
+.live-intro span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-intro button {
+  flex: none; cursor: pointer; width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 11px; line-height: 1;
+}
+.live-intro button:hover { color: var(--text); }
+
+/* champion share */
+.co-share {
+  cursor: pointer; font: 800 13px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: var(--accent); padding: 13px 20px; min-height: 44px; border-radius: 12px;
+  border: 1px solid rgba(255, 207, 92, 0.55);
+  background: linear-gradient(180deg, rgba(255, 207, 92, 0.2), rgba(255, 207, 92, 0.06));
+  animation: coDrop 0.7s ease 1s both;
+}
+.co-share:hover { border-color: var(--accent); }
+
+/* your-marble card: number badge + career line */
+.prm-id { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+.prm-career { font-size: 10.5px; color: var(--accent); margin-top: 1px; }
+.prm-career:empty, .prm-career[hidden] { display: none; }
+
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   .brand .dot, .conn, .race-card.current, .bd-pip.live, .pr-card,
-  .recent-item, .champion-card { animation: none !important; }
+  .recent-item, .champion-card, .live-intro .li-dot, .co-share { animation: none !important; }
+  .race-toast { transition: opacity 0.1s; }
   .bracket-dock, .rc-dot, .cd-fg { transition: none; }
 }
 

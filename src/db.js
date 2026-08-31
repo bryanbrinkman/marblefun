@@ -262,6 +262,24 @@ class DB {
   // Wipe ALL history. Order respects the implicit result->race->tournament
   // relationships. The caller is expected to immediately start a fresh
   // tournament so the DB isn't left empty.
+  // Public API: lifetime career stats per marble id across ALL tournaments.
+  // Grouped by id only — display names changed over time, ids are forever.
+  marbleCareers() {
+    return this.db
+      .prepare(
+        `SELECT res.marble_id AS id,
+                COUNT(*) AS races,
+                SUM(CASE WHEN res.rank = 1 THEN 1 ELSE 0 END) AS wins,
+                SUM(CASE WHEN res.rank <= 3 THEN 1 ELSE 0 END) AS podiums,
+                (SELECT COUNT(*) FROM tournaments t
+                   WHERE t.status='complete' AND t.champion_marble_id = res.marble_id) AS titles
+         FROM results res
+         GROUP BY res.marble_id
+         ORDER BY res.marble_id`
+      )
+      .all();
+  }
+
   // Public API: recent completed races (newest first) with seeds + results —
   // everything a third-party site needs to settle predictions and verify
   // outcomes against the deterministic sim.

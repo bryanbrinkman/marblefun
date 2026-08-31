@@ -4,6 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>marblerun.fun — Marble Tournament</title>
+    <meta name="description" content="100 marbles enter. One becomes champion. A nonstop, provably-fair 3D marble tournament — pick a marble and cheer it home." />
+    <meta property="og:title" content="marblerun.fun — live marble tournament" />
+    <meta property="og:description" content="100 marbles enter. One becomes champion. Watch live, pick your marble, call the winners." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://marblefun.fly.dev/" />
+    <meta property="og:image" content="https://marblefun.fly.dev/logo.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="marblerun.fun — live marble tournament" />
+    <meta name="twitter:description" content="100 marbles enter. One becomes champion. Watch live, pick your marble, call the winners." />
+    <meta name="twitter:image" content="https://marblefun.fly.dev/logo.png" />
     <link rel="stylesheet" href="viewer.css" />
   </head>
   <body class="stats-hidden">
@@ -80,6 +90,7 @@
         <button id="cpFollow" aria-pressed="false">📍 Chase Cam <kbd>C</kbd></button>
         <button data-cam="top" aria-pressed="false">⬇ Top <kbd>T</kbd></button>
         <button id="cpSplit" aria-pressed="false">🔲 Split view <kbd>X</kbd></button>
+        <button id="cpTv" aria-pressed="false" title="Auto-director: the camera cuts itself">🎬 TV mode</button>
       </div>
       <details class="cp-kbd">
         <summary>Keyboard shortcuts</summary>
@@ -123,6 +134,17 @@
         <button class="pr-how" id="prHow" hidden>How it works</button>
       </div>
     </section>
+
+    <!-- Mid-race event toast (lead changes). -->
+    <div class="race-toast" id="raceToast" hidden aria-hidden="true"></div>
+
+    <!-- First-visit context: shown when someone lands in the middle of a live
+         race with no idea what they're watching. Dismissible, session-once. -->
+    <div class="live-intro" id="liveIntro" hidden>
+      <span class="li-dot" aria-hidden="true"></span>
+      <span id="liveIntroText">Live: a 100-marble tournament — one becomes champion</span>
+      <button id="liveIntroClose" aria-label="Dismiss">✕</button>
+    </div>
 
     <!-- Replay chip: shown while re-watching the previous race between rounds. -->
     <div class="replay-chip" id="replayChip" hidden>
@@ -214,6 +236,7 @@
         <div class="co-ball" id="coBall"><span class="co-shine"></span></div>
         <div class="co-name" id="coName"></div>
         <div class="co-sub">100 marbles entered — one rolled out on top</div>
+        <button class="co-share" id="coShare">📣 Share the moment</button>
       </div>
       <button class="co-close" id="coClose" aria-label="Close">✕</button>
     </div>

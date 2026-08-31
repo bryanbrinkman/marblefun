@@ -178,7 +178,8 @@ function runCountdown(race) {
 // ---- rendering -----------------------------------------------------------
 
 const orderedRaces = () => model.rounds.flatMap((r) => r.races);
-const shortName = (n) => (n || '').replace(/^Marble\s*/i, ''); // "Marble 083" -> "083"
+const shortName = (n) => n || ''; // marbles have real names now ("Purple Orbit")
+const numOf = (id) => String(id).padStart(3, '0'); // compact numeric badge
 
 // Meaningful race labels: spectators shouldn't need to decode "Heat 4 · 7/25".
 function raceLabel(race) {
@@ -288,7 +289,7 @@ function renderLanes(race) {
     race.roster
       .map(
         (s) =>
-          `<div class="rc-lane"><span class="rc-num">${shortName(s.marbleName)}</span>` +
+          `<div class="rc-lane"><span class="rc-num">${numOf(s.marbleId)}</span>` +
           `<div class="rc-rail"><span class="rc-dot" data-lane="${s.lane}" style="background:${s.color}"></span></div></div>`
       )
       .join('');
@@ -317,11 +318,84 @@ function trackTick() {
         }
       }
       updateFollowLive(prog);
+      watchLeadChanges(prog);
     }
   }
   requestAnimationFrame(trackTick);
 }
 requestAnimationFrame(trackTick);
+
+// ---- marble careers --------------------------------------------------------
+// Lifetime stats per marble id from /api/careers (server mode only). Fetched
+// once at boot and refreshed when a tournament completes; renders a one-line
+// career summary in the Your Marble card and the follow pill's tooltip.
+let _careers = null; // Map(id -> {races, wins, podiums, titles})
+async function loadCareers() {
+  try {
+    const r = await fetch('/api/careers', { cache: 'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d && Array.isArray(d.careers)) {
+      _careers = new Map(d.careers.map((c) => [c.id, c]));
+      renderPrMarble();
+      renderFollowPill();
+    }
+  } catch {}
+}
+function careerLine(id) {
+  if (!_careers || id == null) return '';
+  const c = _careers.get(id);
+  if (!c || !c.races) return 'Rookie — no races on record yet';
+  const bits = [];
+  if (c.titles) bits.push(`🏆 ${c.titles} ${c.titles > 1 ? 'championships' : 'championship'}`);
+  bits.push(`${c.wins} race ${c.wins === 1 ? 'win' : 'wins'}`);
+  bits.push(`${c.podiums} ${c.podiums === 1 ? 'podium' : 'podiums'}`);
+  bits.push(`${c.races} races`);
+  return bits.join(' · ');
+}
+
+// ---- lead-change callouts --------------------------------------------------
+// The middle of a 60-120s race deserves a pulse: when the front of the pack
+// changes hands, flash a small toast (and tell screen readers). Debounced so a
+// tight duel doesn't machine-gun toasts, and quiet in the scrappy first
+// moments off the gate.
+let _leadLane = null;
+let _leadToastAt = 0;
+let _toastTimer = null;
+function watchLeadChanges(prog) {
+  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+  if (!cur || cur.result || !startedRaces.has(cur.key)) {
+    _leadLane = null;
+    return;
+  }
+  let lead = null;
+  for (const p of prog) {
+    if (p.finished) { _leadLane = null; return; } // someone's home — race is deciding itself
+    if (!lead || p.pos > lead.pos) lead = p;
+  }
+  if (!lead || lead.pos < 0.06) return; // ignore the scramble right off the gate
+  if (_leadLane === null) { _leadLane = lead.lane; return; } // baseline, no toast
+  if (lead.lane === _leadLane) return;
+  _leadLane = lead.lane;
+  const now = Date.now();
+  if (now - _leadToastAt < 3000) return; // debounce dueling leaders
+  _leadToastAt = now;
+  const s = cur.roster.find((x) => x.lane === lead.lane);
+  if (!s) return;
+  showToast(`⚡ ${s.marbleName} takes the lead!`, s.color);
+  announce(`${s.marbleName} takes the lead.`);
+}
+function showToast(text, color) {
+  const t = el('raceToast');
+  if (!t) return;
+  t.innerHTML = `<span class="swatch" style="background:${color || 'var(--accent)'}"></span>${text}`;
+  t.hidden = false;
+  t.classList.remove('show');
+  void t.offsetWidth; // restart the pop animation
+  t.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { t.classList.remove('show'); t.hidden = true; }, 2600);
+}
 
 function renderFunnel() {
   const order = ['heats', 'semis', 'final', 'champion'];
@@ -332,6 +406,15 @@ function renderFunnel() {
     const idx = order.indexOf(node.dataset.stage);
     node.classList.toggle('active', idx === activeIdx);
     node.classList.toggle('done', idx < activeIdx);
+  });
+  // The "100 started" box drains as marbles bow out — progress you can feel.
+  const alive = model.standings.length ? model.standings.filter((m) => m.status === 'alive').length : 100;
+  const draining = model.standings.length > 0 && alive < 100 && !model.champion;
+  document.querySelectorAll('.funnel-stage[data-stage="heats"], .j-stage[data-stage="heats"]').forEach((node) => {
+    const b = node.querySelector('b');
+    const lbl = node.querySelector('i, span');
+    if (b) b.textContent = draining ? String(alive) : '100';
+    if (lbl) lbl.textContent = draining ? 'still in' : lbl.tagName === 'I' ? 'started' : 'marbles';
   });
 }
 
@@ -507,6 +590,21 @@ function announce(text) {
   if (n) n.textContent = text;
 }
 
+// ---- first-visit live intro ------------------------------------------------
+// Shown once per session when someone lands in the middle of a live race —
+// one line of context, dismissible, gone in 14s either way.
+function maybeShowLiveIntro() {
+  try { if (sessionStorage.getItem('mrLiveIntro') === '1') return; } catch {}
+  const chip = el('liveIntro');
+  if (!chip) return;
+  try { sessionStorage.setItem('mrLiveIntro', '1'); } catch {}
+  el('liveIntroText').textContent = `Live: ${topLabel()} — 100 marbles enter, one becomes champion`;
+  chip.hidden = false;
+  const hide = () => { chip.hidden = true; };
+  el('liveIntroClose').addEventListener('click', hide, { once: true });
+  setTimeout(hide, 14000);
+}
+
 // ---- connection state ------------------------------------------------------
 // Explicit, human states — never an indefinite "connecting". State is written
 // as text+glyph (data-state only adds color).
@@ -556,6 +654,7 @@ function renderFollowPill() {
     return;
   }
   pill.classList.add('has');
+  pill.title = careerLine(followId) || 'Your marble';
   const cur = model.currentKey && model.racesByKey.get(model.currentKey);
   const slot = cur && cur.roster.find((x) => x.marbleId === followId);
   sw.hidden = !slot;
@@ -613,6 +712,13 @@ function setFollow(id) {
   buildPickerGrid();
   const cur = model.currentKey && model.racesByKey.get(model.currentKey);
   applyFollow(cur && !cur.result ? cur : null);
+  // Close the loop on picking: if your marble is racing RIGHT NOW, cut the
+  // camera to it immediately — the pick should visibly do something.
+  if (id != null && cur && !cur.result && startedRaces.has(cur.key) && cur.roster.some((s) => s.marbleId === id)) {
+    const a = api();
+    if (a && a.setCamera) a.setCamera('chase');
+    if (typeof syncCamButtons === 'function') syncCamButtons();
+  }
   renderPreRace();
 }
 const PICKER_NOTE_DEFAULT = 'Your pick is remembered on this device. The camera follows it whenever it races.';
@@ -787,11 +893,19 @@ function renderPrMarble() {
   wrap.innerHTML =
     `<div class="prm${st && st.status === 'eliminated' ? ' out' : ''}">` +
     `<span class="prm-ball" style="${ballStyle}" aria-hidden="true"></span>` +
-    `<span class="prm-info"><i class="prm-k">Your marble</i><b>${st ? st.name : 'Marble ' + num}</b>` +
-    `<span class="prm-status">${status}</span></span>` +
+    `<span class="prm-info"><i class="prm-k">Your marble</i>` +
+    `<b>${st ? st.name : 'Marble ' + num} <span class="prm-id">#${num}</span></b>` +
+    `<span class="prm-status">${status}</span>` +
+    `<span class="prm-career" id="prCareer"></span></span>` +
     `<span class="prm-actions">${mainAction}` +
     `<button class="prm-change" id="prChangeBtn">Change</button></span>` +
     `</div>`;
+  const cl = el('prCareer');
+  if (cl) {
+    const line = careerLine(followId);
+    cl.textContent = line;
+    cl.hidden = !line;
+  }
 }
 
 // ---- shared event-state model ----------------------------------------------
@@ -1028,6 +1142,8 @@ function ingestSnapshot(msg) {
   const cur = msg.current;
   model.currentKey = cur ? cur.raceKey : null;
   renderAll();
+  // Landing mid-race is the coldest entry — one dismissible line of context.
+  if (cur && cur.phase === 'running') maybeShowLiveIntro();
 
   if (cur && (cur.phase === 'announced' || cur.phase === 'running')) {
     const race = model.racesByKey.get(cur.raceKey);
@@ -1199,6 +1315,28 @@ function hideChampionCelebration() {
   const ov = el('champOverlay');
   const close = el('coClose');
   if (close) close.addEventListener('click', hideChampionCelebration);
+  // Share the champion moment: native share sheet where available, else
+  // copy-to-clipboard with visible confirmation.
+  const share = el('coShare');
+  if (share)
+    share.addEventListener('click', async () => {
+      const name = model.champion ? model.champion.name : 'A marble';
+      const text = `🏆 ${name} just won the 100-marble tournament on marblerun.fun!`;
+      const url = 'https://marblefun.fly.dev/';
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: 'marblerun.fun', text, url });
+          return;
+        }
+      } catch { return; } // user cancelled the sheet — done
+      try {
+        await navigator.clipboard.writeText(`${text} ${url}`);
+        share.textContent = '✓ Copied to clipboard';
+      } catch {
+        share.textContent = url;
+      }
+      setTimeout(() => (share.textContent = '📣 Share the moment'), 2500);
+    });
   if (ov) ov.addEventListener('click', (e) => { if (e.target === ov) hideChampionCelebration(); });
 }
 
@@ -1265,6 +1403,7 @@ function onMessage(msg) {
       model.currentKey = null;
       renderAll();
       loadChampions(); // the hall of fame just gained a row
+      loadCareers(); // career stats just changed too
       showChampionCelebration(msg.champion);
       if (msg.champion) announce(`${msg.champion.name} is the tournament champion!`);
       break;
@@ -1653,6 +1792,7 @@ function connect() {
         serverKnown = true;
         if (s.type === 'snapshot') onMessage(s); // paint the current race immediately
         loadChampions();
+        loadCareers();
       }
     }
   } catch {}
@@ -1786,6 +1926,56 @@ if (el('prMarble'))
 // One control system: Overview · Action · Follow · Top · Split view · Marble
 // Blast. The game's own camera button is hidden in embed mode, so nothing is
 // duplicated. The active camera is marked visually AND via aria-pressed.
+// ---- TV mode: auto-director ------------------------------------------------
+// Ambient viewing: the camera cuts itself. Breakaway leader → chase; tight
+// pack → action (with an occasional variety cut); finish approach → action;
+// between races → overview. Any manual camera choice switches it off.
+let tvMode = false;
+let _tvTimer = null;
+let _tvLastCut = 0;
+function setTvMode(on) {
+  tvMode = !!on;
+  try { sessionStorage.setItem('mrTv', tvMode ? '1' : '0'); } catch {}
+  clearInterval(_tvTimer);
+  _tvTimer = null;
+  if (tvMode) {
+    _tvTimer = setInterval(tvDirector, 1000);
+    tvDirector();
+  }
+  syncCamButtons();
+}
+function tvDirector() {
+  const a = api();
+  if (!a || !a.getCamera || !a.setCamera) return;
+  const now = Date.now();
+  const since = now - _tvLastCut;
+  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+  const live = cur && !cur.result && startedRaces.has(cur.key);
+  let cam = 'overview';
+  try { cam = a.getCamera() || 'overview'; } catch {}
+  if (cam === 'blast' || cam === 'split') return; // never fight those modes
+  if (!live || replaying) {
+    if (cam !== 'overview' && since > 4000) { a.setCamera('overview'); _tvLastCut = now; syncCamButtons(); }
+    return;
+  }
+  let prog = null;
+  try { prog = a.getProgress(); } catch {}
+  if (!prog || !prog.length) return;
+  const act = prog.filter((p) => !p.finished).sort((x, y) => y.pos - x.pos);
+  if (!act.length) return;
+  const leader = act[0];
+  const gap = act.length > 1 ? leader.pos - act[1].pos : 1;
+  let want;
+  if (leader.pos > 0.88) want = 'action'; // finish approach: the wide dramatic angle
+  else if (gap > 0.07) want = 'chase'; // breakaway: ride the leader
+  else want = since > 9000 && cam === 'action' ? 'chase' : 'action'; // tight pack + variety
+  if (want !== cam && since > 5000) {
+    a.setCamera(want);
+    _tvLastCut = now;
+    syncCamButtons();
+  }
+}
+
 function syncCamButtons() {
   const pop = el('controlsPop');
   if (!pop) return;
@@ -1809,6 +1999,11 @@ function syncCamButtons() {
     follow.classList.toggle('active', on);
     follow.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
+  const tv = el('cpTv');
+  if (tv) {
+    tv.classList.toggle('active', tvMode);
+    tv.setAttribute('aria-pressed', tvMode ? 'true' : 'false');
+  }
 }
 {
   const btn = el('controlsBtn');
@@ -1829,6 +2024,7 @@ function syncCamButtons() {
     });
     pop.querySelectorAll('[data-cam]').forEach((b) =>
       b.addEventListener('click', () => {
+        setTvMode(false); // a manual choice takes the director's chair back
         const a = api();
         if (a && a.setCamera) a.setCamera(b.dataset.cam);
         if (a && a.setSplit) a.setSplit(false); // leaving split when picking a single cam
@@ -1838,14 +2034,20 @@ function syncCamButtons() {
     const splitBtn = el('cpSplit');
     if (splitBtn)
       splitBtn.addEventListener('click', () => {
+        setTvMode(false);
         const a = api();
         if (a && a.setSplit) a.setSplit();
         syncCamButtons();
       });
+    const tvBtn = el('cpTv');
+    if (tvBtn) tvBtn.addEventListener('click', () => setTvMode(!tvMode));
+    // Restore the director across a refresh within the same session.
+    try { if (sessionStorage.getItem('mrTv') === '1') setTvMode(true); } catch {}
     // (Marble Blast has no menu entry on purpose — it's an easter egg on M.)
     const followBtn = el('cpFollow');
     if (followBtn)
       followBtn.addEventListener('click', () => {
+        setTvMode(false);
         // Behind-the-marble chase cam. It rides YOUR marble when one is picked
         // and racing (via the game's follow-lane), otherwise the leader.
         const cur = model.currentKey && model.racesByKey.get(model.currentKey);

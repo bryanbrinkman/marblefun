@@ -71,17 +71,24 @@
   class Tournament {
     constructor(masterSeed) {
       this.masterSeed = masterSeed >>> 0;
+      // Deterministic permanent names — identical table in src/tournament.js.
       this.marbles = [];
       for (let i = 1; i <= MARBLE_COUNT; i++) {
-        this.marbles.push({ id: i, name: 'Marble ' + String(i).padStart(3, '0') });
+        this.marbles.push({ id: i, name: Tournament.marbleNameFor(i) });
       }
       this.rounds = [];
       this.champion = null;
       this._buildHeats();
     }
+    static marbleNameFor(id) {
+      const ADJ = ['Purple', 'Golden', 'Cosmic', 'Turbo', 'Midnight', 'Ruby', 'Frosty', 'Electric', 'Lucky', 'Shadow'];
+      const NOUN = ['Orbit', 'Comet', 'Thunder', 'Pebble', 'Rocket', 'Whirl', 'Blaze', 'Drifter', 'Nova', 'Bandit'];
+      const idx = (((id - 1) % 100) + 100) % 100;
+      return ADJ[idx % 10] + ' ' + NOUN[Math.floor(idx / 10)];
+    }
     marbleName(id) {
       const m = this.marbles.find((x) => x.id === id);
-      return m ? m.name : 'Marble ' + id;
+      return m ? m.name : Tournament.marbleNameFor(id);
     }
     _makeRace(roundIdx, indexInRound, participantIds) {
       const round = ROUNDS[roundIdx];

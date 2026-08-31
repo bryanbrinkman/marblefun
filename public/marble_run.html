@@ -255,6 +255,18 @@
     transition: opacity 0.5s ease;
   }
   #loadingOverlay.done { opacity: 0; pointer-events: none; }
+  /* Peek: a moment of brand, then get out of the way — the course assembling
+     IS the show. The big logo and mini-race hide; the marble ring, label and
+     quip dock at the bottom while the real build plays out behind them. */
+  #loadingOverlay.peek {
+    background: transparent; pointer-events: none;
+    justify-content: flex-end; padding-bottom: 18px; gap: 8px;
+  }
+  #loadingOverlay.peek #loaderBrand, #loadingOverlay.peek #loaderTrack { display: none; }
+  #loadingOverlay.peek #loaderLabel, #loadingOverlay.peek #loaderQuip {
+    text-shadow: 0 1px 6px rgba(255, 248, 230, 0.9), 0 0 2px rgba(255, 248, 230, 0.9);
+  }
+  @media (prefers-reduced-motion: reduce) { #loadingOverlay { transition: none; } }
   #loaderRetry {
     margin-top: 4px; cursor: pointer;
     font: bold 12px/1 inherit; letter-spacing: 0.06em;
@@ -7613,6 +7625,12 @@ updateOrthoCamera();
   }, 2400);
   if (quipEl) quipEl.textContent = QUIPS[quipIdx];
 
+  // After a short brand beat, melt the overlay away so the course visibly
+  // assembles on screen — watching the workshop build the track IS the show.
+  const peekTimer = setTimeout(() => {
+    if (!overlay.classList.contains('done')) overlay.classList.add('peek');
+  }, 1600);
+
   // Slow-device safety nets: a retry action if the build is still going after
   // 15 s, and a friendlier "still working" fallback at 30 s. Both are cleared
   // the moment the build completes — fast devices never see them.
@@ -7642,6 +7660,7 @@ updateOrthoCamera();
   // Fade the overlay out, then remove it from the DOM entirely so its
   // backdrop never costs the compositor anything again.
   clearInterval(quipTimer);
+  clearTimeout(peekTimer);
   clearTimeout(retryTimer);
   clearTimeout(fallbackTimer);
   overlay.classList.add('done');

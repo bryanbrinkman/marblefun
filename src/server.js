@@ -251,6 +251,16 @@ async function main() {
         race,
       });
     }
+    if (url.pathname === '/api/careers') {
+      // Lifetime stats per marble id (races, wins, podiums, championships).
+      let careers = [];
+      try {
+        if (db) careers = db.marbleCareers();
+      } catch (e) {
+        console.error('[api] careers failed:', e && e.message);
+      }
+      return sendJSON(res, 200, { careers });
+    }
     if (url.pathname === '/api/history') {
       // Recent completed races (seeds + full results), newest first.
       let races = [];
