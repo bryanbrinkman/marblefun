@@ -5769,9 +5769,13 @@ function updateCamera(dt) {
       let dx = p.x - leader.pos.x, dz = p.z - leader.pos.z;
       const dm = Math.hypot(dx, dz) || 1;
       dx /= dm; dz /= dm;
-      _revGoal.set(leader.pos.x + dx * 6.0, leader.pos.y + 2.2, leader.pos.z + dz * 6.0);
+      _revGoal.set(leader.pos.x + dx * 6.0, leader.pos.y + 3.0, leader.pos.z + dz * 6.0);
       if (!_revInit) { camera.position.copy(_revGoal); _revInit = true; } // hard TV cut
       camera.position.lerp(_revGoal, 1 - Math.pow(0.02, dt));
+      // Never sink below the subject — the goal is above the marble, but lerp
+      // lag on fast drops (or a bounce upward) can leave the camera under it,
+      // shooting up through the track floor. Keep it slightly higher, always.
+      if (camera.position.y < leader.pos.y + 1.5) camera.position.y = leader.pos.y + 1.5;
       cameraTarget.lerp(leader.pos, 1 - Math.pow(0.002, dt));
       const targetZoom = 0.10;
       zoomFactor += (targetZoom - zoomFactor) * (1 - Math.pow(0.2, dt));
@@ -5794,9 +5798,19 @@ function updateCamera(dt) {
         const pin = curve.getPointAt(_tsPinT);
         const tan = curve.getTangentAt(_tsPinT);
         const mag = Math.hypot(tan.x, tan.z) || 1;
-        _tsPos.set(pin.x + (-tan.z / mag) * 3.4, pin.y + 1.5, pin.z + (tan.x / mag) * 3.4);
+        // The pin is DOWNHILL of the pack (courses descend), so raise it to at
+        // least slightly above the approaching leader — a camera planted below
+        // the marble it's watching looks up through the track between them.
+        _tsPos.set(
+          pin.x + (-tan.z / mag) * 3.4,
+          Math.max(pin.y + 1.8, leader.pos.y + 1.2),
+          pin.z + (tan.x / mag) * 3.4
+        );
       }
       camera.position.copy(_tsPos);
+      // And keep that guarantee live between re-pins (bounces, jump pads can
+      // carry the marble back above the planted height).
+      if (camera.position.y < leader.pos.y + 1.2) camera.position.y = leader.pos.y + 1.2;
       cameraTarget.lerp(leader.pos, 1 - Math.pow(0.001, dt));
       const targetZoom = 0.12;
       zoomFactor += (targetZoom - zoomFactor) * (1 - Math.pow(0.2, dt));
