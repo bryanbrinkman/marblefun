@@ -1939,10 +1939,52 @@ const worldObjects = [];
 const _ghostedMeshes = new Set();
 const _ghostCandidates = [];   // flat list of meshes to consider for ghosting
 let _ghostCandidatesDirty = true;
+// Construct-up intro: while a course build is running, every piece is born
+// invisible and pops up into place (rise + scale) a beat after its creation.
+// Creation order follows the path, so the whole track ripples into existence.
+// Purely visual — physics reads the track data, never these transforms.
+let _constructing = false;
+let _introCount = 0;
+let _introActive = false;
+const _reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 function addToWorld(obj) {
   scene.add(obj);
   worldObjects.push(obj);
+  if (_constructing && !_reduceMotion) {
+    obj.userData._intro = {
+      start: performance.now() + Math.min(1800, _introCount++ * 5),
+      dur: 420,
+      oy: obj.position.y,
+      os: obj.scale.clone(),
+    };
+    obj.visible = false;
+    _introActive = true;
+  }
   return obj;
+}
+function updateConstructIntro() {
+  if (!_introActive) return;
+  const now = performance.now();
+  let pending = false;
+  for (const obj of worldObjects) {
+    const it = obj.userData._intro;
+    if (!it) continue;
+    const t = (now - it.start) / it.dur;
+    if (t < 0) { obj.visible = false; pending = true; continue; }
+    obj.visible = true;
+    if (t >= 1) {
+      obj.position.y = it.oy;
+      obj.scale.copy(it.os);
+      delete obj.userData._intro;
+      continue;
+    }
+    pending = true;
+    const e = 1 - Math.pow(1 - t, 3); // ease-out: quick pop, gentle settle
+    obj.position.y = it.oy - (1 - e) * 2.4; // rises up into place
+    const f = 0.25 + 0.75 * e;
+    obj.scale.set(it.os.x * f, it.os.y * f, it.os.z * f);
+  }
+  if (!pending) _introActive = false;
 }
 function clearWorld() {
   // Clear any tracked occlusion-ghost refs — the meshes are about to be disposed.
@@ -4344,7 +4386,13 @@ let _buildSerial = 0;
 
 function buildWorld() {
   _buildSerial++;
-  for (const s of BUILD_STEPS) s.fn();
+  _constructing = true;
+  _introCount = 0;
+  try {
+    for (const s of BUILD_STEPS) s.fn();
+  } finally {
+    _constructing = false;
+  }
 }
 
 // Async build with progress reporting — used once at boot so the loading
@@ -4354,6 +4402,7 @@ function buildWorld() {
 async function buildWorldAsync(onProgress) {
   const nextFrame = () => new Promise(r => requestAnimationFrame(r));
   const serial = _buildSerial;
+  _introCount = 0;
   for (const s of BUILD_STEPS) {
     if (onProgress) onProgress(null, s.label);
     await nextFrame();   // paint the label + current pct before the sync chunk
@@ -4361,7 +4410,8 @@ async function buildWorldAsync(onProgress) {
     // we were awaiting a frame, it already built the real course — abort so we
     // don't clear it and stack a second one on top.
     if (_buildSerial !== serial) return;
-    s.fn();
+    _constructing = true;
+    try { s.fn(); } finally { _constructing = false; }
     if (onProgress) onProgress(s.pct, null);
   }
   await nextFrame();     // paint the final 100% before the overlay fades
@@ -5695,6 +5745,59 @@ function updateCamera(dt) {
     chaseFwdX = chaseFwdZ = undefined;
   }
 
+  // Reverse Cam: sit AHEAD of the subject on the track looking back at it, so
+  // the chasers are visible bearing down behind. The camera dollies backwards
+  // along the course as the pack advances.
+  if (STATE.reverseCam) {
+    const leader = _camSubject();
+    if (leader && typeof curve !== 'undefined' && curve) {
+      // Direction of travel from the path just ahead; the camera sits a FIXED
+      // short hop in front of the subject along it (mirror of the chase cam),
+      // slightly raised, looking back — chasers fill the frame behind.
+      const t = Math.min(0.995, Math.max(0.005, leader.progress + 0.02));
+      const p = curve.getPointAt(t);
+      let dx = p.x - leader.pos.x, dz = p.z - leader.pos.z;
+      const dm = Math.hypot(dx, dz) || 1;
+      dx /= dm; dz /= dm;
+      _revGoal.set(leader.pos.x + dx * 6.0, leader.pos.y + 2.2, leader.pos.z + dz * 6.0);
+      if (!_revInit) { camera.position.copy(_revGoal); _revInit = true; } // hard TV cut
+      camera.position.lerp(_revGoal, 1 - Math.pow(0.02, dt));
+      cameraTarget.lerp(leader.pos, 1 - Math.pow(0.002, dt));
+      const targetZoom = 0.10;
+      zoomFactor += (targetZoom - zoomFactor) * (1 - Math.pow(0.2, dt));
+      updateOrthoCamera();
+      camera.up.set(0, 1, 0);
+      camera.lookAt(cameraTarget);
+      return;
+    }
+    STATE.reverseCam = false;
+  }
+
+  // Trackside Cam: a fixed camera planted just off the course ahead of the
+  // pack — the marbles roll toward it and past, broadcast-style, then it
+  // re-pins further down the track and waits again.
+  if (STATE.tracksideCam) {
+    const leader = _camSubject();
+    if (leader && typeof curve !== 'undefined' && curve) {
+      if (_tsPinT === null || leader.progress > _tsPinT - 0.004) {
+        _tsPinT = Math.min(0.99, leader.progress + 0.07);
+        const pin = curve.getPointAt(_tsPinT);
+        const tan = curve.getTangentAt(_tsPinT);
+        const mag = Math.hypot(tan.x, tan.z) || 1;
+        _tsPos.set(pin.x + (-tan.z / mag) * 3.4, pin.y + 1.5, pin.z + (tan.x / mag) * 3.4);
+      }
+      camera.position.copy(_tsPos);
+      cameraTarget.lerp(leader.pos, 1 - Math.pow(0.001, dt));
+      const targetZoom = 0.12;
+      zoomFactor += (targetZoom - zoomFactor) * (1 - Math.pow(0.2, dt));
+      updateOrthoCamera();
+      camera.up.set(0, 1, 0);
+      camera.lookAt(cameraTarget);
+      return;
+    }
+    STATE.tracksideCam = false;
+  }
+
   // Top Cam: bird's-eye view directly above the leading marble. Camera looks
   // straight down (pitch = 90°) so the marble is centered in frame with the track
   // visible around it from directly overhead. Useful for seeing path layout and
@@ -6522,6 +6625,11 @@ window.marbleAPI = {
 // overview ortho cam. The pre-action overview state is saved so toggling back returns
 // the camera to whatever yaw/zoom/target the user had before.
 let _savedCamState = null;
+// Reverse/trackside cam scratch state.
+let _revInit = false;
+const _revGoal = new THREE.Vector3();
+let _tsPinT = null;
+const _tsPos = new THREE.Vector3();
 
 // =========================================================
 // SOUND — Web Audio API synth for marble clack effects
@@ -6856,7 +6964,8 @@ function playGateSound() {
 // Switch to a specific camera mode: 'overview', 'action', or 'chase'.
 function setCamMode(mode) {
   // Save overview state before LEAVING overview, so we can restore later.
-  const leavingOverview = !STATE.actionCam && !STATE.chaseCam && !STATE.topCam;
+  const leavingOverview =
+    !STATE.actionCam && !STATE.chaseCam && !STATE.topCam && !STATE.reverseCam && !STATE.tracksideCam;
   if (leavingOverview && mode !== 'overview') {
     _savedCamState = {
       target: cameraTarget.clone(),
@@ -6868,6 +6977,10 @@ function setCamMode(mode) {
   STATE.actionCam = (mode === 'action');
   STATE.chaseCam  = (mode === 'chase');
   STATE.topCam    = (mode === 'top');
+  STATE.reverseCam = (mode === 'reverse');
+  STATE.tracksideCam = (mode === 'trackside');
+  if (mode === 'reverse') _revInit = false;   // hard cut into the fresh angle
+  if (mode === 'trackside') _tsPinT = null;   // pick a fresh pin ahead
   // Button visual feedback — "active" class when any follow mode is engaged.
   if (mode === 'overview') {
     actionCamBtn.classList.remove('active');
@@ -7511,6 +7624,8 @@ function currentCamMode() {
   if (STATE.actionCam) return 'action';
   if (STATE.chaseCam) return 'chase';
   if (STATE.topCam) return 'top';
+  if (STATE.reverseCam) return 'reverse';
+  if (STATE.tracksideCam) return 'trackside';
   return 'overview';
 }
 
@@ -8048,6 +8163,7 @@ function animate() {
   }
 
   updateMarbleVisuals(frameTime);
+  updateConstructIntro();
   updateFollowMarker();
   updateRollSounds(frameTime);
   updateGateAnimation(frameTime);

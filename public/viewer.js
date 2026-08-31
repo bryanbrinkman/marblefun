@@ -1965,10 +1965,16 @@ function tvDirector() {
   if (!act.length) return;
   const leader = act[0];
   const gap = act.length > 1 ? leader.pos - act[1].pos : 1;
-  let want;
-  if (leader.pos > 0.88) want = 'action'; // finish approach: the wide dramatic angle
-  else if (gap > 0.07) want = 'chase'; // breakaway: ride the leader
-  else want = since > 9000 && cam === 'action' ? 'chase' : 'action'; // tight pack + variety
+  // Shot selection: each situation has a set of angles the director rotates
+  // through. 'reverse' plants the camera AHEAD of the leader looking back at
+  // the chasing pack; 'trackside' is a fixed roll-past broadcast shot.
+  let set;
+  if (leader.pos > 0.88) set = ['action', 'reverse']; // finish: wide, or chasers' last gasp
+  else if (gap > 0.07) set = ['chase', 'reverse']; // breakaway: ride it, then face it
+  else set = ['action', 'reverse', 'trackside']; // tight pack: full variety
+  let want = cam;
+  if (!set.includes(cam)) want = set[0];
+  else if (set.length > 1 && since > 8500) want = set[(set.indexOf(cam) + 1) % set.length];
   if (want !== cam && since > 5000) {
     a.setCamera(want);
     _tvLastCut = now;
