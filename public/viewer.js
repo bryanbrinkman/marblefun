@@ -2041,8 +2041,11 @@ function syncCamButtons() {
       });
     const tvBtn = el('cpTv');
     if (tvBtn) tvBtn.addEventListener('click', () => setTvMode(!tvMode));
-    // Restore the director across a refresh within the same session.
-    try { if (sessionStorage.getItem('mrTv') === '1') setTvMode(true); } catch {}
+    // TV mode is the DEFAULT viewing experience — the director runs unless the
+    // visitor turned it off this session (any manual camera choice does that).
+    let tvPref = null;
+    try { tvPref = sessionStorage.getItem('mrTv'); } catch {}
+    if (tvPref !== '0') setTvMode(true);
     // (Marble Blast has no menu entry on purpose — it's an easter egg on M.)
     const followBtn = el('cpFollow');
     if (followBtn)
