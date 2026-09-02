@@ -692,9 +692,32 @@ setIsoCamera(camYaw, camPitch, camDistance);
 // with no GPU/WebGL. In that case WebGLRenderer construction throws; fall back to
 // a no-op renderer so the rest of the script (which defines marbleAPI) still runs.
 // Real browsers with WebGL are unaffected — they take the normal path.
+// Quality tier must be known BEFORE the renderer exists: antialias and
+// preserveDrawingBuffer are context-creation parameters that can't be changed
+// afterwards. detectLowGfx and the persisted ⚡ choice are defined below —
+// hoisted function + this early init keep the original block readable.
+let _lowQ = false;
+let _lowQUserSet = false; // true once the user has picked via the ⚡ button
+try {
+  const saved = localStorage.getItem('marbleLowQ');
+  if (saved === '1' || saved === '0') { _lowQ = saved === '1'; _lowQUserSet = true; }
+  else _lowQ = detectLowGfx(); // first visit: auto-pick from device capability
+} catch (e) { _lowQ = detectLowGfx(); }
+const _coarsePointer = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  renderer = new THREE.WebGLRenderer({
+    // MSAA off on the low tier — a large fill-rate saving on exactly the GPUs
+    // that struggle, and the soft wooden shapes barely alias anyway.
+    antialias: !_lowQ,
+    alpha: true,
+    // preserveDrawingBuffer exists so right-click → "Save Image As…" captures
+    // the frame. Touch devices have no right-click, and on their tiled GPUs
+    // preserving the buffer forces an expensive copy every frame — off there.
+    preserveDrawingBuffer: !_coarsePointer,
+    powerPreference: 'high-performance',
+  });
 } catch (e) {
   console.warn('[marble] WebGL unavailable — running headless (physics only, no rendering).', e && e.message);
   window.__headlessNoGL = true;
@@ -770,15 +793,18 @@ function detectLowGfx() {
   }
 }
 
-let _lowQ = false;
-let _lowQUserSet = false; // true once the user has picked via the ⚡ button
-try {
-  const saved = localStorage.getItem('marbleLowQ');
-  if (saved === '1' || saved === '0') { _lowQ = saved === '1'; _lowQUserSet = true; }
-  else _lowQ = detectLowGfx(); // first visit: auto-pick from device capability
-} catch (e) { _lowQ = detectLowGfx(); }
+// (_lowQ/_lowQUserSet are initialized above, before renderer creation, so the
+// context parameters could take the tier into account.)
 function applyQuality(recompile) {
-  const maxDpr = Math.min(window.devicePixelRatio || 1, 2);
+  let maxDpr = Math.min(window.devicePixelRatio || 1, 2);
+  // Touch devices: cap the physical framebuffer at ~2.6M pixels. Beyond that,
+  // fill rate dominates on mobile GPUs and the extra sharpness is invisible at
+  // phone/tablet viewing sizes (a 2x phone stays untouched; a 2x iPad Pro
+  // drops to ~1.4x). Desktop displays keep their full ratio.
+  if (_coarsePointer) {
+    const px = Math.max(1, window.innerWidth * window.innerHeight);
+    maxDpr = Math.max(1, Math.min(maxDpr, Math.sqrt(2.6e6 / px)));
+  }
   renderer.setPixelRatio(_lowQ ? Math.min(maxDpr, 1) : maxDpr);
   renderer.shadowMap.enabled = !_lowQ;
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -3765,7 +3791,9 @@ function spawnConfettiBurst() {
   if (finishPostTops.length === 0) return;
   // ~30 particles from each post, with upward velocity + outward spread
   for (const origin of finishPostTops) {
-    const count = 30 + Math.floor(Math.random() * 10);
+    // Every particle is its own mesh (= a draw call); half the shower still
+    // reads as a celebration on the low tier.
+    const count = (_lowQ ? 14 : 30) + Math.floor(Math.random() * (_lowQ ? 5 : 10));
     for (let i = 0; i < count; i++) {
       const mat = _confettiMats[Math.floor(Math.random() * _confettiMats.length)];
       const mesh = new THREE.Mesh(_confettiGeo, mat);
@@ -5562,8 +5590,17 @@ function buildFlags() {
 // Update each flag: rotate toward the shared windYaw (lerped per-flag for stagger),
 // and apply a SHARED traveling-wave displacement so they all wave in unison. Wind
 // direction periodically shifts to a new random target.
+let _flagFrame = 0;
 function updateFlags(dt) {
   if (allFlags.length === 0) return;
+  // Low tier: animate the cloth at 1/3 rate (dt scaled so wave speed and wind
+  // shifts stay identical) — reshaping every flag's vertices every frame is
+  // pure decoration the weakest phones can't afford.
+  if (_lowQ) {
+    _flagFrame = (_flagFrame + 1) % 3;
+    if (_flagFrame !== 0) return;
+    dt *= 3;
+  }
 
   // Tick the direction-shift timer. When it expires, pick a new random target yaw
   // and reset the timer for 5-10s out. Each flag will then lerp toward the new yaw
@@ -5613,7 +5650,10 @@ function updateFlags(dt) {
       pos.array[ix + 2] = env * f.amplitudeZ * wave;
     }
     pos.needsUpdate = true;
-    f.geom.computeVertexNormals();
+    // Recomputing normals per flag per frame costs more than the wave itself.
+    // On the low tier keep the original flat-plane normals — on a 0.95-unit
+    // flag the shading difference is imperceptible.
+    if (!_lowQ) f.geom.computeVertexNormals();
   }
 }
 
@@ -8003,7 +8043,19 @@ function collectGhostCandidates() {
   _ghostCandidatesDirty = false;
 }
 
+let _ghostSkip = false;
+let _ghostDtAcc = 0;
 function updateGhosting(dt) {
+  // Low tier: run the occlusion-bubble scan every other frame with the summed
+  // dt, halving its per-frame projection cost. The opacity smoothing is
+  // time-based, so the look is identical — just updated at 30Hz instead of 60.
+  if (_lowQ) {
+    _ghostDtAcc += dt;
+    _ghostSkip = !_ghostSkip;
+    if (_ghostSkip) return;
+    dt = _ghostDtAcc;
+    _ghostDtAcc = 0;
+  }
   // Only ghost in follow-cam modes; restore everything in overview.
   const followingMarble = STATE.actionCam || STATE.chaseCam;
   if (!followingMarble) {
