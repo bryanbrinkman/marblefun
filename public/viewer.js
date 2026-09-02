@@ -853,7 +853,9 @@ function renderPrMarble() {
   const wrap = el('prMarble');
   if (!wrap) return;
   if (followId == null) {
-    wrap.innerHTML = `<button class="pr-btn primary" id="prPickBtn">🔮 Pick a marble</button>`;
+    // No big pick button here — the top-bar "Pick a marble" and tapping a
+    // starter chip both cover it, and the card stays lean.
+    wrap.innerHTML = '';
     return;
   }
   const st = followedStanding();

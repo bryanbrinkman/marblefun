@@ -109,12 +109,10 @@
          Countdown, what's next, the road to the champion, and things to do. -->
     <section class="prerace" id="preRace" hidden>
       <div class="pr-card" id="prCard">
-        <div class="pr-tag">100 marbles enter. One becomes champion.</div>
-        <div class="pr-state" id="prState">Between races</div>
-        <!-- Primary line: the next-race countdown (or a friendly fallback). -->
+        <!-- One context line (state · phase), then the countdown. The tagline
+             lives in the top bar — repeating it here made the card bulky. -->
+        <div class="pr-context"><span class="pr-state" id="prState">Between races</span><span class="pr-flavor" id="prFlavor"></span></div>
         <div class="pr-title" id="prTitle"></div>
-        <!-- Secondary flavor: phase label or "Lining up the next race…". -->
-        <div class="pr-flavor" id="prFlavor"></div>
         <div class="pr-journey" id="journey" role="img" aria-label="Tournament progress: 100 started, 20 advance, 5 finalists, 1 champion">
           <span class="j-stage" data-stage="heats"><b>100</b><i>started</i></span>
           <span class="j-arrow" aria-hidden="true">→</span>
@@ -124,7 +122,7 @@
           <span class="j-arrow" aria-hidden="true">→</span>
           <span class="j-stage" data-stage="champion"><b>1</b><i>champion</i></span>
         </div>
-        <div class="pr-guess" id="prGuessLabel" hidden>🎯 Call the winner — tap a marble to back it</div>
+        <div class="pr-guess" id="prGuessLabel" hidden>🎯 Tap a marble to back it to win</div>
         <div class="pr-starters" id="prStarters"></div>
         <!-- Your marble: a pick button before choosing, a status card after. -->
         <div class="pr-marble" id="prMarble"></div>
