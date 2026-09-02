@@ -1944,33 +1944,51 @@ let _ghostCandidatesDirty = true;
 // Creation order follows the path, so the whole track ripples into existence.
 // Purely visual — physics reads the track data, never these transforms.
 let _constructing = false;
-let _introCount = 0;
 let _introActive = false;
+let _introObjs = [];   // only the objects still animating — cheap per-frame loop
 const _reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 function addToWorld(obj) {
   scene.add(obj);
   worldObjects.push(obj);
   if (_constructing && !_reduceMotion) {
     obj.userData._intro = {
-      start: performance.now() + Math.min(1800, _introCount++ * 5),
-      dur: 420,
+      start: Infinity,   // real start assigned by _spreadIntro once the build ends
+      dur: 650,
       oy: obj.position.y,
       os: obj.scale.clone(),
     };
     obj.visible = false;
+    _introObjs.push(obj);
     _introActive = true;
   }
   return obj;
 }
+// Called when a build finishes: spread the pieces' pop-in times evenly across a
+// fixed window (creation order = path order, so the course ripples into
+// existence start→finish). A fixed window keeps the ripple density — and the
+// per-frame animation cost — constant no matter how many meshes the course
+// has; the old per-piece stagger clumped everything past a cap into one frame,
+// which both spiked the framerate and made the show feel rushed.
+function _spreadIntro() {
+  const n = _introObjs.length;
+  if (!n) return;
+  const now = performance.now();
+  const window_ = 3800, lead = 200;
+  for (let i = 0; i < n; i++) {
+    const it = _introObjs[i].userData._intro;
+    if (it) it.start = now + lead + (i / Math.max(1, n - 1)) * window_;
+  }
+}
 function updateConstructIntro() {
   if (!_introActive) return;
   const now = performance.now();
-  let pending = false;
-  for (const obj of worldObjects) {
+  let w = 0;
+  for (let i = 0; i < _introObjs.length; i++) {
+    const obj = _introObjs[i];
     const it = obj.userData._intro;
-    if (!it) continue;
+    if (!it) continue; // cleared externally (e.g. course torn down mid-intro)
     const t = (now - it.start) / it.dur;
-    if (t < 0) { obj.visible = false; pending = true; continue; }
+    if (t < 0) { obj.visible = false; _introObjs[w++] = obj; continue; }
     obj.visible = true;
     if (t >= 1) {
       obj.position.y = it.oy;
@@ -1978,13 +1996,14 @@ function updateConstructIntro() {
       delete obj.userData._intro;
       continue;
     }
-    pending = true;
+    _introObjs[w++] = obj;
     const e = 1 - Math.pow(1 - t, 3); // ease-out: quick pop, gentle settle
     obj.position.y = it.oy - (1 - e) * 2.4; // rises up into place
     const f = 0.25 + 0.75 * e;
     obj.scale.set(it.os.x * f, it.os.y * f, it.os.z * f);
   }
-  if (!pending) _introActive = false;
+  _introObjs.length = w;
+  if (!w) _introActive = false;
 }
 function clearWorld() {
   // Clear any tracked occlusion-ghost refs — the meshes are about to be disposed.
@@ -1998,6 +2017,9 @@ function clearWorld() {
   // way to the void anyway).
   _collapsingPieces.length = 0;
   _collapseActive = false;
+  // Any in-flight construct-up intro dies with its meshes.
+  _introObjs.length = 0;
+  _introActive = false;
   for (const obj of worldObjects) {
     scene.remove(obj);
     obj.traverse(child => {
@@ -4393,11 +4415,11 @@ let _buildSerial = 0;
 function buildWorld() {
   _buildSerial++;
   _constructing = true;
-  _introCount = 0;
   try {
     for (const s of BUILD_STEPS) s.fn();
   } finally {
     _constructing = false;
+    _spreadIntro();
   }
 }
 
@@ -4408,7 +4430,6 @@ function buildWorld() {
 async function buildWorldAsync(onProgress) {
   const nextFrame = () => new Promise(r => requestAnimationFrame(r));
   const serial = _buildSerial;
-  _introCount = 0;
   _constructing = true;
   try {
   for (const s of BUILD_STEPS) {
@@ -4423,6 +4444,7 @@ async function buildWorldAsync(onProgress) {
   }
   } finally {
     _constructing = false;
+    _spreadIntro();
   }
   await nextFrame();     // paint the final 100% before the overlay fades
 }

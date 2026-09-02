@@ -1995,15 +1995,24 @@ function tvDirector() {
   if (leader.pos > 0.88) set = ['action', 'reverse']; // finish: wide, or chasers' last gasp
   else if (gap > 0.07) set = ['chase', 'reverse']; // breakaway: ride it, then face it
   else set = ['action', 'reverse', 'trackside']; // tight pack: full variety
+  // A game iframe from an older cached deploy may not know the newer shots —
+  // drop any the game refuses so the director keeps cutting through the rest
+  // instead of silently asking for angles that never happen.
+  set = set.filter((m) => !_tvUnsupported.has(m));
+  if (!set.length) set = ['action'];
   let want = cam;
   if (!set.includes(cam)) want = set[0];
   else if (set.length > 1 && since > 8500) want = set[(set.indexOf(cam) + 1) % set.length];
   if (want !== cam && since > 5000) {
     a.setCamera(want);
+    let took = want;
+    try { took = a.getCamera() || took; } catch {}
+    if (took !== want) _tvUnsupported.add(want);
     _tvLastCut = now;
     syncCamButtons();
   }
 }
+const _tvUnsupported = new Set(); // shots this game build ignored (stale cache)
 
 function syncCamButtons() {
   const pop = el('controlsPop');

@@ -90,14 +90,40 @@ function serveStatic(req, res) {
   }
   // Clean URLs: an extensionless path (e.g. /admin) maps to its .html file.
   if (path.extname(filePath) === '') filePath += '.html';
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
+  fs.stat(filePath, (statErr, stat) => {
+    if (statErr) {
       res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found');
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
-    res.end(data);
+    // Without explicit cache headers browsers cache heuristically — phones
+    // especially would keep serving week-old HTML/JS, so a deploy's new viewer
+    // could run against a stale cached game (or vice versa) and features would
+    // silently misbehave. no-cache = always revalidate; Last-Modified makes
+    // that revalidation a cheap 304 instead of a refetch. Heavy immutable-ish
+    // assets (models, images, fonts) may cache for an hour.
+    const code = ext === '.html' || ext === '.js' || ext === '.css' || ext === '.json';
+    const headers = {
+      'Content-Type': MIME[ext] || 'application/octet-stream',
+      'Cache-Control': code ? 'no-cache' : 'public, max-age=3600',
+      'Last-Modified': stat.mtime.toUTCString(),
+    };
+    const ims = req.headers['if-modified-since'];
+    if (ims) {
+      const since = Date.parse(ims);
+      // mtime truncated to seconds — HTTP dates carry no milliseconds.
+      if (!Number.isNaN(since) && Math.floor(stat.mtime.getTime() / 1000) * 1000 <= since) {
+        res.writeHead(304, headers).end();
+        return;
+      }
+    }
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found');
+        return;
+      }
+      res.writeHead(200, headers).end(data);
+    });
   });
 }
 
