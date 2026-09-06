@@ -4108,16 +4108,21 @@ function updateMarbleVisuals(dt) {
   const r = CONFIG.marbleRadius;
   for (const m of marbles) {
     if (!m.mesh) continue;
-    const v = m.vel;
-    const speed = v ? v.length() : 0;
-    if (speed > 1e-4) {
-      // Rolling without slipping: angular velocity = (up × v) / radius.
-      _spinAxis.copy(_spinUp).cross(v);
-      if (_spinAxis.lengthSq() > 1e-9) {
-        _spinAxis.normalize();
-        _spinQuat.setFromAxisAngle(_spinAxis, (speed / r) * dt);
-        m.mesh.quaternion.premultiply(_spinQuat);
-      }
+    // Roll from the ACTUAL frame-to-frame displacement, not instantaneous
+    // velocity: a marble pinned in place (against a wall, jammed in a pack)
+    // carries velocity that gets cancelled every step — velocity-based spin
+    // made skinned marbles visibly rotate while standing still. Rolling
+    // without slipping: axis = up × displacement, angle = ground distance / r.
+    if (!m._visPrev) m._visPrev = m.pos.clone();
+    const dx = m.pos.x - m._visPrev.x;
+    const dz = m.pos.z - m._visPrev.z;
+    m._visPrev.copy(m.pos);
+    const dist = Math.hypot(dx, dz);
+    // Ignore teleports (race resets, mid-race catch-up fast-forwards).
+    if (dist > 1e-5 && dist < 2.0) {
+      _spinAxis.set(dz, 0, -dx).normalize();
+      _spinQuat.setFromAxisAngle(_spinAxis, dist / r);
+      m.mesh.quaternion.premultiply(_spinQuat);
     }
     if (m.shadowBlob) {
       m.shadowBlob.position.set(m.pos.x, m.pos.y - r + 0.02, m.pos.z);
@@ -4963,6 +4968,53 @@ function stepPhysics(dt) {
       }
     }
 
+    // Anti-stuck rescue. Two traps used to strand marbles into DNFs:
+    //   • knocked backward by the pack after a stepRamp drop and stranded on
+    //     the stepRamp's FLAT lower shelf (the only floor with no descent
+    //     tilt), friction pinning it to a dead stop;
+    //   • rocking forever in a corner pocket, where walls + slope sustain a
+    //     small perpetual oscillation that never escapes.
+    // Speed can't detect the second (it never stops moving), so the detector
+    // is PROGRESS stagnation: if a live marble hasn't advanced its best-ever
+    // course progress in 6 sim-seconds, feed it a gentle push along the track
+    // direction until it does. Pure function of sim state — fully
+    // deterministic, identical on server and every viewer.
+    if (!m.finished && STATE.gateOpen) {
+      if (m.progress > (m._rescueBestProg || 0) + 0.004) {
+        m._rescueBestProg = m.progress;
+        m._rescueTime = 0;
+      } else {
+        m._rescueTime = (m._rescueTime || 0) + dt;
+      }
+      if (m._rescueTime > 6.0) {
+        m.vel.addScaledVector(tangent, 2.5 * dt);
+        // Escalation: some corner pockets eat the continuous push (wall
+        // restitution drains energy as fast as it arrives) — every 4s of
+        // CONTINUED stagnation, add one discrete jostle: a hop + forward
+        // kick, like the table got bumped. Kept modest on purpose: stronger
+        // kicks were seen ejecting marbles clean over the channel walls.
+        const kickIdx = Math.floor((m._rescueTime - 6.0) / 4.0);
+        if (kickIdx > Math.floor((m._rescueTime - dt - 6.0) / 4.0) && kickIdx >= 1) {
+          m.vel.addScaledVector(tangent, 3.0);
+          m.vel.y += 2.0;
+        }
+      }
+      // Last resort after 20s: the invisible stagehand picks the marble up
+      // and sets it back on the track centerline just past where it lost the
+      // plot, rolling gently. Covers pockets no in-channel force can escape
+      // AND marbles that ended up off the course entirely. Deterministic —
+      // a pure function of the marble's best progress.
+      if (m._rescueTime > 20.0) {
+        const t = Math.min(0.995, (m._rescueBestProg || 0) + 0.01);
+        const p = curve.getPointAt(t);
+        m.pos.set(p.x, p.y + CONFIG.marbleRadius + 0.3, p.z);
+        m.vel.copy(curve.getTangentAt(t)).multiplyScalar(2.0);
+        m.progress = t;
+        m._rescueBestProg = t;
+        m._rescueTime = 0;
+      }
+    }
+
     // Update prevCellType for cell-transition detection used by other logic. (We
     // used to fire a "ramp exit bounce" here, but regular smooth ramps shouldn't
     // produce a hop — only the stepRamp cliff does, handled in its own block above.)
@@ -5251,6 +5303,12 @@ function stepPhysics(dt) {
         // (false hits observed at dy 2.5-4).
         crossedFinish =
           fwd >= 0 && fwd < finishFwdMax && lat < finishLatMax && Math.abs(m.pos.y - finishLinePos.y) < 1.6;
+        // Fallback: a marble that physically reached the very end of the
+        // course but sailed past the gate outside its bounds (e.g. hopped
+        // over the banner after an anti-stuck jostle) still finishes.
+        // progress ≥ 0.995 pins it to the final runout samples, so distant
+        // track curling past the plane can't false-trigger this.
+        if (!crossedFinish && m.progress >= 0.995 && fwd >= 0) crossedFinish = true;
       }
     } else {
       crossedFinish = m.progress >= 0.995;
