@@ -1991,27 +1991,56 @@ function addToWorld(obj) {
   }
   return obj;
 }
-// Called when a build finishes: spread the pieces' pop-in times evenly across
-// fixed windows (creation order = path order, so the course ripples into
-// existence start→finish). Fixed windows keep the ripple density — and the
-// per-frame animation cost — constant no matter how many meshes the course
-// has. Two phases: the TRACK-level pieces draw on first (rising into place),
-// then after a beat the support blocks BENEATH slide downward under them.
+// Called when a build finishes: schedule the construct-up choreography.
+// Creation order = path order, so the TRACK-level pieces ripple into
+// existence start→finish across a fixed window. Each tile's support blocks
+// then drop in a quick cascade a beat after THEIR OWN tile draws (keyed by
+// the cellIdx stamped at build time) — the wave of falling blocks chases the
+// track wave down the course rather than waiting for the whole track. The
+// table/felt base (isBase) holds off until the FIRST block lands on it.
 function _spreadIntro() {
   if (!_introObjs.length) return;
   const now = performance.now();
-  const tops = [], belows = [];
-  for (const o of _introObjs) (o.userData._intro && o.userData._intro.below ? belows : tops).push(o);
-  const seq = (list, startAt, window_) => {
-    const n = list.length;
-    for (let i = 0; i < n; i++) {
-      const it = list[i].userData._intro;
-      if (it) it.start = startAt + (i / Math.max(1, n - 1)) * window_;
-    }
-  };
-  const TOP_LEAD = 200, TOP_WINDOW = 2200, GAP = 1000, BELOW_WINDOW = 2000;
-  seq(tops, now + TOP_LEAD, TOP_WINDOW);
-  seq(belows, now + TOP_LEAD + TOP_WINDOW + GAP, BELOW_WINDOW);
+  const TOP_LEAD = 200, TOP_WINDOW = 2400;
+  const BLOCK_DELAY = 320, BLOCK_STAGGER = 50, BLOCK_DUR = 380, BASE_DUR = 550;
+  const tops = [], belows = [], bases = [];
+  for (const o of _introObjs) {
+    const it = o.userData._intro;
+    if (!it) continue;
+    if (o.userData.isBase) bases.push(o);
+    else if (it.below) belows.push(o);
+    else tops.push(o);
+  }
+  // Track pieces: even ripple; remember when each cell's tile starts drawing.
+  const cellTopStart = new Map();
+  for (let i = 0; i < tops.length; i++) {
+    const o = tops[i];
+    const it = o.userData._intro;
+    it.start = now + TOP_LEAD + (i / Math.max(1, tops.length - 1)) * TOP_WINDOW;
+    const ci = o.userData.cellIdx;
+    if (ci !== undefined && !cellTopStart.has(ci)) cellTopStart.set(ci, it.start);
+  }
+  // Support blocks: shortly after their own tile, staggered down the stack,
+  // with a snappier drop than the tiles' rise.
+  const cellBlockN = new Map();
+  let firstLanding = Infinity;
+  for (const o of belows) {
+    const it = o.userData._intro;
+    const ci = o.userData.cellIdx;
+    const tileAt = cellTopStart.has(ci) ? cellTopStart.get(ci) : now + TOP_LEAD;
+    const k = cellBlockN.get(ci) || 0;
+    cellBlockN.set(ci, k + 1);
+    it.start = tileAt + BLOCK_DELAY + k * BLOCK_STAGGER;
+    it.dur = BLOCK_DUR;
+    if (it.start + it.dur < firstLanding) firstLanding = it.start + it.dur;
+  }
+  // Base: appears the moment the first block touches down.
+  const baseAt = firstLanding === Infinity ? now + TOP_LEAD : firstLanding;
+  for (let i = 0; i < bases.length; i++) {
+    const it = bases[i].userData._intro;
+    it.start = baseAt + i * 25;
+    it.dur = BASE_DUR;
+  }
 }
 function updateConstructIntro() {
   if (!_introActive) return;
