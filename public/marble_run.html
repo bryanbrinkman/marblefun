@@ -1981,6 +1981,7 @@ function addToWorld(obj) {
     obj.userData._intro = {
       start: Infinity,   // real start assigned by _spreadIntro once the build ends
       dur: 650,
+      below: !!obj.userData.introBelow, // support blocks under the track (phase 2)
       oy: obj.position.y,
       os: obj.scale.clone(),
     };
@@ -1990,21 +1991,27 @@ function addToWorld(obj) {
   }
   return obj;
 }
-// Called when a build finishes: spread the pieces' pop-in times evenly across a
-// fixed window (creation order = path order, so the course ripples into
-// existence start→finish). A fixed window keeps the ripple density — and the
+// Called when a build finishes: spread the pieces' pop-in times evenly across
+// fixed windows (creation order = path order, so the course ripples into
+// existence start→finish). Fixed windows keep the ripple density — and the
 // per-frame animation cost — constant no matter how many meshes the course
-// has; the old per-piece stagger clumped everything past a cap into one frame,
-// which both spiked the framerate and made the show feel rushed.
+// has. Two phases: the TRACK-level pieces draw on first (rising into place),
+// then after a beat the support blocks BENEATH slide downward under them.
 function _spreadIntro() {
-  const n = _introObjs.length;
-  if (!n) return;
+  if (!_introObjs.length) return;
   const now = performance.now();
-  const window_ = 3800, lead = 200;
-  for (let i = 0; i < n; i++) {
-    const it = _introObjs[i].userData._intro;
-    if (it) it.start = now + lead + (i / Math.max(1, n - 1)) * window_;
-  }
+  const tops = [], belows = [];
+  for (const o of _introObjs) (o.userData._intro && o.userData._intro.below ? belows : tops).push(o);
+  const seq = (list, startAt, window_) => {
+    const n = list.length;
+    for (let i = 0; i < n; i++) {
+      const it = list[i].userData._intro;
+      if (it) it.start = startAt + (i / Math.max(1, n - 1)) * window_;
+    }
+  };
+  const TOP_LEAD = 200, TOP_WINDOW = 2200, GAP = 1000, BELOW_WINDOW = 2000;
+  seq(tops, now + TOP_LEAD, TOP_WINDOW);
+  seq(belows, now + TOP_LEAD + TOP_WINDOW + GAP, BELOW_WINDOW);
 }
 function updateConstructIntro() {
   if (!_introActive) return;
@@ -2025,7 +2032,9 @@ function updateConstructIntro() {
     }
     _introObjs[w++] = obj;
     const e = 1 - Math.pow(1 - t, 3); // ease-out: quick pop, gentle settle
-    obj.position.y = it.oy - (1 - e) * 2.4; // rises up into place
+    // Track pieces rise up into place; support blocks slide DOWN out from
+    // under the already-drawn track above them.
+    obj.position.y = it.below ? it.oy + (1 - e) * 2.2 : it.oy - (1 - e) * 2.4;
     const f = 0.25 + 0.75 * e;
     obj.scale.set(it.os.x * f, it.os.y * f, it.os.z * f);
   }
@@ -2568,6 +2577,7 @@ function buildBlocks() {
           cube.rotation.y = (trackRng() - 0.5) * (6 * Math.PI / 180); // ±3°
           cube.castShadow = true;
           cube.receiveShadow = true;
+          cube.userData.introBelow = true; // construct intro phase 2: slides DOWN under the track
           addToWorld(cube);
         }
       }
@@ -2639,6 +2649,7 @@ function buildBlocks() {
             // skipGhost exclusion dated from the single tall LatheGeometry
             // pillars, whose hollow-looking back-faces ghosted confusingly —
             // these solid CylinderGeometry tokens fade cleanly.)
+            seg.userData.introBelow = true; // construct intro phase 2
             addToWorld(seg);
           }
         }
