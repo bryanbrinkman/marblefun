@@ -43,8 +43,10 @@ Keys are the marble number (1–100). Each entry has **either** `img` **or**
   **0.44** units, Y-up, centered at origin) with UVs and a neutral material —
   a clean base to replace in Blender/etc.
 - Author your model at roughly that size and centered on the origin; the loader
-  also **auto-scales** any model to fit the marble, so exact size isn't
-  critical. Keep it **low-poly** and embed textures in the `.glb` (binary glTF).
+  **normalizes every model to fill the marble sphere exactly** (per-axis, from
+  its true vertex bounds), so exact size isn't critical — and a slightly
+  squashed export still races as a perfect sphere. Note this means
+  deliberately non-spherical art gets stretched to a ball. Keep it **low-poly** and embed textures in the `.glb` (binary glTF).
 - Export as **`.glb`** (binary glТF 2.0), save as e.g. `012.glb`, point the
   manifest at it.
 - Note: only the 5 marbles in the current race load their assets (lazy per

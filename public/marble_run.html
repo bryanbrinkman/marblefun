@@ -3961,21 +3961,48 @@ function applyMarbleSkin(m) {
       });
     } else if (skin.glb) {
       // Clone the loaded model onto the marble, auto-fitting to marble size.
+      // The fit normalizes PER-AXIS: the physics object is a true sphere, so
+      // the art must fill that sphere — a model exported slightly oblate (or
+      // with a stretched bounding box) would otherwise race as a visibly
+      // squished oval on every marble wearing it.
       const place = (template) => {
         if (!m.mesh || !template) return;
         const model = template.clone(true);
-        const box = new THREE.Box3().setFromObject(model);
+        // EXACT vertex bounds of the model as authored (its own transforms
+        // included). Box3.setFromObject transforms per-node local AABBs
+        // (conservative), so any rotation inside the GLB inflates the box and
+        // the fit comes out small and lopsided. Skins are low-poly by
+        // convention; walking the actual vertices once at apply time is cheap.
+        model.updateMatrixWorld(true);
+        const box = new THREE.Box3();
+        const v = new THREE.Vector3();
+        model.traverse((n) => {
+          if (!n.isMesh || !n.geometry || !n.geometry.attributes || !n.geometry.attributes.position) return;
+          const pos = n.geometry.attributes.position;
+          for (let i = 0; i < pos.count; i++) {
+            v.fromBufferAttribute(pos, i).applyMatrix4(n.matrixWorld);
+            box.expandByPoint(v);
+          }
+        });
+        if (box.isEmpty()) return;
         const size = new THREE.Vector3();
         box.getSize(size);
-        const maxDim = Math.max(size.x, size.y, size.z) || 1;
-        const s = (CONFIG.marbleRadius * 2) / maxDim;
-        model.scale.setScalar(s);
+        // Fit PER-AXIS on a wrapper group (whose axes match the space the box
+        // was measured in, so the correction is exact even if the model's root
+        // carries its own rotation/scale): the physics object is a true
+        // sphere, and art exported slightly oblate would otherwise race as a
+        // visibly squished oval.
+        const d = CONFIG.marbleRadius * 2;
+        const kx = d / (size.x || 1), ky = d / (size.y || 1), kz = d / (size.z || 1);
         const center = new THREE.Vector3();
         box.getCenter(center);
-        model.position.copy(center.multiplyScalar(-s));
+        const wrapper = new THREE.Group();
+        wrapper.add(model);
+        wrapper.scale.set(kx, ky, kz);
+        wrapper.position.set(-center.x * kx, -center.y * ky, -center.z * kz);
         if (m.mesh.material) m.mesh.material.visible = false; // hide the default sphere
-        m.mesh.add(model);
-        m.skinModel = model;
+        m.mesh.add(wrapper);
+        m.skinModel = wrapper;
       };
       // Load a given GLB once, then clone it for every marble — loading a
       // multi-MB model per marble per race would be wasteful.
