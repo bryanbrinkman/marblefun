@@ -616,6 +616,7 @@ const STATE = {
   actionCam: false,
   chaseCam: false,
   topCam: false,
+  closeCam: false,
   splitScreen: false,
   marbleBlast: false,
 };
@@ -5737,6 +5738,44 @@ function updateCamera(dt) {
     return;
   }
 
+  // Close Cam (Shift+Z): ultra-tight trailing shot of the followed marble (or
+  // the leader) — Marble Blast's framing without the driving. With an ortho
+  // camera the "closeness" is all zoom; the camera itself rides high behind
+  // along the track direction, so it never clips into geometry.
+  if (STATE.closeCam) {
+    const m = _camSubject();
+    if (m && typeof curve !== 'undefined' && curve) {
+      const tan = curve.getTangentAt(Math.min(0.999, Math.max(0.001, m.progress)));
+      let fwdX = tan.x, fwdZ = tan.z;
+      const fMag = Math.sqrt(fwdX * fwdX + fwdZ * fwdZ);
+      if (fMag > 0.001) { fwdX /= fMag; fwdZ /= fMag; } else { fwdX = 0; fwdZ = 1; }
+      if (chaseFwdX === undefined) { chaseFwdX = fwdX; chaseFwdZ = fwdZ; }
+      const smoothK = 1 - Math.pow(0.01, dt);
+      chaseFwdX += (fwdX - chaseFwdX) * smoothK;
+      chaseFwdZ += (fwdZ - chaseFwdZ) * smoothK;
+      const sMag = Math.sqrt(chaseFwdX * chaseFwdX + chaseFwdZ * chaseFwdZ);
+      if (sMag > 0.001) { chaseFwdX /= sMag; chaseFwdZ /= sMag; }
+      const followK = 1 - Math.pow(0.001, dt);
+      cameraTarget.lerp(m.pos, followK);
+      camYaw = Math.atan2(-chaseFwdX, -chaseFwdZ) * 180 / Math.PI;
+      const targetZoom = 0.022; // even tighter than the blast cam's 0.026
+      zoomFactor += (targetZoom - zoomFactor) * (1 - Math.pow(0.1, dt));
+      updateOrthoCamera();
+      const yawR = camYaw * Math.PI / 180;
+      const pitchR = 22 * Math.PI / 180;
+      const D = camDistance;
+      camera.position.set(
+        cameraTarget.x + Math.cos(pitchR) * Math.sin(yawR) * D,
+        cameraTarget.y + Math.sin(pitchR) * D,
+        cameraTarget.z + Math.cos(pitchR) * Math.cos(yawR) * D
+      );
+      camera.up.set(0, 1, 0);
+      camera.lookAt(cameraTarget);
+      return;
+    }
+    STATE.closeCam = false;
+  }
+
   // Chase Cam: trail the leading marble from behind based on its current velocity vector.
   // Camera sits a fixed distance BEHIND the marble along its travel direction, slightly
   // elevated, looking at the marble. The cam direction smooths over time so sudden
@@ -7057,7 +7096,8 @@ function playGateSound() {
 function setCamMode(mode) {
   // Save overview state before LEAVING overview, so we can restore later.
   const leavingOverview =
-    !STATE.actionCam && !STATE.chaseCam && !STATE.topCam && !STATE.reverseCam && !STATE.tracksideCam;
+    !STATE.actionCam && !STATE.chaseCam && !STATE.topCam && !STATE.reverseCam &&
+    !STATE.tracksideCam && !STATE.closeCam;
   if (leavingOverview && mode !== 'overview') {
     _savedCamState = {
       target: cameraTarget.clone(),
@@ -7071,6 +7111,8 @@ function setCamMode(mode) {
   STATE.topCam    = (mode === 'top');
   STATE.reverseCam = (mode === 'reverse');
   STATE.tracksideCam = (mode === 'trackside');
+  STATE.closeCam = (mode === 'close');
+  if (mode === 'close') { chaseFwdX = chaseFwdZ = undefined; }
   if (mode === 'reverse') _revInit = false;   // hard cut into the fresh angle
   if (mode === 'trackside') _tsPinT = null;   // pick a fresh pin ahead
   // Button visual feedback — "active" class when any follow mode is engaged.
@@ -7656,6 +7698,9 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'T' && e.shiftKey) {
     // Shift+T: preview a custom marble wrap on every ball (dev easter egg).
     toggleTestSkin();
+  } else if ((e.key === 'Z' || e.key === 'z') && e.shiftKey) {
+    // Shift+Z: toggle the ultra-close trailing shot on the followed marble.
+    setCamMode(STATE.closeCam ? 'overview' : 'close');
   } else if (e.key === 't' || e.key === 'T') {
     setCamMode('top');
   } else if (e.key === 'o' || e.key === 'O') {
@@ -7718,6 +7763,7 @@ function currentCamMode() {
   if (STATE.topCam) return 'top';
   if (STATE.reverseCam) return 'reverse';
   if (STATE.tracksideCam) return 'trackside';
+  if (STATE.closeCam) return 'close';
   return 'overview';
 }
 

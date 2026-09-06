@@ -66,11 +66,13 @@ async function ensureCourse(trackSeed) {
 async function startReplay(race) {
   if (startedRaces.has(race.key)) return;
   startedRaces.add(race.key);
-  // A "watch latest" replay yields the stage to the live race.
+  // A "watch latest" replay yields the stage to the live race — flash a TV
+  // channel-change so the hard cut reads as "we're going live now".
   if (replaying) {
     replaying = false;
     el('replayChip').hidden = true;
     clearLanes();
+    playTvStatic(`<div class="ts-live">● LIVE</div><div class="ts-sub">${raceLabel(race)}</div>`);
   }
   const a = await ensureCourse(race.trackSeed);
   applyRaceSkins(a, race);
@@ -115,6 +117,50 @@ async function startReplay(race) {
   markOnboarded();
   showFullOnce = false;
   if (race.key === model.currentKey) renderCurrent(race);
+}
+
+// TV-static channel change: a short burst of full-screen noise with a "LIVE"
+// label, used when the stage hard-cuts from a replay to the live race. Purely
+// cosmetic (~0.9s); reduced-motion viewers get the label without the noise.
+let _tvStaticTimer = 0;
+let _tvStaticRaf = 0;
+function playTvStatic(labelHtml) {
+  const wrap = el('tvStatic');
+  const cv = el('tvStaticCv');
+  if (!wrap || !cv) return;
+  const label = el('tvStaticLabel');
+  if (label) label.innerHTML = labelHtml || '● LIVE';
+  wrap.hidden = false;
+  clearTimeout(_tvStaticTimer);
+  cancelAnimationFrame(_tvStaticRaf);
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const DUR = reduce ? 650 : 900;
+  if (!reduce) {
+    // Coarse noise rendered tiny and blown up by CSS (image-rendering: pixelated)
+    // — a real 1:1 noise field would cost more than the race itself.
+    const w = 160, h = 90;
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    const px = img.data;
+    const start = performance.now();
+    const frame = () => {
+      for (let i = 0; i < px.length; i += 4) {
+        px[i] = px[i + 1] = px[i + 2] = (Math.random() * 256) | 0;
+        px[i + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+      if (performance.now() - start < DUR) _tvStaticRaf = requestAnimationFrame(frame);
+    };
+    _tvStaticRaf = requestAnimationFrame(frame);
+  } else {
+    const ctx = cv.getContext('2d');
+    if (ctx) { cv.width = 4; cv.height = 4; ctx.clearRect(0, 0, 4, 4); }
+  }
+  _tvStaticTimer = setTimeout(() => {
+    cancelAnimationFrame(_tvStaticRaf);
+    wrap.hidden = true;
+  }, DUR);
 }
 
 function flashOverlay(text) {
@@ -1978,7 +2024,7 @@ function tvDirector() {
   const live = cur && !cur.result && startedRaces.has(cur.key);
   let cam = 'overview';
   try { cam = a.getCamera() || 'overview'; } catch {}
-  if (cam === 'blast' || cam === 'split') return; // never fight those modes
+  if (cam === 'blast' || cam === 'split' || cam === 'close') return; // never fight those modes
   // A "watch latest" replay gets the full TV treatment too — it's the same
   // race footage; the director previously forced replays back to the wide
   // overview shot.
