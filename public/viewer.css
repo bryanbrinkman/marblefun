@@ -411,13 +411,6 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
-/* ---------- brand tagline ---------- */
-.brand-tag {
-  color: var(--muted); font-weight: 600; font-size: 11px; letter-spacing: .4px;
-  white-space: nowrap; padding-left: 10px; border-left: 1px solid var(--line);
-}
-@media (max-width: 1180px) { .brand-tag { display: none; } }
-
 /* ---------- WebGL fallback banner ---------- */
 .gl-fallback {
   position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 25;
