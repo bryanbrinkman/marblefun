@@ -4017,7 +4017,7 @@ function _camSubject() {
   return leader;
 }
 
-// T key: toggle a test wrap (marbles/_test.glb) on every marble. This is a
+// Shift+T: toggle a test wrap (hosted sample GLB) on every marble. This is a
 // local previewing aid for trying out custom marble art — it isn't part of the
 // tournament and doesn't affect the deterministic race result. Because
 // _marbleSkins is keyed by color-name and covers all lanes, the wrap persists
@@ -4025,7 +4025,7 @@ function _camSubject() {
 function toggleTestSkin() {
   _testSkinOn = !_testSkinOn;
   if (_testSkinOn) {
-    const skin = { glb: 'marbles/_test.glb' };
+    const skin = { glb: 'https://res.cloudinary.com/dto3ky70u/image/upload/v1788659528/marble-5289_mvoo8d.glb' };
     _marbleSkins = {};
     NAMES.forEach((n) => { _marbleSkins[n] = skin; });
     if (typeof marbles !== 'undefined' && marbles) marbles.forEach((m) => applyMarbleSkin(m));

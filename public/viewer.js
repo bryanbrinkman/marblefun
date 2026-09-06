@@ -1979,7 +1979,10 @@ function tvDirector() {
   let cam = 'overview';
   try { cam = a.getCamera() || 'overview'; } catch {}
   if (cam === 'blast' || cam === 'split') return; // never fight those modes
-  if (!live || replaying) {
+  // A "watch latest" replay gets the full TV treatment too — it's the same
+  // race footage; the director previously forced replays back to the wide
+  // overview shot.
+  if (!live && !replaying) {
     if (cam !== 'overview' && since > 4000) { a.setCamera('overview'); _tvLastCut = now; syncCamButtons(); }
     return;
   }
