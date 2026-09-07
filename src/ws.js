@@ -13,6 +13,16 @@ const { EventEmitter } = require('node:events');
 
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
+// Hard limits so a hostile or broken client can't exhaust server memory.
+// Clients only ever send tiny control messages (or nothing), so these are
+// generous. A single frame or the unparsed read buffer exceeding the cap, or a
+// client whose outbound backlog balloons because it can't keep up, gets the
+// connection closed rather than letting either buffer grow without bound.
+const MAX_FRAME_BYTES = 1 << 20; // 1 MiB: largest inbound frame we'll accept
+const MAX_READ_BUFFER = (1 << 20) + 4096; // headroom over one max frame
+const MAX_SEND_BACKLOG = 4 << 20; // 4 MiB of unflushed outbound = drop the client
+const HEARTBEAT_MS = 30000; // ping cadence; a client silent for two rounds is dead
+
 function acceptKey(key) {
   return crypto
     .createHash('sha1')
@@ -44,24 +54,62 @@ function encodeFrame(payload, opcode = 0x1) {
   return Buffer.concat([header, data]);
 }
 
+// Sentinel returned by _readFrame when a frame declares a length past the cap.
+const OVERSIZE = Symbol('oversize-frame');
+
 class WSConnection extends EventEmitter {
   constructor(socket) {
     super();
     this.socket = socket;
     this.open = true;
+    this.isAlive = true; // flipped false each heartbeat, back true on pong
     this._buf = Buffer.alloc(0);
     socket.on('data', (chunk) => this._onData(chunk));
     socket.on('close', () => this._onClose());
     socket.on('error', () => this._onClose());
   }
 
+  // A client too slow to drain what we send backs up in the kernel + Node
+  // write buffer; past a threshold that's unbounded memory, so cut it loose and
+  // let it reconnect and resync. Returns true if the connection was dropped.
+  _overBacklog() {
+    if (this.socket.writableLength > MAX_SEND_BACKLOG) {
+      this.terminate();
+      return true;
+    }
+    return false;
+  }
+
   send(str) {
     if (!this.open) return;
+    if (this._overBacklog()) return;
     try {
       this.socket.write(encodeFrame(str, 0x1));
     } catch {
       this._onClose();
     }
+  }
+
+  ping() {
+    if (!this.open) return;
+    try {
+      this.socket.write(encodeFrame(Buffer.alloc(0), 0x9));
+    } catch {
+      this._onClose();
+    }
+  }
+
+  // Immediate, un-graceful teardown (no close handshake) — for dead or abusive
+  // peers where a polite close frame would just add to a backlog we're dropping.
+  terminate() {
+    if (!this.open) return;
+    this.open = false;
+    try {
+      this.socket.destroy();
+    } catch {
+      /* ignore */
+    }
+    this.emit('close');
   }
 
   close(code = 1000) {
@@ -85,9 +133,22 @@ class WSConnection extends EventEmitter {
 
   _onData(chunk) {
     this._buf = Buffer.concat([this._buf, chunk]);
+    // A client that streams bytes without ever completing a parseable frame
+    // would otherwise grow _buf forever. Once the unparsed buffer passes the
+    // cap (which is larger than the biggest frame we accept), the peer is
+    // either hostile or broken — drop it.
+    if (this._buf.length > MAX_READ_BUFFER) {
+      this.terminate();
+      return;
+    }
     // Parse as many complete frames as the buffer holds.
     for (;;) {
       const frame = this._readFrame();
+      if (frame === OVERSIZE) {
+        // Declared frame length exceeds our cap — 1009 "message too big".
+        this.close(1009);
+        return;
+      }
       if (!frame) break;
       const { opcode, payload } = frame;
       if (opcode === 0x8) {
@@ -101,15 +162,19 @@ class WSConnection extends EventEmitter {
         } catch {
           /* ignore */
         }
+      } else if (opcode === 0xa) {
+        // pong -> peer is alive
+        this.isAlive = true;
       } else if (opcode === 0x1 || opcode === 0x0) {
         this.emit('message', payload.toString('utf8'));
       }
-      // 0xA pong / 0x2 binary ignored
+      // 0x2 binary ignored
     }
   }
 
   // Try to read one full frame off the front of the buffer. Returns null if a
-  // complete frame isn't available yet. Client frames are always masked.
+  // complete frame isn't available yet, or the OVERSIZE sentinel if the frame
+  // declares a length past our cap. Client frames are always masked.
   _readFrame() {
     const buf = this._buf;
     if (buf.length < 2) return null;
@@ -123,10 +188,14 @@ class WSConnection extends EventEmitter {
       offset += 2;
     } else if (len === 127) {
       if (buf.length < offset + 8) return null;
-      // Ignore high 32 bits.
+      // A frame claiming the high 32 bits are set is > 4 GiB — reject before we
+      // ever try to allocate for it.
+      if (buf.readUInt32BE(offset) !== 0) return OVERSIZE;
       len = buf.readUInt32BE(offset + 4);
       offset += 8;
     }
+    // Reject an oversize frame at declaration time — before allocating for it.
+    if (len > MAX_FRAME_BYTES) return OVERSIZE;
     const maskLen = masked ? 4 : 0;
     if (buf.length < offset + maskLen + len) return null;
     let payload;
@@ -151,6 +220,28 @@ class WSServer extends EventEmitter {
     this.path = path;
     this.connections = new Set();
     httpServer.on('upgrade', (req, socket) => this._onUpgrade(req, socket));
+    // Heartbeat: each round, reap any connection that didn't pong since the
+    // last round (a dead/half-open socket that TCP hasn't noticed), then ping
+    // the rest. Without this, silently-dropped clients linger in the set
+    // forever and every broadcast keeps trying to write to them. unref() so it
+    // never holds the process open on its own.
+    this._heartbeat = setInterval(() => {
+      for (const c of this.connections) {
+        if (!c.isAlive) {
+          c.terminate();
+          continue;
+        }
+        c.isAlive = false;
+        c.ping();
+      }
+    }, HEARTBEAT_MS);
+    if (this._heartbeat.unref) this._heartbeat.unref();
+  }
+
+  close() {
+    clearInterval(this._heartbeat);
+    for (const c of this.connections) c.terminate();
+    this.connections.clear();
   }
 
   _onUpgrade(req, socket) {
@@ -182,14 +273,16 @@ class WSServer extends EventEmitter {
 
   broadcast(obj) {
     const str = typeof obj === 'string' ? obj : JSON.stringify(obj);
-    const frame = encodeFrame(str, 0x1);
+    const frame = encodeFrame(str, 0x1); // encode once, reuse across clients
     for (const c of this.connections) {
-      if (c.open) {
-        try {
-          c.socket.write(frame);
-        } catch {
-          /* dropped on next tick */
-        }
+      if (!c.open) continue;
+      // Drop any client that has fallen too far behind rather than piling more
+      // onto an unbounded backlog.
+      if (c._overBacklog()) continue;
+      try {
+        c.socket.write(frame);
+      } catch {
+        /* dropped on next tick */
       }
     }
   }

@@ -175,10 +175,17 @@ async function main() {
   // All /api/admin/* routes require the ADMIN_TOKEN (header x-admin-token or
   // ?token=) when one is configured. If none is set, the API is open and the
   // status response flags it as unprotected.
+  // Fail CLOSED: with no ADMIN_TOKEN configured, the admin API is disabled
+  // entirely rather than open to the world. (Read-only /status still answers so
+  // the page can explain why controls are off.) A configured token is compared
+  // in constant time so the status endpoint can't be used as a timing oracle.
+  const adminConfigured = () => !!cfg.adminToken;
   const adminAuthed = (url) => {
-    if (!cfg.adminToken) return true;
+    if (!cfg.adminToken) return false;
     const tok = req_token_from(url);
-    return tok === cfg.adminToken;
+    const a = Buffer.from(String(tok));
+    const b = Buffer.from(cfg.adminToken);
+    return a.length === b.length && require('node:crypto').timingSafeEqual(a, b);
   };
   function req_token_from(urlObj) {
     return urlObj.searchParams.get('token') || currentReqHeaders['x-admin-token'] || '';
@@ -202,6 +209,7 @@ async function main() {
         ok: true,
         mode: 'server',
         protected: !!cfg.adminToken,
+        configured: adminConfigured(),
         authed: adminAuthed(url),
         paused: scheduler ? scheduler.isPaused() : false,
         running: !!scheduler,
@@ -212,7 +220,11 @@ async function main() {
       });
     }
 
-    if (!adminAuthed(url)) return sendJSON(res, 401, { ok: false, error: 'bad or missing admin token' });
+    if (!adminAuthed(url)) {
+      return adminConfigured()
+        ? sendJSON(res, 401, { ok: false, error: 'bad or missing admin token' })
+        : sendJSON(res, 403, { ok: false, error: 'admin API disabled: set ADMIN_TOKEN on the server to enable controls' });
+    }
 
     // CSV downloads (GET).
     if (route.startsWith('export')) {
@@ -422,6 +434,9 @@ async function main() {
     console.log('\n[server] shutting down…');
     try {
       scheduler && scheduler.stop();
+    } catch {}
+    try {
+      wss && wss.close();
     } catch {}
     try {
       if (simulator) await simulator.close();

@@ -159,13 +159,20 @@
         el('serverNote').hidden = false; el('localNote').hidden = true;
         el('statsCard').hidden = false;
         el('stMode').innerHTML = '<span class="pill running">server</span>';
-        const needTok = s.protected && !s.authed;
-        el('tokenCard').hidden = !s.protected;
-        el('tokenBanner').hidden = !needTok;
-        if (needTok) el('tokenBanner').textContent = '🔒 This admin is protected. Enter the ADMIN_TOKEN below to enable controls.';
-        else if (!s.protected) { el('tokenBanner').hidden = false; el('tokenBanner').textContent = '⚠ Admin is UNPROTECTED — anyone can control it. Set an ADMIN_TOKEN (see the note) to lock it down.'; }
+        // Controls are usable only when the server has a token AND we're authed.
+        // With no ADMIN_TOKEN configured the server refuses every mutation
+        // (fail-closed), so the buttons are disabled and we point the owner at
+        // the fix instead of pretending it's an open free-for-all.
+        const authedOk = s.protected && s.authed;
+        el('tokenCard').hidden = !s.protected; // entering a token only helps when one exists
+        el('tokenBanner').hidden = false;
+        if (!s.protected)
+          el('tokenBanner').textContent = '⚠ Admin controls are OFF — no ADMIN_TOKEN is set on the server. Set one (see the note below) and redeploy to enable them.';
+        else if (!s.authed)
+          el('tokenBanner').textContent = '🔒 This admin is protected. Enter the ADMIN_TOKEN below to enable controls.';
+        else el('tokenBanner').hidden = true;
 
-        const disabled = needTok;
+        const disabled = !authedOk;
         for (const id of ['pauseBtn','resumeBtn','restartBtn','resetBtn','dlResults','dlMarbles','dlChampions'])
           el(id).disabled = disabled;
 
