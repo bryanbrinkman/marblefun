@@ -429,6 +429,9 @@
     /* Hide the desktop scroll/drag hint on mobile (no scroll wheel anyway) */
     #hint { display: none; }
   }
+  /* Trail-mode easter egg ("P"): black void, so hide the game's own on-canvas
+     overlays too — only the marbles and their light-painting trails remain. */
+  body.trail-mode #ui, body.trail-mode #topMenu, body.trail-mode #hint { display: none !important; }
 </style>
 </head>
 <body>
@@ -619,6 +622,7 @@ const STATE = {
   closeCam: false,
   splitScreen: false,
   marbleBlast: false,
+  trailMode: false, // 'p' easter egg: black void + light-painting marble trails
 };
 
 // Children's wooden-toy palette — saturated painted accents on natural wood
@@ -2052,7 +2056,9 @@ function updateConstructIntro() {
     if (!it) continue; // cleared externally (e.g. course torn down mid-intro)
     const t = (now - it.start) / it.dur;
     if (t < 0) { obj.visible = false; _introObjs[w++] = obj; continue; }
-    obj.visible = true;
+    // While the trail-mode void is active, the intro still advances positions
+    // but never reveals track pieces (only the marbles stay visible).
+    obj.visible = STATE.trailMode ? !!(obj.userData && obj.userData.isMarble) : true;
     if (t >= 1) {
       obj.position.y = it.oy;
       obj.scale.copy(it.os);
@@ -7836,6 +7842,9 @@ window.addEventListener('keydown', (e) => {
     // Toggle marble-blast mode — single-marble player control. Kept out of the
     // menus on purpose: it's an easter egg.
     toggleMarbleBlast();
+  } else if (e.key === 'p' || e.key === 'P') {
+    // Trail mode — hidden easter egg: black void + light-painting marble trails.
+    toggleTrailMode();
   } else if (e.key === 'T' && e.shiftKey) {
     // Shift+T: preview a custom marble wrap on every ball (dev easter egg).
     toggleTestSkin();
@@ -8415,6 +8424,127 @@ function updateGhosting(dt) {
 }
 
 // =========================================================
+// TRAIL MODE — hidden "P" easter egg
+// =========================================================
+// Drops the whole scene into a black void and paints a glowing color trail
+// behind every marble, so a race renders as pure light-painting of the five
+// paths. Purely visual — no effect on physics or the deterministic result.
+let _trailGroup = null;
+let _trails = []; // per-marble { marble, positions:Float32Array, count, cap, geo }
+let _trailSavedFog = undefined;
+
+const TRAIL_CAP = 24000; // points per marble (~200s at 120Hz sampling); ample
+const TRAIL_MIN_STEP2 = 0.03 * 0.03; // only add a point after the marble moves ~3cm
+
+function _disposeTrails() {
+  if (!_trailGroup) return;
+  for (const t of _trails) {
+    _trailGroup.remove(t.line);
+    t.geo.dispose();
+    t.line.material.dispose();
+  }
+  _trails = [];
+}
+
+// (Re)build one line per current marble, in that marble's color, ready to grow.
+function _rebuildTrails() {
+  if (!_trailGroup) {
+    _trailGroup = new THREE.Group();
+    _trailGroup.renderOrder = 5;
+    scene.add(_trailGroup);
+  }
+  _disposeTrails();
+  for (const m of marbles) {
+    const positions = new Float32Array(TRAIL_CAP * 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setDrawRange(0, 0);
+    const mat = new THREE.LineBasicMaterial({
+      color: m.color,
+      transparent: true,
+      opacity: 1.0,
+      // Normal blending (not additive): five marbles share the channel, so
+      // additive washed the overlaps to white — this keeps each trail its own
+      // vivid color against the void, last-drawn winning where they cross.
+      depthWrite: false,
+      depthTest: false, // always on top of the void
+    });
+    const line = new THREE.Line(geo, mat);
+    line.frustumCulled = false; // the bounding sphere grows every frame; skip culling
+    _trailGroup.add(line);
+    _trails.push({ marble: m, positions, count: 0, cap: TRAIL_CAP, geo, line });
+  }
+}
+
+// The marble set is replaced every race; detect that and start fresh trails.
+function _trailsMatchMarbles() {
+  if (_trails.length !== marbles.length) return false;
+  for (let i = 0; i < marbles.length; i++) if (_trails[i].marble !== marbles[i]) return false;
+  return true;
+}
+
+function updateTrails() {
+  if (!STATE.trailMode) return;
+  // Keep late-appearing groups out of the void (podium reveal, a lazily-built
+  // glass case) — they can turn themselves visible after trail mode engaged.
+  if (podiumGroup && podiumGroup.visible) podiumGroup.visible = false;
+  if (_glassGroup && _glassGroup.visible) _glassGroup.visible = false;
+  if (!_trailsMatchMarbles()) _rebuildTrails();
+  for (const t of _trails) {
+    const m = t.marble;
+    if (!m || !m.pos || t.count >= t.cap) continue;
+    if (t.count > 0) {
+      const j = (t.count - 1) * 3;
+      const dx = m.pos.x - t.positions[j];
+      const dy = m.pos.y - t.positions[j + 1];
+      const dz = m.pos.z - t.positions[j + 2];
+      if (dx * dx + dy * dy + dz * dz < TRAIL_MIN_STEP2) continue; // barely moved
+    }
+    const i = t.count * 3;
+    t.positions[i] = m.pos.x;
+    t.positions[i + 1] = m.pos.y;
+    t.positions[i + 2] = m.pos.z;
+    t.count++;
+    t.geo.setDrawRange(0, t.count);
+    t.geo.attributes.position.needsUpdate = true;
+  }
+}
+
+// Enter/leave the void. On enter: hide the world (keep the marbles as the pens),
+// kill fog, paint the canvas opaque black, drop the tilt-shift blur, and start
+// trails. On leave: put everything back.
+function applyTrailMode() {
+  const on = STATE.trailMode;
+  for (const o of worldObjects) {
+    if (o.userData && o.userData.isMarble) continue; // the balls stay — they draw
+    o.visible = !on;
+  }
+  for (const m of marbles) if (m.shadowBlob) m.shadowBlob.visible = !on;
+  if (podiumGroup) podiumGroup.visible = on ? false : podiumGroup.visible;
+  if (_glassGroup) _glassGroup.visible = on ? false : _glassGroup.visible;
+
+  document.body.classList.toggle('trail-mode', on); // hides #ui / #topMenu overlays
+  const ts = document.getElementById('tiltShift');
+  if (on) {
+    if (_trailSavedFog === undefined) _trailSavedFog = scene.fog;
+    scene.fog = null;
+    renderer.setClearColor(0x000000, 1); // opaque black void (hides the CSS gradient)
+    if (ts) ts.classList.add('off');
+    _rebuildTrails();
+  } else {
+    if (_trailSavedFog !== undefined) { scene.fog = _trailSavedFog; _trailSavedFog = undefined; }
+    renderer.setClearColor(0x000000, 0); // back to transparent — CSS backdrop shows
+    if (ts) ts.classList.remove('off');
+    _disposeTrails();
+  }
+}
+
+function toggleTrailMode() {
+  STATE.trailMode = !STATE.trailMode;
+  applyTrailMode();
+}
+
+// =========================================================
 // MAIN LOOP
 // =========================================================
 const FIXED_DT = 1 / 120;
@@ -8471,6 +8601,7 @@ function animate() {
   updateGhosting(frameTime);
   updateGlassCase(frameTime);
   updateCollapse(frameTime);
+  updateTrails(frameTime);
 
   // Hidden tabs get near-zero rAF ticks from the browser already; on the ones
   // that do fire, skip the paint entirely (physics above still advances so the
