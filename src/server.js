@@ -172,24 +172,21 @@ async function main() {
   let startTournament = null; // assigned once setup succeeds
 
   // ---- admin API ---------------------------------------------------------
-  // All /api/admin/* routes require the ADMIN_TOKEN (header x-admin-token or
-  // ?token=) when one is configured. If none is set, the API is open and the
-  // status response flags it as unprotected.
+  // All /api/admin/* routes require the ADMIN_TOKEN via the x-admin-token
+  // header when one is configured. (Header only — a token in the query string
+  // would leak into access logs, proxy logs, and browser history.)
   // Fail CLOSED: with no ADMIN_TOKEN configured, the admin API is disabled
   // entirely rather than open to the world. (Read-only /status still answers so
   // the page can explain why controls are off.) A configured token is compared
   // in constant time so the status endpoint can't be used as a timing oracle.
   const adminConfigured = () => !!cfg.adminToken;
-  const adminAuthed = (url) => {
+  const adminAuthed = () => {
     if (!cfg.adminToken) return false;
-    const tok = req_token_from(url);
+    const tok = currentReqHeaders['x-admin-token'] || '';
     const a = Buffer.from(String(tok));
     const b = Buffer.from(cfg.adminToken);
     return a.length === b.length && require('node:crypto').timingSafeEqual(a, b);
   };
-  function req_token_from(urlObj) {
-    return urlObj.searchParams.get('token') || currentReqHeaders['x-admin-token'] || '';
-  }
   let currentReqHeaders = {};
 
   const csvExports = {
@@ -210,7 +207,7 @@ async function main() {
         mode: 'server',
         protected: !!cfg.adminToken,
         configured: adminConfigured(),
-        authed: adminAuthed(url),
+        authed: adminAuthed(),
         paused: scheduler ? scheduler.isPaused() : false,
         running: !!scheduler,
         simFailed,
@@ -220,7 +217,7 @@ async function main() {
       });
     }
 
-    if (!adminAuthed(url)) {
+    if (!adminAuthed()) {
       return adminConfigured()
         ? sendJSON(res, 401, { ok: false, error: 'bad or missing admin token' })
         : sendJSON(res, 403, { ok: false, error: 'admin API disabled: set ADMIN_TOKEN on the server to enable controls' });
@@ -343,6 +340,11 @@ async function main() {
         console.error('[admin] error:', e && e.message);
         return sendJSON(res, 500, { ok: false, error: 'admin action failed' });
       }
+    }
+    // Any other /api/* path is an unknown endpoint — answer JSON, not the
+    // static handler's HTML "Not found" (API clients expect JSON).
+    if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+      return sendJSON(res, 404, { ok: false, error: 'unknown endpoint' });
     }
     serveStatic(req, res);
    } catch (e) {

@@ -149,9 +149,25 @@
         if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
         return j;
       }
-      function download(type) {
-        const q = new URLSearchParams({ type }); if (token) q.set('token', token);
-        window.location.href = '/api/admin/export?' + q.toString();
+      async function download(type) {
+        // Fetch with the token in the header (never the URL) and save via a
+        // blob, so the admin token can't leak into history/logs.
+        try {
+          const r = await fetch('/api/admin/export?type=' + encodeURIComponent(type),
+            { headers: token ? { 'x-admin-token': token } : {} });
+          if (!r.ok) { toast('Download failed (' + r.status + ')', true); return; }
+          const blob = await r.blob();
+          const cd = r.headers.get('content-disposition') || '';
+          const m = /filename="?([^"]+)"?/.exec(cd);
+          const name = (m && m[1]) || (type + '.csv');
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = name;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        } catch (e) {
+          toast('Download failed', true);
+        }
       }
 
       function renderServer(s) {
