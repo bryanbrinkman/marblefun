@@ -67,17 +67,31 @@
   </p>
 
   <div class="card">
-    <h2>Why it's build-on-able</h2>
+    <h2>Why it's build-on-able (and fair)</h2>
     <p>
-      Every race is a <b>pure function of two published integers</b>: a track seed
-      (builds the course) and a race seed (drives the physics). Both are broadcast
-      ~30 seconds <i>before</i> the race runs, and the server, every viewer, and your
-      code can reproduce the exact same finishing order from them — the sim is
-      deterministic and open source
+      Every race is a <b>pure function of two integers</b>: a track seed
+      (builds the course) and a race seed (drives the physics). The server, every
+      viewer, and your code reproduce the exact same finishing order from them —
+      the sim is deterministic and open source
       (<a href="https://github.com/bryanbrinkman/marblefun" rel="noopener">github.com/bryanbrinkman/marblefun</a>).
-      Nobody — including the house — can change an outcome without changing the
-      seeds everyone already saw. That's the whole trust model, and it's verifiable.
     </p>
+    <p>
+      Because the result is computable from the seeds, the seeds are disclosed
+      <b>as late as you actually need them</b>, never sooner:
+    </p>
+    <ul>
+      <li>The <b>track seed</b> is published at announce (T−30s) so clients can
+        build the course during the countdown. The course alone doesn't decide a
+        winner.</li>
+      <li>The <b>race seed</b> — which determines the outcome — is withheld until
+        the gate opens (<code>race_start</code>). Before that instant nobody, the
+        house included, can compute the result.</li>
+      <li>The whole tournament derives from one <b>master seed</b>, kept sealed
+        behind a published <code>commit</code> = <code>sha256(masterSeed ‖ salt)</code>
+        and revealed only when the tournament ends. So no one can precompute future
+        races either, and afterward anyone can re-run the entire bracket from the
+        revealed seed and confirm every result against that commit.</li>
+    </ul>
   </div>
 
   <div class="card">
@@ -85,13 +99,16 @@
     <div class="timeline">
       <div class="tl"><div class="dot"><i></i></div><div class="body">
         <b>race_announced</b> <span class="when">T−30s</span><br />
-        <span class="muted">Seeds, the 5-marble roster, and <code>scheduledStart</code> (epoch ms) go public.
-        Open your prediction window here.</span>
+        <span class="muted">The 5-marble roster, the <b>track seed</b>, and
+        <code>scheduledStart</code> (epoch ms) go public — <i>not</i> the race seed.
+        You know the field and the course but not the outcome: this is your
+        prediction window.</span>
       </div></div>
       <div class="tl"><div class="dot"><i></i></div><div class="body">
         <b>race_start</b> <span class="when">T+0</span><br />
-        <span class="muted">The gate opens. Close your window — the outcome is now
-        physically unfolding (and was always determined by the seeds).</span>
+        <span class="muted">The gate opens and the <b>race seed</b> is revealed.
+        Close your window — the outcome is now determined and computable, and the
+        marbles are visibly running it out.</span>
       </div></div>
       <div class="tl"><div class="dot"><i></i></div><div class="body">
         <b>race_result</b> <span class="when">≈ T+60–120s</span><br />
@@ -132,9 +149,12 @@ ws.onmessage = (e) =&gt; {
 
     <div class="ep"><span class="method">GET</span><span class="path">/api/state</span></div>
     <p class="muted">The full tournament snapshot — same payload a fresh viewer boots from:
-    all rounds and races (seeds, rosters, results so far), standings for all 100 marbles,
+    all rounds and races (rosters, results so far, and each race's seeds <i>as they're
+    disclosed</i> — see the fairness rules above), standings for all 100 marbles,
     the current race phase, the champion if crowned, <code>serverNow</code> and
-    <code>announceLeadMs</code>.</p>
+    <code>announceLeadMs</code>. The <code>tournament</code> object carries the
+    <code>commit</code> while running, and <code>masterSeed</code> + <code>commitSalt</code>
+    once it's <code>complete</code>.</p>
 
     <div class="ep"><span class="method">GET</span><span class="path">/api/next</span></div>
     <p class="muted">Just the upcoming (or in-progress) race — the essentials for a prediction window:</p>
@@ -149,10 +169,10 @@ ws.onmessage = (e) =&gt; {
     "key": "heats:7",
     "roundKey": "heats",           // heats = qualifying, semis = finals, final = championship
     "indexInRound": 7,
-    "trackSeed": 1970251534,       // course = f(trackSeed)
-    "raceSeed": 3324241325,        // outcome = f(trackSeed, raceSeed)
+    "trackSeed": 1970251534,       // course = f(trackSeed) — present from announce
+    // "raceSeed" appears only once status is "running": outcome = f(trackSeed, raceSeed)
     "scheduledStart": 1786000023456,
-    "status": "announced",
+    "status": "announced",         // pending → announced → running → done
     "roster": [
       { "slot": 0, "marbleId": 42, "marbleName": "Golden Rocket", "lane": "RED", "color": "#c94a36" },
       …4 more
@@ -184,12 +204,12 @@ ws.onmessage = (e) =&gt; {
     <table>
       <tr><th>type</th><th>when</th><th>payload highlights</th></tr>
       <tr><td><code>snapshot</code></td><td>on connect</td><td>same shape as <code>/api/state</code></td></tr>
-      <tr><td><code>round_built</code></td><td>a round's bracket forms</td><td><code>round.races[]</code> with seeds + rosters</td></tr>
-      <tr><td><code>race_announced</code></td><td>T−30s</td><td><code>race</code> (seeds, roster, <code>scheduledStart</code>), <code>serverNow</code></td></tr>
-      <tr><td><code>race_start</code></td><td>gate opens</td><td><code>raceKey</code>, <code>serverNow</code></td></tr>
+      <tr><td><code>round_built</code></td><td>a round's bracket forms</td><td><code>round.races[]</code> (rosters; seeds only as disclosed)</td></tr>
+      <tr><td><code>race_announced</code></td><td>T−30s</td><td><code>race</code> (roster, <code>trackSeed</code>, <code>scheduledStart</code> — no <code>raceSeed</code>), <code>serverNow</code></td></tr>
+      <tr><td><code>race_start</code></td><td>gate opens</td><td><code>raceKey</code>, <code>trackSeed</code>, <code>raceSeed</code> (revealed now), <code>serverNow</code></td></tr>
       <tr><td><code>race_result</code></td><td>after the finish</td><td><code>raceKey</code>, <code>result[]</code> (ranks/times), fresh <code>standings</code></td></tr>
       <tr><td><code>paused</code></td><td>admin pause/resume</td><td><code>paused: true|false</code></td></tr>
-      <tr><td><code>tournament_complete</code></td><td>champion crowned</td><td><code>champion {id, name}</code></td></tr>
+      <tr><td><code>tournament_complete</code></td><td>champion crowned</td><td><code>champion {id, name}</code>, <code>masterSeed</code>, <code>commitSalt</code>, <code>commit</code></td></tr>
     </table>
     <p class="muted" style="margin-top:8px">Reconnect with backoff and re-sync from
     <code>/api/state</code> — snapshots are idempotent.</p>
@@ -204,6 +224,14 @@ marbleAPI.newCourse(1970251534);          // trackSeed from the API
 const sim = marbleAPI.simulateRace(3324241325);  // raceSeed from the API
 console.log(sim.results);                 // identical order + times to race_result</code></pre>
     <p class="muted">This is what the server itself does — it has no other source of truth.</p>
+    <p class="muted" style="margin-top:8px">To check the tournament wasn't rigged mid-run, verify the
+    reveal against the <code>commit</code> you saw while it was live:</p>
+<pre><code>// masterSeed + commitSalt arrive in tournament_complete (and /api/state once "complete")
+const buf = new Uint8Array(4); new DataView(buf.buffer).setUint32(0, masterSeed &gt;&gt;&gt; 0);
+const bytes = new Uint8Array([...buf, ...salt.match(/../g).map(h =&gt; parseInt(h, 16))]);
+const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
+  .map(b =&gt; b.toString(16).padStart(2, '0')).join('');
+console.log(digest === commit);           // true → the seed was fixed before the tournament began</code></pre>
   </div>
 
   <div class="card">

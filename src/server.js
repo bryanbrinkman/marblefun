@@ -80,7 +80,22 @@ function sendJSON(res, code, obj) {
 }
 
 function serveStatic(req, res) {
-  let urlPath = decodeURIComponent(req.url.split('?')[0]);
+  let urlPath;
+  try {
+    // decodeURIComponent throws URIError on a malformed %-sequence (e.g. "/%").
+    // Left uncaught, the request never gets a response and the socket dangles
+    // until the client times out — a trivial socket-exhaustion DoS.
+    urlPath = decodeURIComponent(req.url.split('?')[0]);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain' }).end('Bad request');
+    return;
+  }
+  // A NUL byte makes fs.stat/readFile throw ("path must be … without null
+  // bytes"). Reject outright — no legitimate asset path contains one.
+  if (urlPath.indexOf('\0') !== -1) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' }).end('Bad request');
+    return;
+  }
   if (urlPath === '/') urlPath = '/index.html';
   // Prevent path traversal.
   let filePath = path.join(PUBLIC_DIR, path.normalize(urlPath).replace(/^(\.\.[/\\])+/, ''));
@@ -246,6 +261,7 @@ async function main() {
   }
 
   const httpServer = http.createServer((req, res) => {
+   try {
     const url = new URL(req.url, 'http://localhost');
     if (req.method === 'OPTIONS' && url.pathname.startsWith('/api/')) {
       res.writeHead(204, {
@@ -317,6 +333,17 @@ async function main() {
       }
     }
     serveStatic(req, res);
+   } catch (e) {
+    // No request may ever escape without a response — an unanswered socket
+    // leaks until the client times out. Any synchronous throw (a malformed
+    // URL that trips `new URL`, an unexpected state error) becomes a 400/500
+    // here instead of a hung connection.
+    console.error('[server] request handler error:', e && e.message);
+    try {
+      if (!res.headersSent) res.writeHead(400, { 'Content-Type': 'text/plain' });
+      res.end('Bad request');
+    } catch {}
+   }
   });
 
   const wss = new WSServer(httpServer, '/ws');

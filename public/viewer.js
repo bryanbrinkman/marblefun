@@ -65,6 +65,12 @@ async function ensureCourse(trackSeed) {
 
 async function startReplay(race) {
   if (startedRaces.has(race.key)) return;
+  // The server reveals raceSeed only at gate-open (it rides the race_start
+  // message), so a race can be on-screen and counting down before its outcome
+  // seed exists here. Until it arrives, don't start — the race_start handler
+  // (or a reconnect snapshot of the now-running race) supplies it and calls
+  // back in. trackSeed arrives earlier, at announce, for course pre-build.
+  if (race.raceSeed == null || race.trackSeed == null) return;
   startedRaces.add(race.key);
   // A "watch latest" replay yields the stage to the live race — flash a TV
   // channel-change so the hard cut reads as "we're going live now".
@@ -281,7 +287,11 @@ function renderCurrent(race) {
   const isFinal = race.roundKey === 'final';
   title.classList.toggle('final', isFinal);
   title.textContent = raceLabel(race);
-  el('seedline').textContent = `track ${race.trackSeed} · race ${race.raceSeed}`;
+  // Seeds are disclosed progressively (trackSeed at announce, raceSeed at the
+  // gate), so show only what's been revealed rather than "undefined".
+  el('seedline').textContent =
+    (race.trackSeed != null ? `track ${race.trackSeed}` : 'track —') +
+    (race.raceSeed != null ? ` · race ${race.raceSeed}` : '');
   // The corner print link always exports the course on screen.
   const pl = el('printLink');
   if (pl) pl.href = '/print?seed=' + race.trackSeed;
@@ -1445,7 +1455,13 @@ function onMessage(msg) {
     case 'race_start': {
       clockOffset = msg.serverNow - Date.now();
       const race = model.racesByKey.get(msg.raceKey);
-      if (race) startReplay(race);
+      if (race) {
+        // The outcome seed is revealed here, at the gate. Fold it (and the
+        // final trackSeed) into the race before replaying.
+        if (msg.trackSeed != null) race.trackSeed = msg.trackSeed;
+        if (msg.raceSeed != null) race.raceSeed = msg.raceSeed;
+        startReplay(race);
+      }
       break;
     }
     case 'race_result': {

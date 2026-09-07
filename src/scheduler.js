@@ -1,7 +1,26 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const { Tournament } = require('./tournament');
 const { deriveSeed } = require('./seeds');
+
+// Provably-fair commitment. The entire tournament is a pure function of its
+// masterSeed, so publishing the masterSeed (or any future race's seeds) up
+// front lets anyone precompute every result — fatal for anything built on top
+// (predictions, betting). Instead we publish sha256(masterSeed || salt) at the
+// start and reveal masterSeed + salt only when the tournament completes: proof
+// the seed was fixed in advance, with nothing precomputable while it matters.
+function makeCommitment(masterSeed) {
+  const salt = crypto.randomBytes(32).toString('hex');
+  const buf = Buffer.alloc(4);
+  buf.writeUInt32BE(masterSeed >>> 0, 0);
+  const commit = crypto
+    .createHash('sha256')
+    .update(buf)
+    .update(salt, 'hex')
+    .digest('hex');
+  return { salt, commit };
+}
 
 // =========================================================
 // Scheduler — drives the tournament on a live timeline
@@ -48,6 +67,19 @@ class Scheduler {
     this._idle = false; // true when paused and waiting between races
     this.current = null; // { race, phase, scheduledStart }
     this._persistedRounds = new Set();
+    // Fairness commitment for THIS tournament's masterSeed (see makeCommitment).
+    const c = makeCommitment(this.t.masterSeed);
+    this.commit = c.commit;
+    this.commitSalt = c.salt;
+  }
+
+  // The masterSeed and its salt are revealed ONLY once the tournament is over,
+  // so a finished tournament is fully verifiable (re-run it from masterSeed and
+  // check every result) while a running one gives up nothing precomputable.
+  seedReveal() {
+    return this.t.isComplete()
+      ? { masterSeed: this.t.masterSeed, commitSalt: this.commitSalt }
+      : {};
   }
 
   isPaused() {
@@ -144,6 +176,12 @@ class Scheduler {
         this.broadcast({
           type: 'tournament_complete',
           champion: { id: this.t.champion, name: this.t.marbleName(this.t.champion) },
+          // Reveal: sha256(masterSeed || commitSalt) must equal the `commit`
+          // published in every prior snapshot — proof the seed was fixed from
+          // the start. Re-run the tournament from masterSeed to verify results.
+          commit: this.commit,
+          masterSeed: this.t.masterSeed,
+          commitSalt: this.commitSalt,
           serverNow: this.now(),
         });
         // Endless mode: hold on the champion for the intermission, then hand
@@ -193,7 +231,16 @@ class Scheduler {
         race.status = 'running';
         this.current = { raceKey: race.key, phase: 'running', scheduledStart };
         this.db.markStarted(race.dbId, this.now());
-        this.broadcast({ type: 'race_start', raceKey: race.key, serverNow: this.now() });
+        // raceSeed rides the START signal — the gate is opening now, so this is
+        // the first moment the outcome is meant to be knowable. trackSeed rode
+        // the earlier announce so the course was already built.
+        this.broadcast({
+          type: 'race_start',
+          raceKey: race.key,
+          trackSeed: race.trackSeed,
+          raceSeed: race.raceSeed,
+          serverNow: this.now(),
+        });
       }, Math.max(0, scheduledStart - this.now()));
 
       // Reveal once the marbles would have finished on screen.
@@ -299,18 +346,32 @@ class Scheduler {
   // ---- views ------------------------------------------------------------
 
   raceView(race) {
-    return {
+    const status = race.status || 'pending';
+    const done = !!race.result;
+    // Seed disclosure ladder — a race's seeds go public only as late as the
+    // clients actually need them, so its outcome can't be precomputed early:
+    //   • pending   → neither seed (nothing to reveal yet).
+    //   • announced → trackSeed only, so clients pre-build the course during
+    //                 the countdown. The course alone doesn't decide a winner.
+    //   • running/done → raceSeed too: the gate has opened, so the marbles'
+    //                 outcome is now determined and replayable/verifiable.
+    const view = {
       key: race.key,
       roundKey: race.roundKey,
       roundTitle: race.roundTitle,
       indexInRound: race.indexInRound,
-      trackSeed: race.trackSeed,
-      raceSeed: race.raceSeed,
-      status: race.status || 'pending',
+      status,
       scheduledStart: race.scheduledStart || null,
       roster: race.roster,
       result: race.result || null,
     };
+    if (status === 'announced' || status === 'running' || status === 'done' || done) {
+      view.trackSeed = race.trackSeed;
+    }
+    if (status === 'running' || status === 'done' || done) {
+      view.raceSeed = race.raceSeed;
+    }
+    return view;
   }
 
   // Who is still in contention. A marble is 'alive' only while its
@@ -348,7 +409,10 @@ class Scheduler {
       paused: this.paused,
       tournament: {
         id: this.tournamentId,
-        masterSeed: this.t.masterSeed,
+        // masterSeed stays sealed behind `commit` until the tournament ends
+        // (seedReveal() adds masterSeed + commitSalt only when complete).
+        commit: this.commit,
+        ...this.seedReveal(),
         status: this.t.isComplete() ? 'complete' : 'running',
         champion: this.t.champion
           ? { id: this.t.champion, name: this.t.marbleName(this.t.champion) }
