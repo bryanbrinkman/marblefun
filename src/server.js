@@ -342,8 +342,10 @@ async function main() {
       }
     }
     // Any other /api/* path is an unknown endpoint — answer JSON, not the
-    // static handler's HTML "Not found" (API clients expect JSON).
-    if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+    // static handler's HTML "Not found" (API clients expect JSON). NOTE: the
+    // bare "/api" is the docs PAGE (clean-URL → api.html), so it must fall
+    // through to the static handler — only "/api/…" subpaths are endpoints.
+    if (url.pathname.startsWith('/api/')) {
       return sendJSON(res, 404, { ok: false, error: 'unknown endpoint' });
     }
     serveStatic(req, res);
