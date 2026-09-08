@@ -502,17 +502,20 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 /* ---------- pre-race experience ---------- */
 .prerace {
   position: fixed; inset: 0; z-index: 18; display: flex;
-  align-items: center; justify-content: center; padding: 70px 14px 90px;
+  /* Dock to the top-middle, just under the menu bar, instead of dead-center —
+     so the card never blocks the race playing out below it. */
+  align-items: flex-start; justify-content: center; padding: 62px 14px 90px;
   pointer-events: none; /* the idle 3D scene stays interactive around the card */
 }
 .prerace[hidden] { display: none; }
 .pr-card {
   pointer-events: auto; text-align: center;
-  width: min(430px, 94vw); padding: 16px 18px 14px; border-radius: 18px;
-  background: linear-gradient(180deg, rgba(14, 18, 28, 0.78), rgba(10, 13, 20, 0.86));
+  width: min(360px, 92vw); padding: 12px 16px 12px; border-radius: 14px;
+  /* Lighter/more see-through so the action stays visible behind it. */
+  background: linear-gradient(180deg, rgba(14, 18, 28, 0.5), rgba(10, 13, 20, 0.58));
   border: 1px solid var(--line); box-shadow: var(--shadow);
   -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
-  animation: prIn 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: prIn 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes prIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 /* One combined context line: STATE · phase flavor. */
@@ -611,7 +614,7 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 .pr-how[hidden] { display: none; }
 
 /* Compact between-races card: countdown + label + actions only. */
-.pr-card.compact { padding: 15px 18px 12px; width: min(390px, 92vw); }
+.pr-card.compact { padding: 11px 16px 10px; width: min(330px, 90vw); }
 /* Compact keeps the starters — calling the winner is the between-races game. */
 .pr-card.compact .pr-journey { display: none; }
 
