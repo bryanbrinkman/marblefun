@@ -3948,6 +3948,34 @@ function ensureGLTFLoader() {
   });
   return _gltfLoaderPromise;
 }
+// Max texture anisotropy (computed once) for crisp minified skins at distance.
+let _maxAniso = 1;
+try { _maxAniso = renderer.capabilities && renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1; } catch {}
+
+// Keep a skinned marble bright at any size. Two things make custom skins read
+// as BLACK BALLS from a distance: (1) a metallic PBR material has nothing to
+// reflect without an environment map, so it's near-black except for a direct
+// specular dot — which shrinks away as the marble gets small; (2) fine texture
+// detail minifies toward its average and, with poor mip filtering, muddies.
+// Fix: hold metalness low (so lighting is diffuse, not reflection-dependent),
+// give the surface a modest self-illumination from its own texture so the
+// brightness floor is size-independent, and use full anisotropy + mipmaps.
+function _brightenSkinMaterial(mat) {
+  if (!mat) return;
+  if ('metalness' in mat && mat.metalness != null) mat.metalness = Math.min(mat.metalness, 0.1);
+  if ('roughness' in mat && mat.roughness != null) mat.roughness = Math.min(mat.roughness, 0.85);
+  if (mat.map) {
+    mat.map.anisotropy = _maxAniso;
+    mat.map.generateMipmaps = true;
+    mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+    mat.map.needsUpdate = true;
+    if (mat.emissive) { mat.emissive.set(0xffffff); mat.emissiveMap = mat.map; mat.emissiveIntensity = 0.4; }
+  } else if (mat.emissive && mat.color) {
+    mat.emissive.copy(mat.color); mat.emissiveIntensity = 0.3;
+  }
+  mat.needsUpdate = true;
+}
+
 function applyMarbleSkin(m) {
   if (!_marbleSkins || !m || !m.mesh) return;
   const skin = _marbleSkins[m.name];
@@ -3962,8 +3990,7 @@ function applyMarbleSkin(m) {
         const mat = m.mesh.material;
         mat.map = tex;
         mat.color.set(0xffffff);
-        if (mat.emissive) mat.emissive.set(0x000000);
-        mat.needsUpdate = true;
+        _brightenSkinMaterial(mat); // self-illuminate so it doesn't darken at distance
       });
     } else if (skin.glb) {
       // Clone the loaded model onto the marble, auto-fitting to marble size.
@@ -3974,6 +4001,19 @@ function applyMarbleSkin(m) {
       const place = (template) => {
         if (!m.mesh || !template) return;
         const model = template.clone(true);
+        // Condition the GLB's materials so the marble stays bright at any
+        // distance (metallic skins otherwise read as black balls when small).
+        model.traverse((n) => {
+          if (!n.isMesh || !n.material) return;
+          const mats = Array.isArray(n.material) ? n.material : [n.material];
+          // Clone so we don't mutate the shared cached template's materials.
+          const conditioned = mats.map((mm) => {
+            const c = mm.clone();
+            _brightenSkinMaterial(c);
+            return c;
+          });
+          n.material = Array.isArray(n.material) ? conditioned : conditioned[0];
+        });
         // EXACT vertex bounds of the model as authored (its own transforms
         // included). Box3.setFromObject transforms per-node local AABBs
         // (conservative), so any rotation inside the GLB inflates the box and
@@ -4032,7 +4072,16 @@ function applyMarbleSkin(m) {
 // Remove any skin from a marble, restoring its default colored sphere.
 function _clearSkin(m) {
   if (!m || !m.mesh) return;
-  if (m.skinModel) { m.mesh.remove(m.skinModel); m.skinModel = null; }
+  if (m.skinModel) {
+    // Dispose the per-marble cloned materials (their textures are shared from
+    // the cached GLB template, so leave those alone).
+    m.skinModel.traverse((n) => {
+      if (!n.isMesh || !n.material) return;
+      (Array.isArray(n.material) ? n.material : [n.material]).forEach((mm) => mm.dispose());
+    });
+    m.mesh.remove(m.skinModel);
+    m.skinModel = null;
+  }
   const mat = m.mesh.material;
   if (mat) {
     mat.visible = true;
