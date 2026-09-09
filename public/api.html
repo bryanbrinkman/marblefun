@@ -136,7 +136,7 @@ console.log(next.race.raceKey, next.race.roster, new Date(next.race.scheduledSta
 const ws = new WebSocket('wss://marblefun.fly.dev/ws');
 ws.onmessage = (e) =&gt; {
   const msg = JSON.parse(e.data);
-  if (msg.type === 'race_announced') openWindow(msg.race);   // seeds + roster + start time
+  if (msg.type === 'race_announced') openWindow(msg.race);   // track seed + roster + start time
   if (msg.type === 'race_start')     closeWindow(msg.raceKey);
   if (msg.type === 'race_result')    settle(msg.raceKey, msg.result); // [{rank, marbleId, …}]
 };</code></pre>
@@ -174,7 +174,7 @@ ws.onmessage = (e) =&gt; {
     "scheduledStart": 1786000023456,
     "status": "announced",         // pending → announced → running → done
     "roster": [
-      { "slot": 0, "marbleId": 42, "marbleName": "Golden Rocket", "lane": "RED", "color": "#c94a36" },
+      { "slot": 0, "marbleId": 42, "marbleName": "Royal Flush", "lane": "RED", "color": "#c94a36" },
       …4 more
     ],
     "result": null                 // filled in once revealed
@@ -190,7 +190,7 @@ ws.onmessage = (e) =&gt; {
   "trackSeed": 2094821771, "raceSeed": 912004183,
   "scheduledStart": 1785999900000, "startedAt": 1785999900012, "revealedAt": 1785999978450,
   "results": [
-    { "rank": 1, "marbleId": 73, "marbleName": "Cosmic Drifter", "lane": "GREEN", "color": "#4d9c56", "timeSec": 58.3 },
+    { "rank": 1, "marbleId": 73, "marbleName": "Molder", "lane": "GREEN", "color": "#4d9c56", "timeSec": 58.3 },
     …
   ]
 } ] }</code></pre>

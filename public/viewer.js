@@ -230,8 +230,8 @@ function runCountdown(race) {
 // ---- rendering -----------------------------------------------------------
 
 const orderedRaces = () => model.rounds.flatMap((r) => r.races);
-const shortName = (n) => n || ''; // marbles have real names now ("Purple Orbit")
-const numOf = (id) => String(id).padStart(3, '0'); // compact numeric badge
+const shortName = (n) => n || ''; // marbles have real names now (e.g. "Royal Flush")
+const numOf = (id) => String(id).padStart(2, '0'); // compact numeric badge
 
 // Meaningful race labels: spectators shouldn't need to decode "Heat 4 · 7/25".
 function raceLabel(race) {
@@ -529,7 +529,7 @@ function renderStandings() {
     if (m.status === 'alive') alive++;
     const d = document.createElement('div');
     d.className = 'm ' + m.status;
-    d.textContent = String(m.id).padStart(3, '0');
+    d.textContent = String(m.id).padStart(2, '0');
     d.title = `${m.name} — ${m.status}`;
     wrap.appendChild(d);
   }
@@ -751,12 +751,12 @@ function buildPickerGrid() {
     return;
   }
   grid.innerHTML = model.standings
-    .filter((m) => !q || String(m.id).padStart(3, '0').includes(q) || (m.name || '').toLowerCase().includes(q))
+    .filter((m) => !q || String(m.id).padStart(2, '0').includes(q) || (m.name || '').toLowerCase().includes(q))
     .map((m) => {
       const cls =
         (m.status === 'eliminated' ? ' out' : m.status === 'champion' ? ' champ' : '') +
         (m.id === followId ? ' followed' : '');
-      const label = (m.status === 'champion' ? '🏆' : '') + String(m.id).padStart(3, '0');
+      const label = (m.status === 'champion' ? '🏆' : '') + String(m.id).padStart(2, '0');
       return `<button class="pk${cls}" data-id="${m.id}" title="${m.name} — ${m.status}">${label}</button>`;
     })
     .join('');
@@ -915,7 +915,7 @@ function renderPrMarble() {
     return;
   }
   const st = followedStanding();
-  const num = String(followId).padStart(3, '0');
+  const num = String(followId).padStart(2, '0');
   const skin = marbleManifest && (marbleManifest[followId] || marbleManifest[String(followId)]);
   const ballStyle = skin && skin.img
     ? `background-image:url('${skin.img}');background-size:cover;background-position:center`

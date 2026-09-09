@@ -81,10 +81,30 @@
       this._buildHeats();
     }
     static marbleNameFor(id) {
-      const ADJ = ['Purple', 'Golden', 'Cosmic', 'Turbo', 'Midnight', 'Ruby', 'Frosty', 'Electric', 'Lucky', 'Shadow'];
-      const NOUN = ['Orbit', 'Comet', 'Thunder', 'Pebble', 'Rocket', 'Whirl', 'Blaze', 'Drifter', 'Nova', 'Bandit'];
+      const NAMES = [
+        'World Peace', 'ETH Saver', 'Cadence / Babka', 'Lore-y', 'Horsin Around',
+        'Appreciatoor', 'Batty', 'High Quality', 'Insert Coin', 'Meow Meow',
+        'Squiggy', 'Boomer', 'Mad Shatter', 'Get That Bread', 'Final Lap',
+        'Bodega', 'Cowboy', 'Viber', 'Curiousity', 'Phishy',
+        'Brunk', 'Ray Of Light', 'Party In The Back', 'Blocky', 'Thrillr',
+        'Lenticular', 'Blue Devil', 'Whiskers', 'Java', 'Rainbow',
+        'BadaBing', 'Presidente', 'Shopper', 'Spicy', 'Roar',
+        'Feathers', 'Lindy', 'Fresh Prince', 'Flight', 'Scorreggia',
+        'Toad', 'Royal Flush', 'King', 'Dimensional', 'QQLer',
+        'Anon', 'Tunneler', 'Glitchy', 'Espresso', 'Blaze It',
+        'Curatooor', 'Baller', 'Punky', 'Double Deuce', 'Doomer',
+        'High T', 'Doc', 'Solo', 'Windy', 'Walker',
+        'Combustion', 'Crusty', 'Mysterio', 'Survivor', 'Sargent',
+        'Moon God', 'Jacked Up', 'Complainoor', 'Bonsai', 'Acidic',
+        'Multitudes', 'Spaced Out', 'Molder', 'Bork', 'Dialer',
+        'Spidey', 'Shutter', 'Maper', 'Chomp', 'Coach',
+        'Sparkly', 'Peeled Out', 'Aerys II', 'Grumpy', 'Versal',
+        'Geared Up', 'Red Nose', 'Rotten', 'Serenity', 'Fluffy',
+        'Mickey', 'Phoenix', 'Geometric', 'Marmy', 'Burnout',
+        'Entertainer', 'Relaxer', 'Cowboy', 'Refunder', 'Detroiter',
+      ];
       const idx = (((id - 1) % 100) + 100) % 100;
-      return ADJ[idx % 10] + ' ' + NOUN[Math.floor(idx / 10)];
+      return NAMES[idx];
     }
     marbleName(id) {
       const m = this.marbles.find((x) => x.id === id);
