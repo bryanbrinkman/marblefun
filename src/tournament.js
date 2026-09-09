@@ -87,7 +87,7 @@ class Tournament {
   // noun, so every combination appears exactly once across the field.
   static marbleNameFor(id) {
     const NAMES = [
-      'World Peace', 'ETH Saver', 'Cadence / Babka', 'Lore-y', 'Horsin Around',
+      'World Peace', 'ETH Saver', 'Babka', 'Lore-y', 'Horsin Around',
       'Appreciatoor', 'Batty', 'High Quality', 'Insert Coin', 'Meow Meow',
       'Squiggy', 'Boomer', 'Mad Shatter', 'Get That Bread', 'Final Lap',
       'Bodega', 'Cowboy', 'Viber', 'Curiousity', 'Phishy',
