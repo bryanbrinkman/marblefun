@@ -7016,21 +7016,20 @@ function _hitOut(ctx, pan) {
   return _masterBus;
 }
 
-// Pool of pre-enveloped noise buffers, lazily generated on first clack. Each
-// buffer is a 100ms burst of white noise with an exponential decay baked into
-// the samples — sharper attack than a gain envelope can produce. Eight buffers
-// with envelope rates spanning the old per-hit random range (30-44) keep the
-// "punchiness" variety; per-hit we just pick one at random instead of
-// generating ~4800 fresh samples.
+// Pool of short "tap" transients, lazily generated on first clack. A real
+// impact's noise component is the few milliseconds of contact — a crisp tick,
+// not a 100 ms hiss. Each buffer is 12 ms of white noise with a steep
+// exponential decay baked in (sharper attack than a gain ramp gives). The pool
+// spans a range of decay rates so consecutive hits aren't sample-identical.
 const _noiseBufPool = [];
 function _getNoiseBuf(ctx) {
   if (_noiseBufPool.length === 0) {
-    const noiseLen = 0.1;
+    const noiseLen = 0.012;
     const sampleCount = Math.floor(ctx.sampleRate * noiseLen);
     for (let b = 0; b < 8; b++) {
       const buf = ctx.createBuffer(1, sampleCount, ctx.sampleRate);
       const nd = buf.getChannelData(0);
-      const envRate = 30 + (b / 7) * 14;   // 30..44 evenly across the pool
+      const envRate = 380 + (b / 7) * 220;   // 380..600 /s — 2-4 ms of "tick"
       for (let i = 0; i < sampleCount; i++) {
         const t = i / ctx.sampleRate;
         nd[i] = (Math.random() * 2 - 1) * Math.exp(-t * envRate);
@@ -7042,30 +7041,46 @@ function _getNoiseBuf(ctx) {
 }
 
 // Surface profiles — each collision type has distinct acoustic + physical
-// character. Real materials differ audibly and physically:
-//   wood   — wooden channel walls. Absorbent (low restitution), deep warm thunk.
-//   peg    — hard dowel bumpers. Springy, brighter/harder knock (smaller mass,
-//            higher resonant modes).
-//   marble — glass-on-glass. Highly elastic, short bright "click" (glass is
-//            stiff, so its modes sit far higher and ring shorter).
-//   floor  — flat drop onto the channel floor. Deepest thud, longest decay
-//            (the whole tile panel resonates).
+// character. `restitution` feeds the DETERMINISTIC physics (server + every
+// client) — never touch it for sound reasons. Everything else is acoustic:
+//   f0Lo/f0Hi — fundamental range (Hz). Which block you hit picks the pitch.
+//   modes     — partial ratios above the fundamental. Wood blocks and dowels are
+//               free-free bars: their modes sit at ~1 : 2.76 : 5.4 (bar theory),
+//               NOT the harmonic 1:2:3 of strings — that inharmonicity is what
+//               the ear reads as "wooden" rather than "musical". Glass-on-glass
+//               marbles are tiny stiff spheres: modes are far higher and denser.
+//   modeGain  — relative level of each partial (fundamental first).
+//   t60       — decay time (s) of the fundamental at a firm hit. Higher partials
+//               die faster (internal damping rises with frequency), so the
+//               tone darkens as it fades — the signature of a damped solid.
+//   tap       — level of the contact tick, and its brightness (lowpass Hz).
+//   body      — level of a short low "thump" (the whole panel/dowel moving).
+//   drop      — starting pitch offset of the fundamental (ratio) that settles
+//               in ~10 ms. Stiff contact briefly raises the effective stiffness
+//               → the audible "th-ock" pitch drop at the attack.
 const SURFACES = {
-  wood:   { restitution: 0.55, freqLo: 100, freqHi: 280,  lpLo: 1100, lpHi: 1800, decayMult: 1.0,  noiseVol: 0.55 },
-  peg:    { restitution: 0.85, freqLo: 260, freqHi: 480,  lpLo: 1800, lpHi: 2600, decayMult: 0.8,  noiseVol: 0.5  },
-  marble: { restitution: 0.84, freqLo: 750, freqHi: 1300, lpLo: 3000, lpHi: 4500, decayMult: 0.45, noiseVol: 0.4  },
-  floor:  { restitution: 0.0,  freqLo: 80,  freqHi: 190,  lpLo: 800,  lpHi: 1300, decayMult: 1.35, noiseVol: 0.6  },
+  wood:   { restitution: 0.55, f0Lo: 190, f0Hi: 340,  modes: [1, 2.76, 5.40], modeGain: [1.0, 0.42, 0.14],
+            t60: 0.11, tap: 0.55, tapLp: 3200, body: 0.35, bodyHz: 95,  drop: 1.18 },
+  peg:    { restitution: 0.85, f0Lo: 420, f0Hi: 700,  modes: [1, 2.76, 5.40], modeGain: [1.0, 0.55, 0.22],
+            t60: 0.08, tap: 0.6,  tapLp: 4800, body: 0.15, bodyHz: 140, drop: 1.12 },
+  marble: { restitution: 0.84, f0Lo: 1900, f0Hi: 3200, modes: [1, 1.51, 2.33], modeGain: [1.0, 0.5, 0.3],
+            t60: 0.035, tap: 0.5, tapLp: 8000, body: 0.0,  bodyHz: 300, drop: 1.05 },
+  floor:  { restitution: 0.0,  f0Lo: 120, f0Hi: 210,  modes: [1, 2.76, 5.40], modeGain: [1.0, 0.30, 0.08],
+            t60: 0.16, tap: 0.4,  tapLp: 2200, body: 0.6,  bodyHz: 70,  drop: 1.22 },
 };
 
 // Play a short percussive impact hit. Synthesized on the fly — no asset files.
-// Real impacts are dominated by a noise transient with inharmonic resonance,
-// not a clean pitched tone. We model this with:
-//   1. A burst of filtered noise (the impact transient)
-//   2. Two SHORT, DETUNED resonators at non-integer-ratio frequencies, decaying
-//      very fast — these give the material character without sounding like a
-//      tuned instrument
-// No pitch sweeps, no oscillators that ring out — percussion doesn't sustain.
-// `surf` selects the material profile (frequency band, brightness, decay).
+// Modal synthesis: a struck solid rings at a handful of exponentially-decaying
+// partials whose frequencies are fixed by its geometry and material. We model
+// each hit as:
+//   1. A 2-4 ms noise tick — the actual contact (glass meeting wood).
+//   2. Three decaying sine partials at the material's inharmonic mode ratios,
+//      each with its own decay (higher = faster). The fundamental starts a
+//      touch sharp and drops into place (contact stiffness).
+//   3. A low, quick "body" thump — the panel/dowel itself lurching.
+// Harder hits are louder AND brighter: upper partials + tap scale faster than
+// the fundamental, the way real impacts excite more high modes with energy.
+// `surf` selects the material profile.
 function playClack(intensity, surf, pan) {
   if (!_soundEnabled || _silentSim) return;
   const ctx = _ensureAudio();
@@ -7074,76 +7089,86 @@ function playClack(intensity, surf, pan) {
   const s = surf || SURFACES.wood;
   const now = ctx.currentTime;
   const vol = Math.min(1, Math.max(0.05, intensity));
+  // Loudness is not linear in impact speed — soft touches are much quieter
+  // than the linear map suggests. sqrt-ish curve keeps the grazes gentle.
+  const amp = 0.14 + 0.86 * Math.pow(vol, 1.6);
+  // Brightness: 0 at the softest hit, 1 at the hardest. Drives how much of the
+  // upper partials and tick get through.
+  const bright = Math.pow(vol, 0.8);
 
-  // Random pitch per hit within the surface's band so consecutive hits read as
-  // distinctly different blocks rather than copies of the same sound. Also
-  // randomize the inharmonic mode ratio (2.5-3.1) so each hit's character
-  // shifts too.
-  const baseFreq = s.freqLo + Math.random() * (s.freqHi - s.freqLo);
-  const modeRatio = 2.5 + Math.random() * 0.6;       // inharmonic 2nd mode
-  // Brightness varies per hit within the surface's band — models hitting
-  // different surface points (a dense knot rings brighter, a soft spot duller).
-  // Harder hits also skew brighter: more impact energy excites higher modes.
-  const lpCutoff = s.lpLo + Math.random() * (s.lpHi - s.lpLo) + vol * 500;
-  // Decay times scale with the surface profile — glass clicks die fast, floor
-  // thuds linger.
-  const dm = s.decayMult;
-  const noiseDecay = (0.055 + Math.random() * 0.04) * dm;
-  const res1Decay  = (0.05  + Math.random() * 0.05) * dm;
-  const res2Decay  = (0.03  + Math.random() * 0.02) * dm;
+  // Fundamental drawn from the surface band. Per-hit random keeps hits from
+  // reading as copies; the band itself is what makes it a "block" vs "dowel".
+  const f0 = s.f0Lo + Math.random() * (s.f0Hi - s.f0Lo);
+  // Slight per-hit smear of the mode ratios — no two real blocks are identical.
+  const smear = 0.97 + Math.random() * 0.06;
 
-  // ---------- Noise transient (the dominant sound) ----------
-  // Noise buffers are pre-generated in a small pool (see _getNoiseBuf) instead
-  // of allocating + filling ~4800 samples on EVERY hit — with five marbles
-  // rattling through a plinko field that allocation churn was measurable.
-  // Each pooled buffer has a different baked-in envelope rate, and all the
-  // per-hit filter/frequency randomization below still applies, so hits stay
-  // audibly varied.
-  const noiseBuf = _getNoiseBuf(ctx);
-  const noise = ctx.createBufferSource();
-  noise.buffer = noiseBuf;
+  // ---------- Contact tick ----------
+  const tick = ctx.createBufferSource();
+  tick.buffer = _getNoiseBuf(ctx);
+  const tickLp = ctx.createBiquadFilter();
+  tickLp.type = 'lowpass';
+  tickLp.frequency.value = s.tapLp * (0.6 + 0.4 * bright);
+  tickLp.Q.value = 0.7;
+  const tickHp = ctx.createBiquadFilter();
+  tickHp.type = 'highpass';
+  tickHp.frequency.value = Math.max(150, f0 * 0.8);
+  const tickG = ctx.createGain();
+  tickG.gain.value = amp * s.tap * (0.35 + 0.65 * bright);
+  tick.connect(tickHp).connect(tickLp).connect(tickG).connect(out);
+  tick.start(now);
 
-  // Lowpass filter — wood is "warm," not "bright". Cuts the harsh high-end of
-  // the white noise leaving just the woody mid-body. Per-hit cutoff makes
-  // each impact slightly different in timbre.
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.value = lpCutoff;
-  lp.Q.value = 0.6;
-  // Highpass — removes sub-bass rumble that would muddy the impact. Tracks the
-  // surface band so high-pitched glass clicks don't carry irrelevant lows.
-  const hp = ctx.createBiquadFilter();
-  hp.type = 'highpass';
-  hp.frequency.value = Math.max(90, s.freqLo * 0.6);
-  hp.Q.value = 0.5;
+  // ---------- Modal partials ----------
+  // Sum into one gain so the whole hit shares an amplitude curve; each partial
+  // has its own decay ramp on top.
+  const hitBus = ctx.createGain();
+  hitBus.gain.value = amp * 0.55;
+  hitBus.connect(out);
+  const nModes = s.modes.length;
+  for (let k = 0; k < nModes; k++) {
+    const ratio = k === 0 ? 1 : s.modes[k] * smear;
+    const fk = f0 * ratio;
+    if (fk > 16000) continue;
+    // Upper partials: quieter on soft hits (they need energy to excite) and
+    // decaying faster (damping grows with frequency).
+    const gk = s.modeGain[k] * (k === 0 ? 1 : (0.25 + 0.75 * bright));
+    const t60 = s.t60 * (0.85 + Math.random() * 0.3) / Math.pow(ratio, 0.55);
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    if (k === 0 && s.drop > 1) {
+      // Contact-stiffness pitch drop: starts sharp, lands on f0 within ~10 ms.
+      o.frequency.setValueAtTime(fk * s.drop, now);
+      o.frequency.exponentialRampToValueAtTime(fk, now + 0.010);
+    } else {
+      o.frequency.value = fk;
+    }
+    const g = ctx.createGain();
+    // 1 ms attack avoids a click at the sine start, then exponential decay to
+    // -60 dB at t60 (0.001 = -60 dB).
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(gk, now + 0.001);
+    g.gain.exponentialRampToValueAtTime(gk * 0.001, now + 0.001 + t60);
+    o.connect(g).connect(hitBus);
+    o.start(now);
+    o.stop(now + t60 + 0.02);
+  }
 
-  const noiseGain = ctx.createGain();
-  noiseGain.gain.setValueAtTime(vol * s.noiseVol, now);
-  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + noiseDecay);
-  noise.connect(hp).connect(lp).connect(noiseGain).connect(out);
-  noise.start(now);
-
-  // ---------- Inharmonic resonators (the "wood" character) ----------
-  // Two narrowband resonators at non-integer-ratio frequencies — wood vibrates
-  // in complex inharmonic modes, NOT in the perfect harmonic series of strings
-  // or pipes. Each is excited by the noise burst, decays fast.
-  const makeResonator = (freq, gainMult, decay) => {
-    const r = ctx.createBiquadFilter();
-    r.type = 'bandpass';
-    r.frequency.value = freq;
-    r.Q.value = 20;  // narrow band = clear resonance
-    const rNoise = ctx.createBufferSource();
-    // Reuse the same noise buffer to excite the resonator.
-    rNoise.buffer = noiseBuf;
-    const rGain = ctx.createGain();
-    rGain.gain.setValueAtTime(vol * gainMult, now);
-    rGain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
-    rNoise.connect(r).connect(rGain).connect(out);
-    rNoise.start(now);
-  };
-  makeResonator(baseFreq, 0.45, res1Decay);
-  // Resonator gain varies slightly so the inharmonic character drifts per hit.
-  makeResonator(baseFreq * modeRatio, 0.12 + Math.random() * 0.08, res2Decay);
+  // ---------- Body thump ----------
+  // The struck object as a whole displaces: a fast, low, barely-pitched bump.
+  // What turns a "tick" into a "thunk". Skipped for glass-on-glass.
+  if (s.body > 0) {
+    const b = ctx.createOscillator();
+    b.type = 'sine';
+    b.frequency.setValueAtTime(s.bodyHz * 1.6, now);
+    b.frequency.exponentialRampToValueAtTime(s.bodyHz, now + 0.025);
+    const bg = ctx.createGain();
+    const bDur = 0.045 + 0.03 * bright;
+    bg.gain.setValueAtTime(0.0001, now);
+    bg.gain.exponentialRampToValueAtTime(amp * s.body, now + 0.002);
+    bg.gain.exponentialRampToValueAtTime(0.0001, now + bDur);
+    b.connect(bg).connect(out);
+    b.start(now);
+    b.stop(now + bDur + 0.02);
+  }
 }
 
 // Per-marble cooldown — collisions can fire many times in adjacent frames
@@ -7167,20 +7192,39 @@ function maybeClack(marble, intensity, surf) {
 // a looping filtered-noise chain whose loudness, brightness and pitch track its
 // speed, and whose pan tracks its on-screen position. Gains sit at 0 whenever
 // a marble is airborne, finished, or the race hasn't started.
+//
+// Texture matters more than level here. Smooth lowpassed noise is what wind
+// and jet engines sound like — the old version read as "a plane". A glass
+// marble on wood grain is GRANULAR: a dense stream of micro-taps as the sphere
+// rides over the grain, whose rate and brightness rise with speed. So the loop
+// is built from sparse, quickly-damped impulses (crackle), sent through a
+// bandpass parked in the woody midrange, and given a speed-tracked tremolo so
+// it "brrr"s like a rolling ball rather than hissing.
 const _rollChains = [];
 function _ensureRollChains(ctx) {
   if (_rollChains.length) return;
-  const len = Math.floor(ctx.sampleRate * 1.5);
+  const sr = ctx.sampleRate;
+  const len = Math.floor(sr * 1.5);
   for (let i = 0; i < 5; i++) {
-    // Rumbly one-pole-lowpassed noise loop, with the seam faded so it doesn't tick.
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const buf = ctx.createBuffer(1, len, sr);
     const d = buf.getChannelData(0);
-    let acc = 0;
+    // Sparse impulse train (~900 grains/s, random amplitude) through a fast
+    // one-pole lowpass so each grain is a tiny "tk" rather than a single-sample
+    // spike. Different density per marble so the five don't phase-lock.
+    const density = (820 + i * 60) / sr;
+    let acc = 0, sq = 0;
     for (let s = 0; s < len; s++) {
-      acc += 0.06 * ((Math.random() * 2 - 1) - acc);
-      d[s] = acc * 3.2;
+      const hit = Math.random() < density ? (Math.random() * 2 - 1) : 0;
+      acc += 0.35 * (hit - acc);
+      d[s] = acc;
+      sq += acc * acc;
     }
-    const fade = Math.floor(ctx.sampleRate * 0.02);
+    // Normalize to a fixed RMS so the gain values below mean the same thing
+    // regardless of how sparse the grain train came out.
+    const norm = 0.4 / Math.max(1e-6, Math.sqrt(sq / len));
+    for (let s = 0; s < len; s++) d[s] *= norm;
+    // Fade the loop seam so it doesn't tick.
+    const fade = Math.floor(sr * 0.02);
     for (let s = 0; s < fade; s++) {
       const k = s / fade;
       d[s] *= k;
@@ -7190,21 +7234,35 @@ function _ensureRollChains(ctx) {
     src.buffer = buf;
     src.loop = true;
     src.playbackRate.value = 0.9 + i * 0.05; // slight per-marble detune
+    // Bandpass in the woody midrange: no sub rumble (that's the "plane"), no
+    // hiss above ~2 kHz.
     const filt = ctx.createBiquadFilter();
-    filt.type = 'lowpass';
-    filt.frequency.value = 500;
-    filt.Q.value = 0.4;
+    filt.type = 'bandpass';
+    filt.frequency.value = 520;
+    filt.Q.value = 0.9;
+    // Speed-tracked tremolo: the rolling "brrr". A gain node sitting at 0.65
+    // with an LFO adding ±0.35 on top.
+    const trem = ctx.createGain();
+    trem.gain.value = 0.65;
+    const lfo = ctx.createOscillator();
+    lfo.type = 'triangle';
+    lfo.frequency.value = 14 + i * 1.3;
+    const lfoDepth = ctx.createGain();
+    lfoDepth.gain.value = 0.35;
+    lfo.connect(lfoDepth).connect(trem.gain);
+    lfo.start();
     const gain = ctx.createGain();
     gain.gain.value = 0;
     let pan = null;
+    src.connect(filt); filt.connect(trem); trem.connect(gain);
     if (ctx.createStereoPanner) {
       pan = ctx.createStereoPanner();
-      src.connect(filt); filt.connect(gain); gain.connect(pan); pan.connect(_masterBus);
+      gain.connect(pan); pan.connect(_masterBus);
     } else {
-      src.connect(filt); filt.connect(gain); gain.connect(_masterBus);
+      gain.connect(_masterBus);
     }
     src.start();
-    _rollChains.push({ src, filt, gain, pan, level: 0 });
+    _rollChains.push({ src, filt, lfo, gain, pan, level: 0 });
   }
 }
 function _muteRolls() {
@@ -7223,13 +7281,15 @@ function updateRollSounds(dt) {
     if (m && STATE.raceStarted && !m.finished && m.vel) {
       const spd = m.vel.length();
       // Rolling contact ≈ moving but not free-falling (big |vy| vs speed = airborne).
-      if (spd > 0.7 && Math.abs(m.vel.y) < Math.max(2.2, spd * 0.55)) {
-        // Kept quiet AND dark: the old version swept the filter up to ~2.2 kHz
-        // at speed, which read as a jet engine. Capping the brightness low
-        // keeps it a faint wooden rumble under the clacks.
-        target = Math.min(0.028, 0.004 + spd * 0.0028);
-        ch.filt.frequency.value = 250 + Math.min(650, spd * 55);
-        ch.src.playbackRate.value = 0.85 + Math.min(0.5, spd * 0.035) + i * 0.03;
+      if (spd > 1.0 && Math.abs(m.vel.y) < Math.max(2.2, spd * 0.55)) {
+        // Deliberately faint: a bed under the clacks, never the foreground. The
+        // ceiling is half what it was — the clacks carry the scene; this just
+        // tells you the marbles are moving between them.
+        const k = Math.min(1, (spd - 1.0) / 9);       // 0 at rest → 1 at full tilt
+        target = 0.002 + 0.012 * k * k;               // quadratic: slow = near-silent
+        ch.filt.frequency.value = 420 + 480 * k;      // 420..900 Hz, stays woody
+        ch.src.playbackRate.value = 0.8 + 0.55 * k + i * 0.03;
+        ch.lfo.frequency.value = 9 + 26 * k + i * 1.3; // grain rate rises with speed
         if (ch.pan) ch.pan.pan.value = _panForPos(m.pos);
       }
     }
