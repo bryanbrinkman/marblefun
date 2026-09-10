@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /marble_run.html
+Disallow: /api/
+
+Sitemap: https://marblerun.fun/sitemap.xml

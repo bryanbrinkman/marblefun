@@ -205,12 +205,21 @@
           const prev = furthest.get(s.marbleId);
           if (!prev || race.roundIdx > prev.roundIdx) furthest.set(s.marbleId, race);
         }
+    const finalDrawn = t.rounds.some((r) => r.key === 'final');
     return t.marbles.map((m) => {
       let status;
       if (t.champion === m.id) status = 'champion';
       else {
         const race = furthest.get(m.id);
-        status = race && race.result ? 'eliminated' : 'alive';
+        if (!race || !race.result) status = 'alive';
+        else if (race.roundKey === 'final') status = 'eliminated';
+        else {
+          const row = race.result.find((r) => r.marbleId === m.id);
+          const rank = row ? row.rank : 99;
+          if (rank === 1) status = 'alive'; // won → advances (next round not drawn yet)
+          else if (race.roundKey === 'semis' && rank === 2 && !finalDrawn) status = 'alive'; // wildcard pending
+          else status = 'eliminated';
+        }
       }
       return { id: m.id, name: m.name, status };
     });

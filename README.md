@@ -93,14 +93,31 @@ Environment knobs:
 | Var | Default | Meaning |
 |-----|---------|---------|
 | `PORT` | `8080` | HTTP + WebSocket port |
-| `MASTER_SEED` | `424242` | Reproduces an entire tournament |
+| `MASTER_SEED` | `424242` | Seeds the first tournament of a fresh database (every later one — including after a restart — draws a random seed) |
 | `ANNOUNCE_LEAD_MS` | `30000` | How far ahead races are announced |
 | `INTER_RACE_GAP_MS` | `6000` | Pause between a reveal and the next announcement |
+| `INTERMISSION_MS` | `30000` | How long the champion is celebrated before the next tournament starts |
 | `DB_PATH` | `data/tournament.db` | SQLite file |
 | `FAST_DEMO=1` | – | Short lead / gap for demos |
 | `RACE_WATCH_OVERRIDE_MS` | – | Reveal after a fixed delay instead of the real race length (testing) |
 
-`GET /api/state` returns the full live snapshot as JSON.
+Public read API (documented in full at `/api`):
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /api/state` | the full live snapshot (same shape as the WebSocket `snapshot`) |
+| `GET /api/next` | the upcoming/current race with roster, disclosed seeds and start time |
+| `GET /api/history?limit=50` | recent completed races with seeds + results |
+| `GET /api/careers` | lifetime per-marble stats (races, wins, podiums, titles) |
+| `GET /api/champions?limit=50` | tournament winners; `history[]` adds each champion's road + the final's order |
+| `GET /api/hall-of-fame` | all-time aggregates: title table, repeat champions, longest streak, current holder |
+
+Pages: `/` (watch), `/gallery` (the 100 marbles), `/champions` (history), `/api` (docs),
+`/print` (3D-print a course), `/admin` (token-protected controls).
+
+The viewer's auto-camera lives in `public/tv-director.js` — a pure, unit-tested
+module whose `RULES` (minimum shot length, phase thresholds, how often the
+viewer's own marble gets a shot) can be tuned without touching the viewer.
 
 ## Test
 

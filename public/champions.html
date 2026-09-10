@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Champions — Marble Run</title>
+<meta name="description" content="Every Marble Run tournament champion: the road through qualifying, the semifinals and the final, title counts, repeat winners and streaks.">
+<link rel="canonical" href="https://marblerun.fun/champions">
+<meta name="theme-color" content="#0a0d14">
+<meta property="og:site_name" content="Marble Run">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Champions — Marble Run">
+<meta property="og:description" content="Every tournament champion, the road each one took to the crown, and the all-time title table.">
+<meta property="og:url" content="https://marblerun.fun/champions">
+<meta property="og:image" content="https://marblerun.fun/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Champions — Marble Run">
+<meta name="twitter:description" content="Every tournament champion, the road each one took to the crown, and the all-time title table.">
+<meta name="twitter:image" content="https://marblerun.fun/og.png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<style>
+  :root {
+    --bg: #0a0d14; --panel: rgba(20, 26, 40, 0.72); --panel2: rgba(27, 34, 51, 0.8);
+    --line: rgba(120, 140, 175, 0.22); --line2: #33405c; --text: #eaf0f8; --muted: #97a4ba;
+    --accent: #ffcf5c; --accent2: #ff9d3c; --live: #35d07f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  body {
+    background:
+      radial-gradient(70% 40% at 50% 0%, rgba(255, 207, 92, 0.12), transparent 60%),
+      radial-gradient(40% 30% at 90% 30%, rgba(91, 192, 222, 0.08), transparent 60%),
+      var(--bg);
+    min-height: 100vh;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 18px 18px calc(60px + env(safe-area-inset-bottom, 0px)); }
+  .crumbs { font-size: 12px; margin-bottom: 14px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .crumbs a { text-decoration: none; color: var(--muted); font-weight: 700; }
+  .crumbs a:hover { color: var(--accent); }
+
+  /* ---- masthead: the current holder, big ---- */
+  .mast { text-align: center; padding: 10px 0 6px; }
+  .mast .eyebrow { font-size: 11px; font-weight: 900; letter-spacing: 0.36em; color: var(--muted); }
+  .mast h1 { margin: 6px 0 0; font-size: clamp(30px, 6vw, 54px); font-weight: 900; letter-spacing: 0.04em; line-height: 1; }
+  .mast h1 span { background: linear-gradient(180deg, #fff, #ffe39a 55%, var(--accent2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .holder {
+    margin: 22px auto 0; max-width: 620px; display: flex; align-items: center; gap: 18px; text-align: left;
+    padding: 16px 18px; border-radius: 18px; border: 1px solid rgba(255, 207, 92, 0.45);
+    background: linear-gradient(165deg, rgba(58, 48, 18, 0.7), rgba(20, 26, 40, 0.75));
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 207, 92, 0.15);
+    text-decoration: none;
+  }
+  .holder:hover { border-color: var(--accent); }
+  .holder .ball { width: 84px; height: 84px; flex: none; }
+  .holder .hk { font-size: 10px; font-weight: 900; letter-spacing: 0.3em; color: var(--accent); }
+  .holder .hn { font-size: clamp(22px, 4.5vw, 34px); font-weight: 900; line-height: 1.1; letter-spacing: 0.01em; }
+  .holder .hn small { color: var(--accent); font-size: 0.72em; margin-right: 8px; }
+  .holder .hs { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+  .holder.none { justify-content: center; color: var(--muted); font-weight: 700; border-color: var(--line); background: var(--panel); }
+
+  .ball {
+    --c1: #ffcf5c; --c2: #8a6a1c; border-radius: 50%; position: relative; flex: none;
+    background-size: cover; background-position: center;
+    background-image:
+      radial-gradient(circle at 33% 27%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.4) 12%, rgba(255,255,255,0) 32%),
+      radial-gradient(circle at 50% 42%, var(--c1) 0%, var(--c2) 100%);
+    box-shadow: inset -6px -10px 18px rgba(0, 0, 0, 0.4), 0 8px 22px rgba(0, 0, 0, 0.5);
+  }
+
+  /* ---- stat tiles ---- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 26px 0 8px; }
+  .tile { padding: 14px 14px 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); text-align: center; }
+  .tile b { display: block; font-size: 26px; font-weight: 900; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; }
+  .tile b.gold { color: var(--accent); }
+  .tile i { display: block; font-style: normal; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); margin-top: 6px; font-weight: 800; }
+  .tile small { display: block; margin-top: 4px; color: var(--muted); font-size: 11.5px; }
+
+  /* ---- sections ---- */
+  h2 { font-size: 12px; font-weight: 900; letter-spacing: 0.3em; text-transform: uppercase; color: var(--muted); margin: 34px 0 12px; display: flex; align-items: center; gap: 12px; }
+  h2::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+  /* title table */
+  .table { display: flex; flex-direction: column; gap: 6px; }
+  .trow {
+    display: grid; grid-template-columns: 34px 44px 1fr auto; align-items: center; gap: 12px;
+    padding: 9px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); text-decoration: none;
+  }
+  .trow:hover { border-color: var(--accent); }
+  .trow .rk { font-weight: 900; color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; }
+  .trow:first-child .rk { color: var(--accent); }
+  .trow .ball { width: 34px; height: 34px; }
+  .trow .nm { font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trow .nm small { color: var(--muted); font-weight: 700; margin-right: 6px; }
+  .trow .tt { display: flex; align-items: center; gap: 4px; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cups { letter-spacing: -2px; }
+
+  /* timeline */
+  .timeline { display: flex; flex-direction: column; gap: 12px; }
+  .champ {
+    position: relative; display: grid; grid-template-columns: 96px 1fr; gap: 16px; align-items: start;
+    padding: 16px; border-radius: 18px; background: var(--panel); border: 1px solid var(--line);
+  }
+  .champ:first-child { border-color: rgba(255, 207, 92, 0.45); background: linear-gradient(165deg, rgba(58, 48, 18, 0.45), var(--panel)); }
+  .champ .left { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+  .champ .ball { width: 72px; height: 72px; }
+  .champ .tid { font-size: 10px; font-weight: 900; letter-spacing: 0.2em; color: var(--muted); }
+  .champ .tid b { display: block; font-size: 18px; color: #fff; letter-spacing: 0; }
+  .champ .head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .champ .name { font-size: clamp(20px, 3.6vw, 28px); font-weight: 900; text-decoration: none; letter-spacing: 0.01em; }
+  .champ .name:hover { color: var(--accent); }
+  .champ .name small { color: var(--accent); margin-right: 8px; }
+  .champ .when { color: var(--muted); font-size: 12px; font-weight: 700; }
+  .champ .badge { font-size: 10px; font-weight: 900; letter-spacing: 0.16em; padding: 3px 8px; border-radius: 999px; background: rgba(255, 207, 92, 0.14); border: 1px solid rgba(255, 207, 92, 0.4); color: var(--accent); }
+  .road { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .step { display: flex; flex-direction: column; min-width: 86px; padding: 7px 10px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); }
+  .step i { font-style: normal; font-size: 9px; letter-spacing: 0.2em; color: var(--muted); font-weight: 800; }
+  .step b { font-size: 15px; font-weight: 900; color: var(--accent); line-height: 1.25; }
+  .step small { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .step.wild b { color: var(--live); }
+  .arrow { color: var(--line2); font-weight: 900; font-size: 18px; }
+  .final { margin-top: 12px; }
+  .final .fh { font-size: 9.5px; font-weight: 900; letter-spacing: 0.24em; color: var(--muted); margin-bottom: 6px; }
+  .frow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 3px 0; }
+  .frow .pos { width: 14px; color: var(--muted); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .frow .sw { width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(255,255,255,.35); flex: none; }
+  .frow a { text-decoration: none; font-weight: 700; }
+  .frow a:hover { color: var(--accent); }
+  .frow .t { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .frow.win a { color: var(--accent); font-weight: 900; }
+  .seed { margin-top: 10px; font: 10.5px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); word-break: break-all; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 10px; font-weight: 700; }
+  .empty a { color: var(--accent); }
+  .foot { margin-top: 40px; text-align: center; color: var(--muted); font-size: 12px; }
+  .foot a { color: var(--accent); text-decoration: none; font-weight: 800; }
+
+  @media (max-width: 560px) {
+    .wrap { padding: 14px 12px calc(50px + env(safe-area-inset-bottom, 0px)); }
+    .champ { grid-template-columns: 1fr; gap: 10px; }
+    .champ .left { flex-direction: row; justify-content: flex-start; text-align: left; }
+    .champ .ball { width: 56px; height: 56px; }
+    .champ .tid b { display: inline; margin-left: 6px; font-size: 15px; }
+    .holder { gap: 12px; padding: 14px; }
+    .holder .ball { width: 64px; height: 64px; }
+    .trow { grid-template-columns: 26px 34px 1fr auto; gap: 8px; padding: 8px 10px; }
+    .step { min-width: 74px; padding: 6px 8px; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">← Back to the races</a>
+    <a href="/gallery">🔮 Marble gallery</a>
+  </nav>
+
+  <header class="mast">
+    <div class="eyebrow">MARBLE RUN · HALL OF CHAMPIONS</div>
+    <h1><span>EVERY CHAMPION. EVERY ROAD.</span></h1>
+    <a class="holder none" id="holder" href="/champions">Loading the record books…</a>
+  </header>
+
+  <section class="tiles" id="tiles" aria-label="All-time numbers"></section>
+
+  <h2>Title table</h2>
+  <div class="table" id="titles"></div>
+
+  <h2>Tournament by tournament</h2>
+  <div class="timeline" id="timeline"></div>
+
+  <p class="foot">Every race is deterministic and replayable from its seeds — see the <a href="/api">public API</a> to verify any result yourself.</p>
+</main>
+
+<script src="/tournament-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const pad = (id) => String(id).padStart(2, '0');
+  const nameFor = window.TournamentCore.Tournament.marbleNameFor;
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  const ordinal = (n) => { const t = n % 100; return n + (t >= 11 && t <= 13 ? 'th' : { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th'); };
+  const fmtDate = (ms) => (ms ? new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
+
+  // Same per-id palette the gallery uses, so a marble looks the same everywhere.
+  const HUES = [[272,68,60],[44,90,58],[248,70,62],[16,88,56],[226,55,42],[350,78,52],[192,65,74],[203,95,55],[135,62,50],[280,14,36]];
+  function hueColor(id) {
+    const idx = (((id - 1) % 100) + 100) % 100;
+    const [h, s, l] = HUES[idx % 10];
+    const v = Math.floor(idx / 10);
+    return `hsl(${(h + v * 7) % 360} ${s}% ${Math.max(28, Math.min(72, l + (v % 3) * 4 - 4))}%)`;
+  }
+  let manifest = null;
+  function ballStyle(id, color) {
+    const sk = manifest && (manifest[id] || manifest[String(id)]);
+    if (sk && sk.img) return `background-image:url('${esc(sk.img)}');background-size:cover;background-position:center`;
+    const c = color || hueColor(id);
+    return `--c1:${c};--c2:color-mix(in srgb, ${c} 45%, #000)`;
+  }
+  const roundLabel = (p) => (p.roundKey === 'final' ? 'FINAL' : p.roundKey === 'semis' ? `SEMI ${p.indexInRound + 1}` : `HEAT ${p.indexInRound + 1}`);
+
+  function renderHolder(hof, history) {
+    const h = $('holder');
+    const cur = hof && hof.currentChampion;
+    if (!cur) {
+      h.className = 'holder none';
+      h.textContent = 'No champion has been crowned yet — the first tournament is still running.';
+      h.href = '/';
+      return;
+    }
+    const row = history.find((t) => t.tournamentId === cur.tournamentId);
+    const color = row && row.final && row.final[0] ? row.final[0].color : null;
+    const titles = (hof.mostTitles.find((m) => m.id === cur.id) || {}).titles || 1;
+    h.className = 'holder';
+    h.href = '/gallery#' + cur.id;
+    h.innerHTML =
+      `<span class="ball" style="${ballStyle(cur.id, color)}"></span>` +
+      `<span><span class="hk">🏆 REIGNING CHAMPION</span>` +
+      `<div class="hn"><small>#${pad(cur.id)}</small>${esc(cur.name)}</div>` +
+      `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''}${titles > 1 ? ` · ${titles}× champion` : ''}</div></span>`;
+  }
+
+  function renderTiles(hof) {
+    const t = $('tiles');
+    if (!hof) { t.innerHTML = ''; return; }
+    const top = hof.mostTitles[0];
+    const tiles = [
+      { b: hof.tournamentsCompleted, i: 'Tournaments', s: `${hof.racesRun} races run` },
+      { b: hof.distinctChampions, i: 'Different champions', s: hof.repeatChampions.length ? `${hof.repeatChampions.length} repeat winner${hof.repeatChampions.length > 1 ? 's' : ''}` : 'no repeat winners yet' },
+      { b: top ? `${top.titles}×` : '—', i: 'Most titles', s: top ? `#${pad(top.id)} ${esc(top.name)}` : 'nobody yet', gold: true },
+      { b: hof.longestStreak ? `${hof.longestStreak.len}` : '1', i: 'Longest streak', s: hof.longestStreak ? `#${pad(hof.longestStreak.id)} ${esc(hof.longestStreak.name)} back-to-back` : 'no back-to-back champions yet' },
+    ];
+    t.innerHTML = tiles.map((x) => `<div class="tile"><b class="${x.gold ? 'gold' : ''}">${x.b}</b><i>${x.i}</i><small>${x.s}</small></div>`).join('');
+  }
+
+  function renderTitles(hof) {
+    const wrap = $('titles');
+    const rows = hof ? hof.mostTitles : [];
+    if (!rows.length) { wrap.innerHTML = '<div class="empty">The title table fills in as tournaments finish.</div>'; return; }
+    wrap.innerHTML = rows
+      .map((m, i) =>
+        `<a class="trow" href="/gallery#${m.id}"><span class="rk">${i + 1}</span>` +
+        `<span class="ball" style="${ballStyle(m.id)}"></span>` +
+        `<span class="nm"><small>#${pad(m.id)}</small>${esc(m.name)}</span>` +
+        `<span class="tt"><span class="cups" aria-hidden="true">${'🏆'.repeat(Math.min(m.titles, 5))}</span>${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
+      )
+      .join('');
+  }
+
+  function renderTimeline(history, hof) {
+    const wrap = $('timeline');
+    if (!history.length) {
+      wrap.innerHTML = '<div class="empty">No tournament has finished yet. <a href="/">Watch the one running now →</a></div>';
+      return;
+    }
+    const titleCount = new Map();
+    // Count titles in chronological order so each card shows "2nd title" etc.
+    history.slice().reverse().forEach((t) => {
+      const n = (titleCount.get(t.champion.id) || 0) + 1;
+      titleCount.set(t.champion.id, n);
+      t._nth = n;
+    });
+    wrap.innerHTML = history
+      .map((t) => {
+        const color = t.final && t.final[0] ? t.final[0].color : null;
+        const isWild = t.path.some((p) => p.roundKey === 'semis' && p.rank === 2);
+        const road = t.path
+          .map((p) => `<span class="step${p.roundKey === 'semis' && p.rank === 2 ? ' wild' : ''}"><i>${roundLabel(p)}</i><b>${p.rank ? ordinal(p.rank) : '—'}</b><small>${p.timeSec != null ? p.timeSec.toFixed(2) + 's' : 'DNF'}</small></span>`)
+          .join('<span class="arrow" aria-hidden="true">›</span>');
+        const finalRows = (t.final || [])
+          .map((f) => `<div class="frow${f.rank === 1 ? ' win' : ''}"><span class="pos">${f.rank}</span><span class="sw" style="background:${esc(f.color)}"></span><a href="/gallery#${f.marbleId}">#${pad(f.marbleId)} ${esc(f.marbleName)}</a><span class="t">${f.timeSec != null ? f.timeSec.toFixed(2) + 's' : 'DNF'}</span></div>`)
+          .join('');
+        return (
+          `<article class="champ">` +
+          `<div class="left"><span class="ball" style="${ballStyle(t.champion.id, color)}"></span><div class="tid">TOURNAMENT<b>${t.tournamentId}</b></div></div>` +
+          `<div>` +
+          `<div class="head"><a class="name" href="/gallery#${t.champion.id}"><small>#${pad(t.champion.id)}</small>${esc(t.champion.name)}</a>` +
+          (t._nth > 1 ? `<span class="badge">${ordinal(t._nth).toUpperCase()} TITLE</span>` : '') +
+          (isWild ? `<span class="badge">WILDCARD RUN</span>` : '') +
+          `<span class="when">${fmtDate(t.completedAt)}</span></div>` +
+          `<div class="road">${road || '<span class="step"><i>ROAD</i><b>—</b></span>'}</div>` +
+          (finalRows ? `<div class="final"><div class="fh">THE FINAL</div>${finalRows}</div>` : '') +
+          `<div class="seed">master seed ${t.masterSeed} · ${t.racesRun} races</div>` +
+          `</div></article>`
+        );
+      })
+      .join('');
+  }
+
+  async function load() {
+    const [c, h, m] = await Promise.all([
+      fetch('/api/champions?limit=200', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch('/api/hall-of-fame', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch('/marbles/manifest.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]);
+    manifest = m && typeof m === 'object' ? m : null;
+    const history = (c && c.history) || [];
+    // Older servers only send the flat rows — build minimal history from them.
+    if (!history.length && c && c.champions && c.champions.length) {
+      for (const r of c.champions) history.push({ tournamentId: r.tournament_id, masterSeed: r.master_seed, completedAt: r.completed_at || r.created_at, champion: { id: r.champion_marble_id, name: r.champion_name || nameFor(r.champion_marble_id) }, path: [], final: [], racesRun: 25 });
+    }
+    renderHolder(h, history);
+    renderTiles(h);
+    renderTitles(h);
+    renderTimeline(history, h);
+  }
+  load();
+})();
+</script>
+</body>
+</html>

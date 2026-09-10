@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Wooden Marble Run</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <script>
   // When embedded in the tournament viewer (?embed=1), tag the document so the
   // game's own control bar is hidden and its leaderboard clears the host top bar.
@@ -15,12 +17,11 @@
      buttons and move the remaining controls (camera, sound, fullscreen) to the
      left, above the leaderboard. */
   html.embed #startBtn, html.embed #restart { display: none !important; }
-  html.embed #topMenu { top: 66px !important; left: 24px !important; right: auto !important; }
-  html.embed #ui { top: 116px !important; }
-  @media (max-width: 720px) {
-    html.embed #topMenu { top: 64px !important; left: 16px !important; }
-    html.embed #ui { top: 116px !important; left: 16px !important; }
-  }
+  /* The host viewer draws its own broadcast HUD (standings board, camera menu,
+     sound/quality/fullscreen controls via marbleAPI.pressControl), so the
+     game's beige toolbar and leaderboard stay out of the picture entirely.
+     updateLeaderboard() keeps running underneath — it also reveals the podium. */
+  html.embed #topMenu, html.embed #ui { display: none !important; }
   html, body {
     width: 100%; height: 100%; overflow: hidden;
     /* Light blue (top) to light tan (bottom) sky gradient. Canvas is transparent so
@@ -6787,6 +6788,16 @@ window.marbleAPI = {
   // finishes.
   isConstructing() {
     return !!(_constructing || _introActive);
+  },
+  // Host-driven settings. In embed mode the game's own toolbar is hidden, so
+  // the viewer's menu presses these buttons for it: 'soundBtn' | 'lqBtn' |
+  // 'fsBtn'. Cosmetic / device-side only — never touches the sim.
+  pressControl(id) {
+    const b = document.getElementById(id);
+    if (b && !/^(startBtn|restart)$/.test(id)) b.click();
+  },
+  getSettings() {
+    return { sound: !!_soundEnabled, lowQ: !!_lowQ };
   },
   // ---- 3D-print export (used by /print) ----------------------------------
   // Returns the built course as world-space triangle soup, grouped into

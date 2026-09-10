@@ -18,8 +18,17 @@ const MIME = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.glb': 'model/gltf-binary',
+  '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.woff2': 'font/woff2',
 };
 
 function envInt(name, def) {
@@ -37,6 +46,7 @@ function buildConfig() {
     headless: process.env.HEADLESS !== '0',
     announceLeadMs: envInt('ANNOUNCE_LEAD_MS', fast ? 6000 : 30000),
     interRaceGapMs: envInt('INTER_RACE_GAP_MS', fast ? 2500 : 6000),
+    intermissionMs: envInt('INTERMISSION_MS', 30000), // hold on the champion before the next tournament
     playbackRate: Number(process.env.PLAYBACK_RATE || 1),
     watchOverrideMs: process.env.RACE_WATCH_OVERRIDE_MS
       ? envInt('RACE_WATCH_OVERRIDE_MS', null)
@@ -324,14 +334,33 @@ async function main() {
       return sendJSON(res, 200, { races });
     }
     if (url.pathname === '/api/champions') {
-      // Public hall of fame: recent tournament winners, newest first.
+      // Public hall of fame: recent tournament winners, newest first. The flat
+      // `champions` rows are the long-standing shape (kept for existing
+      // consumers); `history` adds each champion's road through the bracket
+      // and the final's finishing order, for the /champions page.
       let champions = [];
+      let history = [];
       try {
-        if (db) champions = db.exportChampions().slice(-50).reverse();
+        const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit')) || 50));
+        if (db) {
+          champions = db.exportChampions().slice(-limit).reverse();
+          history = db.championHistory(limit);
+        }
       } catch (e) {
         console.error('[api] champions failed:', e && e.message);
       }
-      return sendJSON(res, 200, { champions });
+      return sendJSON(res, 200, { champions, history });
+    }
+    if (url.pathname === '/api/hall-of-fame') {
+      // Aggregates across all completed tournaments: title counts, repeat
+      // champions, the longest title streak, the current holder.
+      let hof = null;
+      try {
+        if (db) hof = db.hallOfFame();
+      } catch (e) {
+        console.error('[api] hall-of-fame failed:', e && e.message);
+      }
+      return sendJSON(res, 200, hof || { tournamentsCompleted: 0, racesRun: 0, distinctChampions: 0, currentChampion: null, mostTitles: [], repeatChampions: [], longestStreak: null });
     }
     if (url.pathname === '/api/admin' || url.pathname.startsWith('/api/admin/')) {
       try {
@@ -412,6 +441,7 @@ async function main() {
           masterSeed: tournament.masterSeed,
           announceLeadMs: cfg.announceLeadMs,
           interRaceGapMs: cfg.interRaceGapMs,
+          intermissionMs: cfg.intermissionMs,
           playbackRate: cfg.playbackRate,
           watchOverrideMs: cfg.watchOverrideMs,
           onTournamentComplete: () => {
@@ -425,7 +455,16 @@ async function main() {
       // new bracket automatically.
       scheduler.start();
     };
-    startTournament(cfg.masterSeed);
+    // MASTER_SEED seeds the very first tournament of a fresh database. After
+    // that every tournament — including the one started by a restart or a
+    // deploy — gets a fresh random seed. Without this, each deploy replayed the
+    // identical 424242 tournament: same bracket, same champion, and the
+    // history page filled with duplicate "titles".
+    const priorTournaments = db.statsSummary().tournaments;
+    const firstSeed = priorTournaments > 0 ? randomSeed() : cfg.masterSeed;
+    if (priorTournaments > 0)
+      console.log(`[server] ${priorTournaments} tournament(s) on record — starting a fresh one with seed ${firstSeed}`);
+    startTournament(firstSeed);
   } catch (err) {
     simFailed = true;
     console.error('[server] no live tournament (serving page in local-fallback mode):', err && err.stack || err);

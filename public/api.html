@@ -3,7 +3,22 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>marblerun.fun — Developer API</title>
+<title>Developer API — Marble Run</title>
+<meta name="description" content="Free public API for Marble Run: live tournament state, upcoming races, results, seeds and the provably-fair commitment scheme.">
+<link rel="canonical" href="https://marblerun.fun/api">
+<meta name="theme-color" content="#0a0d14">
+<meta property="og:site_name" content="Marble Run">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Developer API — Marble Run">
+<meta property="og:description" content="Free public API for Marble Run: live tournament state, upcoming races, results, seeds and the provably-fair commitment scheme.">
+<meta property="og:url" content="https://marblerun.fun/api">
+<meta property="og:image" content="https://marblerun.fun/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Developer API — Marble Run">
+<meta name="twitter:description" content="Free public API for Marble Run: live tournament state, upcoming races, results, seeds and the provably-fair commitment scheme.">
+<meta name="twitter:image" content="https://marblerun.fun/og.png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
   :root {
     --bg: #0a0d14; --panel: rgba(20, 26, 40, 0.72); --panel2: rgba(27, 34, 51, 0.8);
@@ -195,8 +210,27 @@ ws.onmessage = (e) =&gt; {
   ]
 } ] }</code></pre>
 
-    <div class="ep"><span class="method">GET</span><span class="path">/api/champions</span></div>
-    <p class="muted">The hall of fame — recent tournament winners, newest first.</p>
+    <div class="ep"><span class="method">GET</span><span class="path">/api/champions?limit=50</span></div>
+    <p class="muted">The hall of fame — tournament winners, newest first (max 200). <code>champions[]</code>
+    is the flat record; <code>history[]</code> adds each champion's road through the bracket
+    and the final's finishing order (what <a href="/champions">/champions</a> renders):</p>
+<pre><code>{
+  "champions": [ { "tournament_id": 41, "master_seed": 3456789012, "created_at": …, "completed_at": …,
+                   "champion_marble_id": 73, "champion_name": "Molder" } ],
+  "history": [ {
+    "tournamentId": 41, "masterSeed": 3456789012, "createdAt": …, "completedAt": …,
+    "champion": { "id": 73, "name": "Molder" },
+    "path":  [ { "raceKey": "heats:6", "roundKey": "heats", "indexInRound": 6, "rank": 1, "timeSec": 58.3,
+                 "trackSeed": …, "raceSeed": … }, … ],   // heat → semi → final
+    "final": [ { "rank": 1, "marbleId": 73, "marbleName": "Molder", "lane": "GREEN", "color": "#4d9c56", "timeSec": 61.0 }, … ],
+    "racesRun": 25
+  } ]
+}</code></pre>
+
+    <div class="ep"><span class="method">GET</span><span class="path">/api/hall-of-fame</span></div>
+    <p class="muted">All-time aggregates: tournaments completed, distinct champions, the
+    title table (<code>mostTitles[]</code>), <code>repeatChampions[]</code>, the
+    <code>longestStreak</code> of back-to-back titles, and the <code>currentChampion</code>.</p>
   </div>
 
   <div class="card">

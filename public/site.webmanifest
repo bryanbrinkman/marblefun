@@ -1,0 +1,14 @@
+{
+  "name": "Marble Run — Live 3D Marble Racing Tournament",
+  "short_name": "Marble Run",
+  "description": "Watch 100 marbles race through a live 3D tournament. Pick a marble, follow it through each round, and see who becomes champion.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0d14",
+  "theme_color": "#0a0d14",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

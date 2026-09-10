@@ -92,6 +92,18 @@ class DB {
     this.db.exec('PRAGMA journal_mode = WAL;');
     this.db.exec('PRAGMA foreign_keys = ON;');
     this.db.exec(SCHEMA);
+    this._migrate();
+  }
+
+  // Additive, backward-compatible schema changes for databases created by
+  // earlier builds. Each is idempotent: check the column list, add if missing.
+  _migrate() {
+    const cols = this.db.prepare(`PRAGMA table_info(tournaments)`).all().map((c) => c.name);
+    // completed_at: when the champion was crowned. Older rows keep NULL; the
+    // history views fall back to the final race's revealed_at for those.
+    if (!cols.includes('completed_at')) {
+      this.db.exec(`ALTER TABLE tournaments ADD COLUMN completed_at INTEGER`);
+    }
   }
 
   createTournament({ masterSeed, createdAt }) {
@@ -175,10 +187,10 @@ class DB {
       .run(revealedAt, raceId);
   }
 
-  setChampion(tournamentId, marbleId) {
+  setChampion(tournamentId, marbleId, completedAt = Date.now()) {
     this.db
-      .prepare(`UPDATE tournaments SET status='complete', champion_marble_id=? WHERE id=?`)
-      .run(marbleId, tournamentId);
+      .prepare(`UPDATE tournaments SET status='complete', champion_marble_id=?, completed_at=? WHERE id=?`)
+      .run(marbleId, completedAt, tournamentId);
   }
 
   // ---- reads (for snapshots / debugging) --------------------------------
@@ -213,18 +225,123 @@ class DB {
     };
   }
 
-  // Per-tournament champion history (one row per finished tournament).
+  // Per-tournament champion history (one row per finished tournament). The
+  // champion's name comes from that tournament's own marbles table, so a later
+  // rename never rewrites history.
   exportChampions() {
     return this.db
       .prepare(
-        `SELECT id AS tournament_id, master_seed, created_at,
-                champion_marble_id,
-                'Marble ' || substr('000' || champion_marble_id, -3) AS champion_name
-         FROM tournaments
-         WHERE status='complete' AND champion_marble_id IS NOT NULL
-         ORDER BY id`
+        `SELECT t.id AS tournament_id, t.master_seed, t.created_at, t.completed_at,
+                t.champion_marble_id,
+                COALESCE(m.name, 'Marble ' || substr('00' || t.champion_marble_id, -2)) AS champion_name
+         FROM tournaments t
+         LEFT JOIN marbles m ON m.tournament_id = t.id AND m.marble_id = t.champion_marble_id
+         WHERE t.status='complete' AND t.champion_marble_id IS NOT NULL
+         ORDER BY t.id`
       )
       .all();
+  }
+
+  // Rich champion history for the /champions page: every completed tournament
+  // with the champion's road through the bracket (heat → semi → final, with
+  // rank and time in each) and the final's full finishing order. Newest first.
+  championHistory(limit = 100) {
+    const tours = this.db
+      .prepare(
+        `SELECT t.id, t.master_seed, t.created_at, t.completed_at, t.champion_marble_id,
+                COALESCE(m.name, 'Marble ' || substr('00' || t.champion_marble_id, -2)) AS champion_name
+           FROM tournaments t
+           LEFT JOIN marbles m ON m.tournament_id = t.id AND m.marble_id = t.champion_marble_id
+          WHERE t.status='complete' AND t.champion_marble_id IS NOT NULL
+          ORDER BY t.id DESC
+          LIMIT ?`
+      )
+      .all(limit);
+    const pathStmt = this.db.prepare(
+      `SELECT r.race_key, r.round_key, r.round_idx, r.index_in_round, r.track_seed, r.race_seed,
+              r.revealed_at, res.rank, res.time_sec
+         FROM results res JOIN races r ON r.id = res.race_id
+        WHERE r.tournament_id = ? AND res.marble_id = ?
+        ORDER BY r.round_idx, r.index_in_round`
+    );
+    const finalStmt = this.db.prepare(
+      `SELECT res.rank, res.marble_id, res.marble_name, res.lane, res.color, res.time_sec
+         FROM results res JOIN races r ON r.id = res.race_id
+        WHERE r.tournament_id = ? AND r.round_key = 'final'
+        ORDER BY res.rank`
+    );
+    const countStmt = this.db.prepare(
+      `SELECT COUNT(*) AS c FROM races WHERE tournament_id = ? AND status = 'done'`
+    );
+    return tours.map((t) => {
+      const path = pathStmt.all(t.id, t.champion_marble_id).map((p) => ({
+        raceKey: p.race_key,
+        roundKey: p.round_key,
+        indexInRound: p.index_in_round,
+        trackSeed: p.track_seed,
+        raceSeed: p.race_seed,
+        rank: p.rank,
+        timeSec: p.time_sec,
+        revealedAt: p.revealed_at,
+      }));
+      const finalRow = path.find((p) => p.roundKey === 'final');
+      return {
+        tournamentId: t.id,
+        masterSeed: t.master_seed,
+        createdAt: t.created_at,
+        // Older rows predate completed_at — the final's reveal is the crowning.
+        completedAt: t.completed_at || (finalRow && finalRow.revealedAt) || null,
+        champion: { id: t.champion_marble_id, name: t.champion_name },
+        path,
+        final: finalStmt.all(t.id).map((x) => ({
+          rank: x.rank,
+          marbleId: x.marble_id,
+          marbleName: x.marble_name,
+          lane: x.lane,
+          color: x.color,
+          timeSec: x.time_sec,
+        })),
+        racesRun: countStmt.get(t.id).c,
+      };
+    });
+  }
+
+  // Aggregate hall-of-fame numbers across every completed tournament.
+  hallOfFame() {
+    const champs = this.db
+      .prepare(
+        `SELECT t.id, t.champion_marble_id AS id_m, t.completed_at, t.created_at,
+                COALESCE(m.name, 'Marble ' || substr('00' || t.champion_marble_id, -2)) AS name
+           FROM tournaments t
+           LEFT JOIN marbles m ON m.tournament_id = t.id AND m.marble_id = t.champion_marble_id
+          WHERE t.status='complete' AND t.champion_marble_id IS NOT NULL
+          ORDER BY t.id`
+      )
+      .all();
+    const titles = new Map(); // marble id -> { id, name, titles, last }
+    let streak = null; // longest run of consecutive tournaments by one marble
+    let run = null;
+    for (const c of champs) {
+      const e = titles.get(c.id_m) || { id: c.id_m, name: c.name, titles: 0, lastTournamentId: null };
+      e.titles++;
+      e.name = c.name; // most recent name
+      e.lastTournamentId = c.id;
+      titles.set(c.id_m, e);
+      if (run && run.id === c.id_m) run.len++;
+      else run = { id: c.id_m, name: c.name, len: 1, fromTournamentId: c.id };
+      if (!streak || run.len > streak.len) streak = { ...run };
+    }
+    const leaders = [...titles.values()].sort((a, b) => b.titles - a.titles || b.lastTournamentId - a.lastTournamentId);
+    const last = champs[champs.length - 1] || null;
+    return {
+      tournamentsCompleted: champs.length,
+      racesRun: this.db.prepare(`SELECT COUNT(*) c FROM races WHERE status='done'`).get().c,
+      distinctChampions: titles.size,
+      currentChampion: last ? { id: last.id_m, name: last.name, tournamentId: last.id } : null,
+      mostTitles: leaders.slice(0, 10),
+      repeatChampions: leaders.filter((l) => l.titles > 1),
+      longestStreak: streak && streak.len > 1 ? streak : null,
+    };
   }
 
   // Every finishing position of every race ever run (the raw record).

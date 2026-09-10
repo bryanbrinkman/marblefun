@@ -2,21 +2,44 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>marblerun.fun — Marble Tournament</title>
-    <meta name="description" content="100 marbles enter. One becomes champion. A nonstop, provably-fair 3D marble tournament — pick a marble and cheer it home." />
-    <meta property="og:title" content="marblerun.fun — live marble tournament" />
-    <meta property="og:description" content="100 marbles enter. One becomes champion. Watch live, pick your marble, call the winners." />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Marble Run — Live 3D Marble Racing Tournament</title>
+    <meta name="description" content="Watch 100 marbles race through a live 3D tournament. Pick a marble, follow it through each round, and see who becomes champion." />
+    <link rel="canonical" href="https://marblerun.fun/" />
+    <meta name="theme-color" content="#0a0d14" />
+    <meta name="color-scheme" content="dark" />
+    <meta property="og:site_name" content="Marble Run" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://marblefun.fly.dev/" />
-    <meta property="og:image" content="https://marblefun.fly.dev/logo.png" />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="marblerun.fun — live marble tournament" />
-    <meta name="twitter:description" content="100 marbles enter. One becomes champion. Watch live, pick your marble, call the winners." />
-    <meta name="twitter:image" content="https://marblefun.fly.dev/logo.png" />
+    <meta property="og:title" content="Marble Run — Live 3D Marble Racing Tournament" />
+    <meta property="og:description" content="Watch 100 marbles race through a live 3D tournament. Pick a marble, follow it through each round, and see who becomes champion." />
+    <meta property="og:url" content="https://marblerun.fun/" />
+    <meta property="og:image" content="https://marblerun.fun/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Marble Run — 100 marbles. One champion." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Marble Run — Live 3D Marble Racing Tournament" />
+    <meta name="twitter:description" content="Watch 100 marbles race through a live 3D tournament. Pick a marble, follow it through each round, and see who becomes champion." />
+    <meta name="twitter:image" content="https://marblerun.fun/og.png" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="64x64" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
     <link rel="stylesheet" href="viewer.css" />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Marble Run",
+      "alternateName": "marblerun.fun",
+      "url": "https://marblerun.fun/",
+      "description": "Watch 100 marbles race through a live 3D tournament. Pick a marble, follow it through each round, and see who becomes champion."
+    }
+    </script>
   </head>
   <body class="stats-hidden">
+    <h1 class="sr-only">Marble Run — Live 3D Marble Racing Tournament</h1>
+
     <!-- Full-bleed race fills the screen; everything else floats over it. -->
     <div class="race-bg">
       <iframe id="game" src="marble_run.html?embed=1" title="Live 3D marble race" allow="fullscreen" allowfullscreen></iframe>
@@ -34,15 +57,15 @@
       is still live. Results, standings and the bracket keep updating.
     </div>
 
+    <!-- ================= TOP BAR: watch · my marble · cameras · more ============ -->
     <header class="topbar ov">
-      <div class="brand">
-        <!-- Logo image if present (public/logo.png); falls back to the wordmark. -->
-        <img src="logo.png" alt="marblerun.fun" class="brand-logo"
+      <a class="brand" href="/" aria-label="Marble Run — home">
+        <img src="logo.png" alt="Marble Run" class="brand-logo"
              onerror="this.hidden=true; this.nextElementSibling.hidden=false;" />
         <span class="brand-name" hidden><span class="dot"></span>marblerun.fun</span>
-      </div>
+      </a>
 
-      <!-- Current race console, merged into the bar -->
+      <!-- The stage: what race this is + the countdown / LIVE ring. -->
       <div class="race-console">
         <div class="cd" id="cd">
           <svg viewBox="0 0 64 64" class="cd-ring" aria-hidden="true">
@@ -55,41 +78,40 @@
           <div class="race-title" id="raceTitle">Warming up the track…</div>
           <div class="rc-meta">
             <span class="rc-count" id="progressCount"></span>
-            <span class="seedline" id="seedline"></span>
           </div>
         </div>
-        <!-- Live race tracker: one lane per marble (number on the left, marble
-             sliding toward a checkered finish on the right). -->
-        <div class="rc-lanes" id="rcLanes" aria-hidden="true"><div class="rc-checker"></div></div>
+        <!-- Legacy per-lane tracker: kept for the position poll, not shown in
+             the bar (the standings board on the stage replaced it). -->
+        <div class="rc-lanes" id="rcLanes" aria-hidden="true" hidden><div class="rc-checker"></div></div>
       </div>
 
       <div class="topbar-right">
         <div class="watching" id="watching" hidden>
           <span class="eye" aria-hidden="true">👁</span><span id="watchingN">0</span>&nbsp;watching
         </div>
-        <!-- Follow pill: your marble at a glance; opens the picker. -->
-        <button class="follow-pill" id="followPill" aria-haspopup="dialog" title="Follow a marble through the tournament">
+        <!-- Connection chip: only surfaces when something is off (reconnecting,
+             offline, local). Live is the normal state and stays quiet. -->
+        <div class="conn" id="conn" role="status" data-state="connecting">…</div>
+        <!-- My marble: your pick at a glance; opens the picker. -->
+        <button class="follow-pill" id="followPill" aria-haspopup="dialog" title="Your marble — tap to change">
           <span class="fp-swatch" id="fpSwatch" hidden aria-hidden="true"></span>
           <span class="fp-text" id="fpText">Pick a marble</span>
         </button>
-        <button class="ctl-btn" id="controlsBtn" aria-expanded="false" aria-controls="controlsPop" title="Camera and keyboard controls">🎛<span class="ctl-word"> Controls</span></button>
-        <div class="conn" id="conn" role="status" data-state="connecting">…</div>
-        <button class="stats-toggle" id="statsToggle" title="Show / hide stats" aria-label="Toggle stats panels" aria-pressed="false">☰</button>
+        <button class="ctl-btn" id="controlsBtn" aria-expanded="false" aria-controls="controlsPop" title="Cameras">🎥<span class="ctl-word"> Cameras</span></button>
+        <button class="ctl-btn more-btn" id="moreBtn" aria-expanded="false" aria-controls="morePop" title="More" aria-label="More">☰<span class="ctl-word"> More</span></button>
       </div>
     </header>
 
-    <!-- Controls popover: the unified camera panel. Keyboard keys appear as
-         small secondary labels; the full list lives in the collapsed
-         "Keyboard shortcuts" section below. -->
+    <!-- Cameras popover: TV mode (the default) plus the manual angles. -->
     <div class="controls-pop" id="controlsPop" hidden>
       <div class="cp-title">Cameras</div>
       <div class="cp-touch" role="group" aria-label="Camera modes">
+        <button id="cpTv" class="cp-tv" aria-pressed="false" title="Auto-director: the camera cuts itself like a broadcast">📺 TV mode <small>auto-directed</small></button>
         <button data-cam="overview" aria-pressed="false">🗺 Overview <kbd>O</kbd></button>
         <button data-cam="action" aria-pressed="false">🎥 Action <kbd>A</kbd></button>
         <button id="cpFollow" aria-pressed="false">📍 Chase Cam <kbd>C</kbd></button>
         <button data-cam="top" aria-pressed="false">⬇ Top <kbd>T</kbd></button>
         <button id="cpSplit" aria-pressed="false">🔲 Split view <kbd>X</kbd></button>
-        <button id="cpTv" aria-pressed="false" title="Auto-director: the camera cuts itself">🎬 TV mode</button>
       </div>
       <details class="cp-kbd">
         <summary>Keyboard shortcuts</summary>
@@ -104,12 +126,66 @@
       </details>
     </div>
 
+    <!-- More: everything that isn't watching. Results, history, marbles,
+         settings, and the builder tools (print, API). -->
+    <div class="more-pop" id="morePop" hidden>
+      <div class="mp-group">Tournament</div>
+      <button class="mp-item" id="mpBracket">🏁 Results &amp; bracket</button>
+      <button class="mp-item" id="mpStats">📊 Field &amp; recent results</button>
+      <button class="mp-item" id="mpReplay" hidden>▶ Watch the last race again</button>
+      <a class="mp-item" href="/champions">🏆 Champions history</a>
+      <a class="mp-item" href="/gallery">🔮 Marble gallery</a>
+      <div class="mp-group">Settings</div>
+      <button class="mp-item mp-toggle" id="mpSound" aria-pressed="false">🔊 Sound effects <span class="mp-state">Off</span></button>
+      <button class="mp-item mp-toggle" id="mpLowQ" aria-pressed="false">⚡ Low-quality mode <span class="mp-state">Off</span></button>
+      <button class="mp-item" id="mpFullscreen">⛶ Fullscreen</button>
+      <div class="mp-group">Build</div>
+      <a class="mp-item" id="printLink" href="/print">🖨 3D-print this track</a>
+      <a class="mp-item" href="/api">⚙ Developer API</a>
+      <div class="mp-details" id="mpDetails">
+        <span class="seedline" id="seedline"></span>
+      </div>
+    </div>
+
+    <!-- ================= ONBOARDING: pick your marble ========================== -->
+    <section class="hero" id="pickHero" hidden aria-labelledby="heroTitle">
+      <div class="hero-card">
+        <div class="hero-brand" id="heroTitle">MARBLE RUN</div>
+        <div class="hero-tag">100 MARBLES. ONE CHAMPION.</div>
+        <div class="hero-q">WHO ARE YOU BACKING?</div>
+        <div class="hero-actions">
+          <button class="hero-btn primary" id="heroPick">PICK A MARBLE</button>
+          <button class="hero-btn" id="heroRandom">PICK ONE FOR ME</button>
+        </div>
+        <button class="hero-skip" id="heroSkip">Just watch for now</button>
+      </div>
+    </section>
+
+    <!-- Pick confirmation: a two-second beat that makes the choice feel real. -->
+    <div class="pick-confirm" id="pickConfirm" hidden aria-live="polite">
+      <div class="pc-ball" id="pcBall"><span class="co-shine"></span></div>
+      <div class="pc-kicker">YOU'RE BACKING</div>
+      <div class="pc-name" id="pcName"></div>
+      <div class="pc-sub" id="pcSub"></div>
+    </div>
+
+    <!-- ================= IN-RACE HUD (broadcast lower third) =================== -->
+    <div class="race-board" id="raceBoard" hidden aria-label="Live standings"></div>
+    <div class="race-hud" id="raceHud" hidden>
+      <div class="rh-stage" id="rhStage"></div>
+      <div class="rh-main" id="rhMain">
+        <span class="rh-swatch" id="rhSwatch"></span>
+        <span class="rh-num" id="rhNum"></span>
+        <span class="rh-name" id="rhName"></span>
+        <span class="rh-pos" id="rhPos"></span>
+      </div>
+      <div class="rh-rule" id="rhRule"></div>
+    </div>
+
     <!-- Pre-race experience: shown between races over the idle 3D scene.
          Countdown, what's next, the road to the champion, and things to do. -->
     <section class="prerace" id="preRace" hidden>
       <div class="pr-card" id="prCard">
-        <!-- One context line (state · phase), then the countdown. The tagline
-             lives in the top bar — repeating it here made the card bulky. -->
         <div class="pr-context"><span class="pr-state" id="prState">Between races</span><span class="pr-flavor" id="prFlavor"></span></div>
         <div class="pr-title" id="prTitle"></div>
         <div class="pr-journey" id="journey" role="img" aria-label="Tournament progress: 100 started, 20 advance, 5 finalists, 1 champion">
@@ -123,7 +199,7 @@
         </div>
         <div class="pr-guess" id="prGuessLabel" hidden>🎯 Tap a marble to back it to win</div>
         <div class="pr-starters" id="prStarters"></div>
-        <!-- Your marble: a pick button before choosing, a status card after. -->
+        <!-- Your marble: status card once chosen. -->
         <div class="pr-marble" id="prMarble"></div>
         <div class="pr-actions">
           <button class="pr-btn" id="watchLatestBtn" hidden>▶ Watch latest race</button>
@@ -132,7 +208,7 @@
       </div>
     </section>
 
-    <!-- Mid-race event toast (lead changes). -->
+    <!-- Mid-race event toast (lead changes, your marble's moves). -->
     <div class="race-toast" id="raceToast" hidden aria-hidden="true"></div>
 
     <!-- TV-static transition: flashes when the stage switches from a replay to
@@ -156,6 +232,16 @@
       <button id="replayExit" aria-label="Exit replay">✕</button>
     </div>
 
+    <!-- ================= MOMENTS: survive / eliminated / round transitions ===== -->
+    <div class="moment" id="moment" hidden role="dialog" aria-live="polite">
+      <div class="mo-inner">
+        <div class="mo-kicker" id="moKicker"></div>
+        <div class="mo-title" id="moTitle"></div>
+        <div class="mo-sub" id="moSub"></div>
+        <div class="mo-actions" id="moActions"></div>
+      </div>
+    </div>
+
     <!-- Marble picker: choose one of the 100 to follow all tournament. -->
     <div class="picker-overlay" id="pickerModal" hidden role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
       <div class="picker">
@@ -164,7 +250,7 @@
           <button class="picker-close" id="pickerClose" aria-label="Close picker">✕</button>
         </div>
         <div class="picker-tools">
-          <input id="pickerSearch" type="search" placeholder="Search number…" aria-label="Search marbles by number or name" />
+          <input id="pickerSearch" type="search" placeholder="Search number or name…" aria-label="Search marbles by number or name" />
           <button id="pickerRandom" class="pr-btn">🎲 Surprise me</button>
           <button id="pickerClear" class="pr-btn subtle">Unfollow</button>
         </div>
@@ -173,13 +259,12 @@
       </div>
     </div>
 
-    <!-- Stats: collapsible windows, closed by default, stacked top-to-bottom.
-         On phones this column becomes a bottom sheet. Grouped Live /
-         Tournament / Results; the race itself stays the centerpiece. -->
+    <!-- Stats: collapsible windows, opened from More. On phones this column
+         becomes a bottom sheet. The race itself stays the centerpiece. -->
     <aside class="side" id="sidePanel">
       <div class="sheet-grip" aria-hidden="true"></div>
+      <button class="side-close" id="sideClose" aria-label="Close stats">✕</button>
 
-      <!-- Live: what's happening right now. -->
       <div class="side-group">Live</div>
       <div class="card champion-card" id="championCard" hidden>
         <div class="champ-label">CHAMPION</div>
@@ -194,10 +279,9 @@
         <div class="card-body"><div class="upnext-body" id="upnextBody"></div></div>
       </div>
 
-      <!-- Tournament: who's in and where we are. -->
       <div class="side-group">Tournament</div>
-      <div class="card collapsible" id="fieldCard">
-        <button class="card-head" type="button" aria-expanded="false">
+      <div class="card collapsible open" id="fieldCard">
+        <button class="card-head" type="button" aria-expanded="true">
           <span class="ch-title">Field</span><span class="count-badge" id="aliveCount"></span><span class="caret" aria-hidden="true">▾</span>
         </button>
         <div class="card-body">
@@ -210,7 +294,6 @@
         </div>
       </div>
 
-      <!-- Results: what already happened. -->
       <div class="side-group">Results</div>
       <div class="card collapsible" id="recentCard" hidden>
         <button class="card-head" type="button" aria-expanded="false">
@@ -223,43 +306,50 @@
         <button class="card-head" type="button" aria-expanded="false">
           <span class="ch-title">Past Champions</span><span class="count-badge" id="champsCount"></span><span class="caret" aria-hidden="true">▾</span>
         </button>
-        <div class="card-body"><div class="champs" id="champsBody"></div></div>
+        <div class="card-body">
+          <div class="champs" id="champsBody"></div>
+          <a class="champs-more" href="/champions">Full champions history →</a>
+        </div>
       </div>
     </aside>
 
     <!-- Kept for the renderer; the game draws its own live leaderboard. -->
     <div class="roster" id="roster" hidden></div>
 
-    <!-- Tournament-champion celebration: full-screen fireworks + the winning
-         marble, huge. Shown when a champion is crowned; dismissed on click or
-         when the next tournament starts. -->
+    <!-- ================= CHAMPION MOMENT ======================================= -->
     <div class="champ-overlay" id="champOverlay" hidden>
       <canvas id="fwCanvas" aria-hidden="true"></canvas>
       <div class="co-inner">
-        <div class="co-kicker">🏆 TOURNAMENT CHAMPION 🏆</div>
+        <div class="co-kicker" id="coKicker">🏆 TOURNAMENT CHAMPION 🏆</div>
         <div class="co-ball" id="coBall"><span class="co-shine"></span></div>
+        <div class="co-num" id="coNum"></div>
         <div class="co-name" id="coName"></div>
-        <div class="co-sub">100 marbles entered — one rolled out on top</div>
-        <button class="co-share" id="coShare">📣 Share the moment</button>
+        <div class="co-label" id="coLabel">TOURNAMENT CHAMPION</div>
+        <div class="co-path" id="coPath"></div>
+        <div class="co-meta" id="coMeta"></div>
+        <div class="co-you" id="coYou" hidden></div>
+        <div class="co-actions">
+          <button class="co-share" id="coShare">📣 Share the moment</button>
+          <a class="co-link" href="/champions">🏆 Champions history</a>
+        </div>
       </div>
       <button class="co-close" id="coClose" aria-label="Close">✕</button>
     </div>
 
-    <!-- Corner links: print the course you're watching, or build on the API. -->
-    <nav class="corner-links" aria-label="More">
-      <a href="/gallery" title="Meet all 100 marbles — names, stats and owners">🔮<span> Marble gallery</span></a>
-      <a id="printLink" href="/print" title="Export this course as 3D-printable pieces">🖨<span> Print this track</span></a>
-      <a href="/api" title="Free public API — build a prediction game, overlay or bot">⚙<span> API</span></a>
+    <!-- ================= BOTTOM NAV: marbles · champions · results ============= -->
+    <nav class="corner-links" aria-label="Marbles and history">
+      <a href="/gallery" title="Meet all 100 marbles — names, stats and owners">🔮<span> Marbles</span></a>
+      <a href="/champions" title="Every champion, every tournament">🏆<span> Champions</span></a>
     </nav>
 
     <!-- Bracket: a classic two-sided "Road to the Final" that slides up from the
          bottom as a lower third, toggled by the button in the corner. -->
-    <button class="bracket-btn" id="bracketBtn" aria-label="Toggle bracket" aria-expanded="false" aria-controls="bracketDock">
-      <span class="bic" aria-hidden="true"></span><span>Bracket</span>
+    <button class="bracket-btn" id="bracketBtn" aria-label="Toggle results and bracket" aria-expanded="false" aria-controls="bracketDock">
+      <span class="bic" aria-hidden="true"></span><span>Results</span>
     </button>
     <section class="bracket-dock" id="bracketDock" aria-hidden="true">
       <div class="bd-top">
-        <div class="bd-title">BRACKET <span>· Road to the Final</span></div>
+        <div class="bd-title">RESULTS <span>· Road to the Final</span></div>
         <div class="funnel" id="funnel">
           <div class="funnel-stage" data-stage="heats"><b>100</b><span>marbles</span></div>
           <div class="funnel-arrow" aria-hidden="true">→</div>
@@ -272,10 +362,13 @@
         <button class="bd-close" id="bracketClose" aria-label="Close bracket">✕</button>
       </div>
       <div class="bd-body" id="bracketBody"></div>
+      <!-- Phone-sized alternative: a round-by-round list instead of the wide tree. -->
+      <div class="bd-compact" id="bracketCompact"></div>
     </section>
 
     <script src="event-state.js"></script>
     <script src="tournament-core.js"></script>
+    <script src="tv-director.js"></script>
     <script src="viewer.js"></script>
   </body>
 </html>

@@ -374,10 +374,12 @@ class Scheduler {
     return view;
   }
 
-  // Who is still in contention. A marble is 'alive' only while its
-  // furthest-reached race is unresolved; once that race is done and it isn't
-  // the champion, it's out. (A wildcard's furthest race is the final, so a
-  // lost final correctly reads as eliminated.)
+  // Who is still in contention. A marble is 'alive' while its furthest-reached
+  // race is unresolved, or when it WON that race (it advances — the next round
+  // just hasn't been drawn yet), or as a semifinal runner-up until the final is
+  // drawn (the fastest runner-up takes the wildcard). Anything else that has
+  // finished its furthest race and isn't the champion is out. Mirrored in
+  // public/tournament-core.js — keep the two in sync.
   standings() {
     const furthest = new Map(); // marbleId -> its highest-round race
     for (const round of this.t.rounds) {
@@ -388,12 +390,21 @@ class Scheduler {
         }
       }
     }
+    const finalDrawn = this.t.rounds.some((r) => r.key === 'final');
     return this.t.marbles.map((m) => {
       let status;
       if (this.t.champion === m.id) status = 'champion';
       else {
         const race = furthest.get(m.id);
-        status = race && race.result ? 'eliminated' : 'alive';
+        if (!race || !race.result) status = 'alive';
+        else if (race.roundKey === 'final') status = 'eliminated';
+        else {
+          const row = race.result.find((r) => r.marbleId === m.id);
+          const rank = row ? row.rank : 99;
+          if (rank === 1) status = 'alive'; // won → advances
+          else if (race.roundKey === 'semis' && rank === 2 && !finalDrawn) status = 'alive'; // wildcard pending
+          else status = 'eliminated';
+        }
       }
       return { id: m.id, name: m.name, status };
     });
