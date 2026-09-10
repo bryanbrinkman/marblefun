@@ -1117,12 +1117,15 @@ body.tv-on #controlsBtn::after { content: ''; width: 7px; height: 7px; border-ra
   .rb-row { height: 20px; gap: 5px; font-size: 11px; }
   .rb-name { display: none; } /* rank · swatch · number — the lower third carries the name */
   .rb-pct { width: 28px; font-size: 10px; }
-  .race-hud { left: 10px; bottom: calc(66px + env(safe-area-inset-bottom, 0px)); max-width: calc(100vw - 20px); }
-  .rh-num, .rh-pos { font-size: 18px; }
-  .rh-name { font-size: 16px; max-width: 46vw; }
-  .rh-main { padding: 7px 11px; gap: 8px; }
-  .rh-stage { font-size: 10px; letter-spacing: 0.18em; }
-  .rh-rule { font-size: 9.5px; letter-spacing: 0.14em; }
+  /* Half-size lower third on phones: a caption, not a billboard. */
+  .race-hud { left: 10px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); max-width: calc(100vw - 20px); gap: 2px; }
+  .rh-num, .rh-pos { font-size: 12px; }
+  .rh-name { font-size: 11px; max-width: 40vw; }
+  .rh-main { padding: 4px 8px; gap: 6px; border-left-width: 3px; border-radius: 0 7px 7px 7px; }
+  .rh-main::before { font-size: 7px; letter-spacing: 0.14em; }
+  .rh-swatch { width: 10px; height: 10px; }
+  .rh-stage { font-size: 7.5px; letter-spacing: 0.14em; padding: 3px 7px 2px; border-radius: 4px 4px 0 0; }
+  .rh-rule { font-size: 7.5px; letter-spacing: 0.12em; }
   .mo-sub { letter-spacing: 0.1em; }
   .more-pop { top: auto; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); left: 10px; right: 10px; width: auto; max-height: 70vh; }
   .controls-pop { max-height: 70vh; overflow-y: auto; }
