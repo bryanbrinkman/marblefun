@@ -22,6 +22,14 @@ html, body {
   background: var(--bg); color: var(--text);
   font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
+/* iOS Safari can scroll the document itself (keyboard open for the picker
+   search, URL-bar collapse) and leave it offset — the fixed top bar rides off
+   the top and a black band appears below. Pin the body to the viewport so
+   there is nothing to scroll; panels scroll internally. */
+body {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  overscroll-behavior: none; -webkit-overflow-scrolling: auto;
+}
 
 /* ---------- full-bleed race ---------- */
 .race-bg { position: fixed; inset: 0; z-index: 0; background: #05070c; }

@@ -2773,6 +2773,17 @@ document.addEventListener('keydown', (e) => {
   else if (!document.body.classList.contains('stats-hidden')) setStatsOpen(false);
 });
 
+// ---- iOS viewport pinning ---------------------------------------------------
+// Safari may still nudge the document while the keyboard is up (picker search)
+// or when the visual viewport resizes; snap back so the chrome never drifts.
+{
+  const snap = () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); };
+  window.addEventListener('scroll', snap, { passive: true });
+  document.addEventListener('focusout', () => setTimeout(snap, 50));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', () => setTimeout(snap, 50));
+  window.addEventListener('orientationchange', () => setTimeout(snap, 300));
+}
+
 // ---- WebGL fallback notice -------------------------------------------------
 // The game degrades to a physics-only no-op renderer when WebGL is missing;
 // spectators should be told the data is still live even though the 3D isn't.
