@@ -93,7 +93,8 @@ check('viewer count visibility thresholds', () => {
   assert.strictEqual(shouldShowViewerCount('12'), false); // strings are invalid
   assert.strictEqual(shouldShowViewerCount(0), false);
   assert.strictEqual(shouldShowViewerCount(1), false);
-  assert.strictEqual(shouldShowViewerCount(9), false);
+  assert.strictEqual(shouldShowViewerCount(4), false);
+  assert.strictEqual(shouldShowViewerCount(5), true);
   assert.strictEqual(shouldShowViewerCount(10), true);
   assert.strictEqual(shouldShowViewerCount(100), true);
 });

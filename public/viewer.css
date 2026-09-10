@@ -877,65 +877,58 @@ button:focus-visible, .card-head:focus-visible, input:focus-visible {
    SPECTATOR LAYER — onboarding hero, broadcast HUD, moments, More menu
    ===================================================================== */
 
-/* ---------- onboarding hero: "who are you backing?" ---------- */
+/* ---------- intro hero: compact, docked under the top bar ---------- */
+/* Explains the concept in a line and offers the two things to do. It floats
+   over the race without dimming it — the race stays the centerpiece. */
 .hero {
-  position: fixed; inset: 0; z-index: 55; display: flex; align-items: center; justify-content: center;
-  padding: 70px 18px calc(90px + env(safe-area-inset-bottom, 0px));
-  background: radial-gradient(120% 90% at 50% 50%, rgba(6, 8, 14, 0.42), rgba(4, 6, 12, 0.78));
-  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
-  animation: heroIn 0.5s ease both;
+  position: fixed; top: 62px; left: 0; right: 0; z-index: 19; display: flex; justify-content: center;
+  padding: 0 14px; pointer-events: none;
+  animation: prIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .hero[hidden] { display: none; }
-@keyframes heroIn { from { opacity: 0; } to { opacity: 1; } }
-.hero-card { text-align: center; max-width: 620px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.hero-brand {
-  font-size: clamp(38px, 9vw, 84px); font-weight: 900; letter-spacing: 0.06em; line-height: 0.95;
-  background: linear-gradient(180deg, #fff 0%, #ffe39a 55%, var(--accent2) 100%);
-  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 6px 30px rgba(0, 0, 0, 0.7));
-  animation: coDrop 0.6s cubic-bezier(0.22, 1.4, 0.36, 1) both;
-}
-.hero-tag {
-  font-size: clamp(12px, 2.4vw, 16px); font-weight: 800; letter-spacing: 0.32em; color: #fff;
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.9); margin-top: 6px;
-  animation: coDrop 0.6s ease 0.12s both;
-}
-.hero-q {
-  margin-top: clamp(22px, 5vh, 44px); font-size: clamp(15px, 3vw, 22px); font-weight: 900; letter-spacing: 0.22em;
-  color: var(--accent); text-shadow: 0 0 22px rgba(255, 207, 92, 0.45), 0 2px 10px #000;
-  animation: coDrop 0.6s ease 0.24s both;
-}
-.hero-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 16px; width: 100%; animation: coDrop 0.6s ease 0.34s both; }
-.hero-btn {
-  cursor: pointer; min-width: 220px; min-height: 56px; padding: 16px 26px; border-radius: 14px;
-  font: 900 15px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; letter-spacing: 0.14em;
-  color: var(--text); background: rgba(20, 26, 40, 0.75); border: 1px solid rgba(255, 255, 255, 0.22);
+.hero-card {
+  pointer-events: auto; text-align: center; width: min(560px, 100%); padding: 16px 18px 12px; border-radius: 16px;
+  background: linear-gradient(180deg, rgba(14, 18, 28, 0.72), rgba(10, 13, 20, 0.8));
+  border: 1px solid rgba(255, 207, 92, 0.35); box-shadow: var(--shadow), 0 0 0 1px rgba(255, 207, 92, 0.12);
   -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
-  box-shadow: var(--shadow); transition: transform 0.12s, border-color 0.2s, background 0.2s;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
 }
-.hero-btn:hover { border-color: #fff; transform: translateY(-1px); }
+.hero-brand {
+  margin: 0; font-size: clamp(18px, 3.4vw, 26px); font-weight: 900; letter-spacing: 0.01em; line-height: 1.15; color: #fff;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.6);
+}
+.hero-brand::first-line { color: #fff; }
+.hero-tag { margin: 0; font-size: 13px; color: var(--muted); font-weight: 700; }
+.hero-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 8px; width: 100%; }
+.hero-btn {
+  cursor: pointer; flex: 1 1 180px; max-width: 240px; min-height: 46px; padding: 12px 18px; border-radius: 12px;
+  font: 900 13px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; letter-spacing: 0.12em;
+  color: var(--text); background: var(--panel2); border: 1px solid var(--line);
+  transition: transform 0.12s, border-color 0.2s, background 0.2s;
+}
+.hero-btn:hover { border-color: var(--muted); }
 .hero-btn:active { transform: translateY(1px); }
 .hero-btn.primary {
   color: #1a1204; border-color: transparent;
   background: linear-gradient(180deg, #ffe39a, var(--accent) 55%, #f0a93a);
-  box-shadow: 0 10px 30px rgba(255, 207, 92, 0.35), var(--shadow);
+  box-shadow: 0 8px 24px rgba(255, 207, 92, 0.3);
 }
 .hero-btn.primary:hover { filter: brightness(1.06); }
-.hero-skip {
-  margin-top: 18px; cursor: pointer; background: none; border: 0; color: var(--muted);
-  font: 700 12.5px/1 inherit; text-decoration: underline; text-underline-offset: 4px; padding: 10px 14px;
-  animation: coDrop 0.6s ease 0.5s both;
+.hero-journey { margin: 10px 0 0; }
+.hero-random {
+  cursor: pointer; background: none; border: 0; color: var(--muted); font: 700 11.5px/1 inherit;
+  text-decoration: underline; text-underline-offset: 4px; padding: 8px 10px; min-height: 36px;
 }
-.hero-skip:hover { color: #fff; }
-/* While the hero is up, the rest of the chrome steps back. */
-body.hero-open .corner-links, body.hero-open .bracket-btn, body.hero-open .race-hud, body.hero-open .race-board { opacity: 0; pointer-events: none; }
+.hero-random:hover { color: var(--accent); }
+/* While the intro is up, the between-races card yields the top-centre slot. */
+body.hero-open .prerace { display: none; }
 @media (max-width: 560px) {
-  .hero { padding: 62px 16px calc(40px + env(safe-area-inset-bottom, 0px)); align-items: flex-end; }
-  .hero-card { padding-bottom: 10px; }
-  .hero-actions { flex-direction: column; }
-  .hero-btn { width: 100%; min-width: 0; }
+  .hero { top: 58px; padding: 0 10px; }
+  .hero-card { padding: 12px 12px 8px; gap: 4px; }
+  .hero-btn { flex: 1 1 130px; min-height: 44px; font-size: 12px; padding: 12px 10px; }
+  .hero-journey { gap: 3px; }
 }
-@media (max-height: 520px) { .hero-q { margin-top: 12px; } .hero { padding-top: 56px; } }
+@media (max-height: 520px) { .hero-journey, .hero-random { display: none; } }
 
 /* ---------- pick confirmation beat ---------- */
 .pick-confirm {
@@ -1192,3 +1185,52 @@ body.tv-on #controlsBtn::after { content: ''; width: 7px; height: 7px; border-ra
 /* Phone: the your-marble card stacks its actions under the text instead of
    squeezing name + status into a sliver beside two buttons. */
 
+
+/* ---------- your-marble rows, no-marble CTA ---------- */
+.prm-rows { display: flex; flex-direction: column; gap: 2px; margin-top: 3px; }
+.prm-row { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; }
+.prm-row i { font-style: normal; color: var(--muted); font-weight: 700; min-width: 48px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; flex: none; }
+.prm-row b { font-weight: 800; color: var(--text); min-width: 0; }
+.prm-row b.alive { color: var(--live); letter-spacing: 0.1em; }
+.prm-row b.out { color: #ff7d6b; letter-spacing: 0.1em; }
+.prm-row b.gold { color: var(--accent); }
+.prm.prm-cta { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'info' 'acts'; border-color: rgba(255, 207, 92, 0.55); background: linear-gradient(180deg, rgba(255, 207, 92, 0.12), var(--panel2)); }
+.prm.prm-cta .prm-info b { font-size: 15px; letter-spacing: 0.02em; text-transform: uppercase; white-space: normal; }
+.prm.prm-cta .prm-follow { color: #1a1204; border-color: transparent; background: linear-gradient(180deg, #ffe39a, var(--accent) 55%, #f0a93a); }
+
+/* ---------- live indicator (audience only at 5+) ---------- */
+.watching { gap: 6px; color: var(--live); border-color: rgba(53, 208, 127, 0.4); background: rgba(53, 208, 127, 0.08); font-weight: 800; letter-spacing: 0.08em; }
+.watching .li-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--live); box-shadow: 0 0 8px var(--live); animation: pulse 2s ease-in-out infinite; }
+.watching .w-count { color: var(--muted); font-weight: 700; letter-spacing: 0; }
+.watching .w-count[hidden] { display: none; }
+.watching .w-count #watchingN { color: var(--text); font-weight: 800; font-variant-numeric: tabular-nums; }
+@media (max-width: 470px) { .watching { display: none !important; } }
+
+/* ---------- post-race: print this race ---------- */
+.pr-print {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; margin-top: 10px; padding: 10px 12px; border-radius: 12px;
+  text-decoration: none; color: var(--text); background: rgba(91, 192, 222, 0.08); border: 1px solid rgba(91, 192, 222, 0.35);
+  transition: border-color 0.2s, background 0.2s;
+}
+.pr-print:hover { border-color: #5bc0de; background: rgba(91, 192, 222, 0.14); }
+.pr-print[hidden] { display: none; }
+.pr-print .pp-k { font-size: 10.5px; font-weight: 900; letter-spacing: 0.2em; color: #5bc0de; }
+.pr-print .pp-s { font-size: 11px; color: var(--muted); }
+.pr-print .pp-b { margin-top: 5px; font: 900 12px/1 inherit; letter-spacing: 0.1em; padding: 9px 14px; border-radius: 9px; background: rgba(91, 192, 222, 0.18); border: 1px solid rgba(91, 192, 222, 0.5); color: #cfeefa; }
+.pr-card.compact .pr-print .pp-s { display: none; }
+
+/* ---------- back to TV mode ---------- */
+.tv-return {
+  position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 41;
+  cursor: pointer; padding: 10px 14px; min-height: 40px; border-radius: 12px;
+  background: var(--panel2); color: var(--accent); border: 1px solid rgba(255, 207, 92, 0.5);
+  font: 800 12px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; letter-spacing: 0.04em;
+  -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass); box-shadow: var(--shadow);
+}
+.tv-return[hidden] { display: none; }
+.tv-return:hover { background: rgba(255, 207, 92, 0.12); }
+
+/* ---------- no-JS note ---------- */
+.noscript-note { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 100; width: min(640px, 92vw); padding: 14px 18px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 14px; }
+.noscript-note a { color: var(--accent); }
+.noscript-note ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); }

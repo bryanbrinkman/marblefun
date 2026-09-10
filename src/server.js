@@ -10,6 +10,7 @@ const { WSServer } = require('./ws');
 const { Tournament } = require('./tournament');
 const { Scheduler } = require('./scheduler');
 const { createSimulator } = require('./simulator');
+const ssr = require('./ssr');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -279,6 +280,35 @@ async function main() {
     }
   }
 
+  // ---- server-rendered pages -------------------------------------------------
+  const SSR_PAGES = { '/': 'index.html', '/index.html': 'index.html', '/gallery': 'gallery.html', '/champions': 'champions.html' };
+  function readManifest() {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(PUBLIC_DIR, 'marbles', 'manifest.json'), 'utf8')) || {};
+    } catch {
+      return {};
+    }
+  }
+  function renderPage(file) {
+    try {
+      const html = fs.readFileSync(path.join(PUBLIC_DIR, file), 'utf8');
+      if (file === 'gallery.html') {
+        return ssr.renderGallery(html, { careers: db ? db.marbleCareers() : [], manifest: readManifest() });
+      }
+      if (file === 'champions.html') {
+        return ssr.renderChampions(html, {
+          history: db ? db.championHistory(200) : [],
+          hof: db ? db.hallOfFame() : null,
+          manifest: readManifest(),
+        });
+      }
+      return ssr.renderHome(html, { snapshot: scheduler ? scheduler.snapshot() : null, hof: db ? db.hallOfFame() : null });
+    } catch (e) {
+      console.error('[ssr] render failed for', file, '-', e && e.message, '(serving static)');
+      return null;
+    }
+  }
+
   const httpServer = http.createServer((req, res) => {
    try {
     const url = new URL(req.url, 'http://localhost');
@@ -376,6 +406,21 @@ async function main() {
     // through to the static handler — only "/api/…" subpaths are endpoints.
     if (url.pathname.startsWith('/api/')) {
       return sendJSON(res, 404, { ok: false, error: 'unknown endpoint' });
+    }
+    // Crawlable pages: fill the client containers server-side (see src/ssr.js)
+    // so no-JS clients and crawlers get real content; the client hydrates over
+    // identical markup. Any failure falls back to the plain static file.
+    const ssrPage = SSR_PAGES[url.pathname];
+    if (ssrPage && req.method === 'GET') {
+      const rendered = renderPage(ssrPage);
+      if (rendered != null) {
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-cache',
+          'Vary': 'Accept-Encoding',
+        });
+        return res.end(rendered);
+      }
     }
     serveStatic(req, res);
    } catch (e) {

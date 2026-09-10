@@ -3,23 +3,23 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Marble Run — Live 3D Marble Racing Tournament</title>
-    <meta name="description" content="Watch 100 marbles race through a live 3D tournament. Pick a marble, follow it through each round, and see who becomes champion." />
+    <title>Marble Run — Live Marble Racing Tournament</title>
+    <meta name="description" content="100 marbles race through a persistent tournament until one champion remains. Pick your marble, watch live races, explore results, and recreate tracks in 3D." />
     <link rel="canonical" href="https://marblerun.fun/" />
     <meta name="theme-color" content="#0a0d14" />
     <meta name="color-scheme" content="dark" />
     <meta property="og:site_name" content="Marble Run" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Marble Run — Live 3D Marble Racing Tournament" />
-    <meta property="og:description" content="Watch 100 marbles race through a live 3D tournament. Pick a marble, follow it through each round, and see who becomes champion." />
+    <meta property="og:title" content="Marble Run — Live Marble Racing Tournament" />
+    <meta property="og:description" content="100 marbles race through a persistent tournament until one champion remains. Pick your marble, watch live races, explore results, and recreate tracks in 3D." />
     <meta property="og:url" content="https://marblerun.fun/" />
     <meta property="og:image" content="https://marblerun.fun/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Marble Run — 100 marbles. One champion." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Marble Run — Live 3D Marble Racing Tournament" />
-    <meta name="twitter:description" content="Watch 100 marbles race through a live 3D tournament. Pick a marble, follow it through each round, and see who becomes champion." />
+    <meta name="twitter:title" content="Marble Run — Live Marble Racing Tournament" />
+    <meta name="twitter:description" content="100 marbles race through a persistent tournament until one champion remains. Pick your marble, watch live races, explore results, and recreate tracks in 3D." />
     <meta name="twitter:image" content="https://marblerun.fun/og.png" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.png" type="image/png" sizes="64x64" />
@@ -29,16 +29,37 @@
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "Marble Run",
-      "alternateName": "marblerun.fun",
-      "url": "https://marblerun.fun/",
-      "description": "Watch 100 marbles race through a live 3D tournament. Pick a marble, follow it through each round, and see who becomes champion."
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "name": "Marble Run",
+          "alternateName": "marblerun.fun",
+          "url": "https://marblerun.fun/",
+          "description": "100 marbles race through a persistent tournament until one champion remains. Pick your marble, watch live races, explore results, and recreate tracks in 3D."
+        },
+        {
+          "@type": "WebApplication",
+          "name": "Marble Run",
+          "url": "https://marblerun.fun/",
+          "applicationCategory": "GameApplication",
+          "operatingSystem": "Any",
+          "browserRequirements": "Requires JavaScript and WebGL",
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+        }
+      ]
     }
     </script>
   </head>
   <body class="stats-hidden">
-    <h1 class="sr-only">Marble Run — Live 3D Marble Racing Tournament</h1>
+    <h1 class="sr-only">Marble Run — Live Marble Racing Tournament</h1>
+    <!--SSR:HOME-->
+    <noscript>
+      <div class="noscript-note">
+        <p><b>Marble Run</b> — 100 marbles, 25 races, one champion, forever. The live 3D race needs JavaScript;
+        the results and history don't: <a href="/champions">Champions</a> · <a href="/gallery">Marble gallery</a> · <a href="/api">API</a>.</p>
+        <!--SSR:HOME-NOSCRIPT-->
+      </div>
+    </noscript>
 
     <!-- Full-bleed race fills the screen; everything else floats over it. -->
     <div class="race-bg">
@@ -86,9 +107,9 @@
       </div>
 
       <div class="topbar-right">
-        <div class="watching" id="watching" hidden>
-          <span class="eye" aria-hidden="true">👁</span><span id="watchingN">0</span>&nbsp;watching
-        </div>
+        <!-- Live indicator. Shows the real audience only once it's 5+; below that
+             it's just the live dot (never a small or fake number). -->
+        <div class="watching" id="watching" hidden><span class="li-dot" aria-hidden="true"></span><span class="w-live">LIVE</span><span class="w-count" id="watchingWrap" hidden>· <span id="watchingN">0</span> watching</span></div>
         <!-- Connection chip: only surfaces when something is off (reconnecting,
              offline, local). Live is the normal state and stays quiet. -->
         <div class="conn" id="conn" role="status" data-state="connecting">…</div>
@@ -147,17 +168,27 @@
       </div>
     </div>
 
-    <!-- ================= ONBOARDING: pick your marble ========================== -->
+    <!-- ================= INTRO: compact hero for new visitors ================== -->
+    <!-- Docked under the top bar so the race stays the centerpiece; explains the
+         concept in one line and points at the two things to do. -->
     <section class="hero" id="pickHero" hidden aria-labelledby="heroTitle">
       <div class="hero-card">
-        <div class="hero-brand" id="heroTitle">MARBLE RUN</div>
-        <div class="hero-tag">100 MARBLES. ONE CHAMPION.</div>
-        <div class="hero-q">WHO ARE YOU BACKING?</div>
+        <h2 class="hero-brand" id="heroTitle">100 marbles. 25 races. One champion. Forever.</h2>
+        <p class="hero-tag">Pick a marble and follow it through the tournament.</p>
         <div class="hero-actions">
           <button class="hero-btn primary" id="heroPick">PICK A MARBLE</button>
-          <button class="hero-btn" id="heroRandom">PICK ONE FOR ME</button>
+          <button class="hero-btn" id="heroSkip">WATCH THE RACE</button>
         </div>
-        <button class="hero-skip" id="heroSkip">Just watch for now</button>
+        <div class="pr-journey hero-journey" role="img" aria-label="Tournament progress: 100 started, 20 advance, 5 finalists, 1 champion">
+          <span class="j-stage" data-stage="heats"><b>100</b><i>started</i></span>
+          <span class="j-arrow" aria-hidden="true">→</span>
+          <span class="j-stage" data-stage="semis"><b>20</b><i>advance</i></span>
+          <span class="j-arrow" aria-hidden="true">→</span>
+          <span class="j-stage" data-stage="final"><b>5</b><i>finalists</i></span>
+          <span class="j-arrow" aria-hidden="true">→</span>
+          <span class="j-stage" data-stage="champion"><b>1</b><i>champion</i></span>
+        </div>
+        <button class="hero-random" id="heroRandom">or pick one for me →</button>
       </div>
     </section>
 
@@ -197,13 +228,19 @@
           <span class="j-arrow" aria-hidden="true">→</span>
           <span class="j-stage" data-stage="champion"><b>1</b><i>champion</i></span>
         </div>
-        <div class="pr-guess" id="prGuessLabel" hidden>🎯 Tap a marble to back it to win</div>
+        <div class="pr-guess" id="prGuessLabel" hidden>🎯 Pick who you think will win</div>
         <div class="pr-starters" id="prStarters"></div>
         <!-- Your marble: status card once chosen. -->
         <div class="pr-marble" id="prMarble"></div>
         <div class="pr-actions">
           <button class="pr-btn" id="watchLatestBtn" hidden>▶ Watch latest race</button>
         </div>
+        <!-- Post-race: the course you just watched is 3D-printable, exactly as raced. -->
+        <a class="pr-print" id="prPrint" hidden href="/print">
+          <span class="pp-k">LIKED THIS TRACK? MAKE IT REAL.</span>
+          <span class="pp-s">Download the exact course from this race for your 3D printer.</span>
+          <span class="pp-b">🖨 PRINT THIS RACE</span>
+        </a>
         <button class="pr-how" id="prHow" hidden>How it works</button>
       </div>
     </section>
@@ -341,6 +378,9 @@
       <a href="/gallery" title="Meet all 100 marbles — names, stats and owners">🔮<span> Marbles</span></a>
       <a href="/champions" title="Every champion, every tournament">🏆<span> Champions</span></a>
     </nav>
+
+    <!-- Shown while a manual camera is in charge: one tap back to the director. -->
+    <button class="tv-return" id="tvReturn" hidden>📺 Back to TV mode</button>
 
     <!-- Bracket: a classic two-sided "Road to the Final" that slides up from the
          bottom as a lower third, toggled by the button in the corner. -->

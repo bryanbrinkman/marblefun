@@ -67,11 +67,12 @@
     return `Next race in ${fmtClock(rem)}`;
   }
 
-  // Viewer count: show only a real, double-digit audience. A tiny or unknown
-  // count is hidden entirely (never faked, never placeholder).
+  // Viewer count: show only a real audience of 5 or more. Below that the UI
+  // shows just the live indicator — never a small, faked or placeholder number.
+  const VIEWER_COUNT_MIN = 5;
   function shouldShowViewerCount(viewerCount) {
-    return Number.isFinite(viewerCount) && viewerCount >= 10;
+    return Number.isFinite(viewerCount) && viewerCount >= VIEWER_COUNT_MIN;
   }
 
-  return { EVENT_STATES, fmtClock, getNextRaceDisplay, shouldShowViewerCount };
+  return { EVENT_STATES, VIEWER_COUNT_MIN, fmtClock, getNextRaceDisplay, shouldShowViewerCount };
 });

@@ -970,6 +970,13 @@ function skipHero() {
   renderHero();
   renderPreRace();
 }
+// "WATCH THE RACE": dismiss the intro, make sure the broadcast director is on,
+// and hand focus to the stage (no navigation).
+function watchTheRace() {
+  skipHero();
+  if (!tvMode) setTvMode(true);
+  try { gameFrame.focus(); } catch {}
+}
 function pickRandomMarble() {
   const alive = model.standings.filter((m) => m.status === 'alive');
   const pool = alive.length ? alive : model.standings;
@@ -1124,14 +1131,19 @@ function marbleColor(id) {
   return '#ffcf5c';
 }
 
-// The "your marble" block: a pick button before choosing, a status card after.
+// The "your marble" block — the product's central mechanic, so it gets a real
+// module: number, name, status, next race, best result so far. Fields the data
+// can't support are simply omitted. With no marble picked it becomes the CTA.
 function renderPrMarble() {
   const wrap = el('prMarble');
   if (!wrap) return;
   if (followId == null) {
-    // No big pick button here — the top-bar "Pick a marble" and tapping a
-    // starter chip both cover it, and the card stays lean.
-    wrap.innerHTML = '';
+    // The compact hero covers first-time visitors; once it's dismissed this is
+    // the standing invitation.
+    wrap.innerHTML =
+      `<div class="prm prm-cta"><span class="prm-info"><i class="prm-k">Your marble</i>` +
+      `<b>You don't have a marble yet</b><span class="prm-status">Pick one and follow it through every round.</span></span>` +
+      `<span class="prm-actions"><button class="prm-follow" id="prPickBtn">🔮 Pick your marble</button></span></div>`;
     return;
   }
   const st = followedStanding();
@@ -1141,39 +1153,46 @@ function renderPrMarble() {
     ? `background-image:url('${skin.img}');background-size:cover;background-position:center`
     : `background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.92), rgba(255,255,255,0) 34%),` +
       `radial-gradient(circle at 50% 45%, ${marbleColor(followId)} 0%, #131a2a 135%)`;
-  // In-roster check for a round: has this marble earned a spot there?
-  const inRound = (key) => {
-    const round = model.rounds.find((r) => r.key === key);
-    return !!(round && round.races.some((r) => r.roster && r.roster.some((s) => s.marbleId === followId)));
-  };
-  let status;
-  let mainAction = `<button class="prm-follow" id="prFollowBtn">📍 Follow</button>`;
+  const rows = []; // [label, value, cls]
+  let mainAction = '';
+  const road = roadFor(followId);
+  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+  const nxt = nextUpcomingRace();
   if (!st) {
-    // Friendly fallback; the selection is retained for when data returns.
-    status = 'Marble status temporarily unavailable';
-    mainAction = '';
+    rows.push(['Status', 'Temporarily unavailable', '']);
   } else if (st.status === 'champion') {
-    status = '🏆 Tournament champion!';
-    mainAction = `<button class="prm-follow" id="prWatchFinishBtn">🏆 Watch finish</button>`;
+    rows.push(['Status', '🏆 CHAMPION', 'gold']);
+    mainAction = `<button class="prm-follow" id="prWatchFinishBtn">🏆 Watch the moment</button>`;
   } else if (st.status === 'eliminated') {
     const e = eliminationInfo(followId);
-    status = e ? `Out — ${ordinal(e.rank || 0)} in ${raceLabelShort(e.race)}` : 'Eliminated';
-    // An eliminated marble isn't racing — the useful next step is backing one
-    // that still is.
+    rows.push(['Status', 'ELIMINATED', 'out']);
+    if (e) rows.push(['Last', `${ordinal(e.rank || 0)} in ${raceLabel(e.race)}`, '']);
     mainAction = `<button class="prm-follow" id="prSurvivorBtn">🔁 Follow a survivor</button>`;
   } else {
-    const nxt = nextUpcomingRace();
-    if (nxt && nxt.roster && nxt.roster.some((s) => s.marbleId === followId)) status = '✨ In the next race!';
-    else if (inRound('final')) status = '👑 Racing in the Championship!';
-    else if (inRound('semis')) status = '🎉 Qualified for the finals';
-    else status = 'Still racing';
+    rows.push(['Status', 'ALIVE', 'alive']);
+    const racingNow = cur && !cur.result && startedRaces.has(cur.key) && cur.roster.some((s) => s.marbleId === followId);
+    if (racingNow) rows.push(['Racing', raceLabel(cur), 'gold']);
+    else if (nxt && nxt.roster && nxt.roster.some((s) => s.marbleId === followId)) rows.push(['Next', raceLabel(nxt), 'gold']);
+    else {
+      const inRound = (key) => model.rounds.some((r) => r.key === key && r.races.some((x) => x.roster && x.roster.some((s) => s.marbleId === followId)));
+      if (inRound('final')) rows.push(['Next', 'The Final', 'gold']);
+      else if (inRound('semis')) rows.push(['Next', 'Semifinals', '']);
+      else if (road.length === 0) rows.push(['Next', 'Qualifying — awaiting its heat', '']);
+      else rows.push(['Next', 'Waiting for the draw', '']);
+    }
+    mainAction = `<button class="prm-follow" id="prFollowBtn">📍 Follow</button>`;
+  }
+  // Best result so far this tournament (rank only — courses differ per race).
+  if (road.length) {
+    const best = road.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99) || b.race.roundIdx - a.race.roundIdx)[0];
+    if (best && best.rank) rows.push(['Best', `${ordinal(best.rank)} · ${raceLabelShort(best.race)}`, '']);
   }
   wrap.innerHTML =
     `<div class="prm${st && st.status === 'eliminated' ? ' out' : ''}">` +
     `<span class="prm-ball" style="${ballStyle}" aria-hidden="true"></span>` +
     `<span class="prm-info"><i class="prm-k">Your marble</i>` +
-    `<b>${st ? st.name : 'Marble ' + num} <span class="prm-id">#${num}</span></b>` +
-    `<span class="prm-status">${status}</span>` +
+    `<b>#${num} — ${st ? st.name : 'Marble ' + num}</b>` +
+    `<span class="prm-rows">${rows.map(([k, v, c]) => `<span class="prm-row"><i>${k}</i><b class="${c}">${v}</b></span>`).join('')}</span>` +
     `<span class="prm-career" id="prCareer"></span></span>` +
     `<span class="prm-actions">${mainAction}` +
     `<button class="prm-change" id="prChangeBtn">Change</button></span>` +
@@ -1343,6 +1362,14 @@ function renderPreRace() {
   const latest = orderedRaces().some((r) => r.result) && mode === 'server';
   el('watchLatestBtn').hidden = !latest;
   renderPrMarble();
+  // The course you just watched, exactly as raced, for your 3D printer.
+  const done = orderedRaces().filter((r) => r.result);
+  const lastDone = done[done.length - 1];
+  const pp = el('prPrint');
+  if (pp) {
+    pp.hidden = !(lastDone && lastDone.trackSeed != null);
+    if (lastDone && lastDone.trackSeed != null) pp.href = '/print?seed=' + lastDone.trackSeed;
+  }
 
   if (model.champion) {
     state.textContent = 'Tournament complete';
@@ -1377,7 +1404,7 @@ function renderPreRace() {
           const mine = s.marbleId === followId;
           return (
             `<button class="um${mine ? ' followed' : ''}" data-guess="${s.marbleId}"` +
-            ` aria-pressed="${mine ? 'true' : 'false'}" title="Back ${s.marbleName} to win">` +
+            ` aria-pressed="${mine ? 'true' : 'false'}" title="Pick ${s.marbleName} to win">` +
             `<span class="swatch" style="background:${s.color}"></span>${shortName(s.marbleName)}` +
             (mine ? ' 🎯' : '') +
             `</button>`
@@ -2567,7 +2594,7 @@ function renderBracketCompact() {
         setFollow(1 + ((Math.random() * 100) | 0));
       }
     });
-  if (el('heroSkip')) el('heroSkip').addEventListener('click', skipHero);
+  if (el('heroSkip')) el('heroSkip').addEventListener('click', watchTheRace);
   renderHero();
 }
 
@@ -2636,8 +2663,11 @@ function setTvMode(on) {
     tvDirector();
   }
   document.body.classList.toggle('tv-on', tvMode);
+  const back = el('tvReturn');
+  if (back) back.hidden = tvMode;
   syncCamButtons();
 }
+if (el('tvReturn')) el('tvReturn').addEventListener('click', () => setTvMode(true));
 function tvDirector() {
   const a = api();
   if (!a || !a.getCamera || !a.setCamera || !_director) return;
@@ -2829,11 +2859,13 @@ whenApiReady().then(() => {
         return;
       }
       if (badge && num) {
-        // A small or zero audience reads worse than no number at all — only
-        // show the real count once it's ≥ 10 (shared shouldShowViewerCount:
-        // invalid/missing/low all hide the element entirely, never a fake).
+        // A small or zero audience reads worse than no number at all: the badge
+        // is the live dot alone until the real count reaches 5 (shared
+        // shouldShowViewerCount); the number is never faked or padded.
         num.textContent = d.count;
-        badge.hidden = !window.UIState.shouldShowViewerCount(d.count);
+        const wrap = el('watchingWrap');
+        if (wrap) wrap.hidden = !window.UIState.shouldShowViewerCount(d.count);
+        badge.hidden = mode !== 'server';
       }
     } catch {
       dead = true;
