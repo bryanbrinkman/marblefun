@@ -5202,9 +5202,9 @@ function stepPhysics(dt) {
         // Reflect velocity along this normal.
         const velAlongNormal = m.vel.dot(normal);
         if (velAlongNormal < 0) {  // moving INTO the wall (against the inward normal)
-          // Wooden walls absorb — restitution from the wood surface profile
-          // (0.55) instead of the old uniform 0.7. Glass-on-wood hits deaden;
-          // the wall flexes and the marble loses real energy.
+          // Wall bounce — restitution from the wood surface profile (0.72).
+          // Was 0.55, which read as the marble sticking to the wall; a livelier
+          // rebound keeps the ball visibly ricocheting through the channel.
           m.vel.addScaledVector(normal, -velAlongNormal * (1 + SURFACES.wood.restitution));
           // Random tangential perturbation so repeated bounces don't trace identical
           // arcs. No upward kick — that was causing visible random hops on straight
@@ -7070,7 +7070,7 @@ function _getNoiseBuf(ctx) {
 //               in ~10 ms. Stiff contact briefly raises the effective stiffness
 //               → the audible "th-ock" pitch drop at the attack.
 const SURFACES = {
-  wood:   { restitution: 0.55, f0Lo: 190, f0Hi: 340,  modes: [1, 2.76, 5.40], modeGain: [1.0, 0.42, 0.14],
+  wood:   { restitution: 0.72, f0Lo: 190, f0Hi: 340,  modes: [1, 2.76, 5.40], modeGain: [1.0, 0.42, 0.14],
             t60: 0.11, tap: 0.55, tapLp: 3200, body: 0.35, bodyHz: 95,  drop: 1.18 },
   peg:    { restitution: 0.85, f0Lo: 420, f0Hi: 700,  modes: [1, 2.76, 5.40], modeGain: [1.0, 0.55, 0.22],
             t60: 0.08, tap: 0.6,  tapLp: 4800, body: 0.15, bodyHz: 140, drop: 1.12 },
