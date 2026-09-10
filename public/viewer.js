@@ -494,7 +494,7 @@ function renderRaceBoard(race, prog) {
       const s = race.roster.find((x) => x.lane === p.lane);
       if (!s) return '';
       const mine = s.marbleId === followId;
-      const pct = p.finished ? '✓' : Math.min(99, Math.round(p.pos * 100)) + '%';
+      const pct = p.finished ? '✓' : ''; // rank order says it all — no percentages
       return (
         `<div class="rb-row${mine ? ' mine' : ''}${p.finished ? ' done' : ''}${i === 0 ? ' lead' : ''}">` +
         `<span class="rb-pos">${i + 1}</span><span class="rb-sw" style="background:${s.color}"></span>` +
