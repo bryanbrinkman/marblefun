@@ -526,9 +526,10 @@ function careerLine(id) {
   if (!_careers || id == null) return '';
   const c = _careers.get(id);
   if (!c || !c.races) return 'Rookie — no races on record yet';
+  // One short line: it has to fit beside a 44px ball on a 330px card.
   const bits = [];
-  if (c.titles) bits.push(`🏆 ${c.titles} ${c.titles > 1 ? 'championships' : 'championship'}`);
-  bits.push(`${c.wins} race ${c.wins === 1 ? 'win' : 'wins'}`);
+  if (c.titles) bits.push(`🏆 ${c.titles} ${c.titles > 1 ? 'titles' : 'title'}`);
+  bits.push(`${c.wins} ${c.wins === 1 ? 'win' : 'wins'}`);
   bits.push(`${c.podiums} ${c.podiums === 1 ? 'podium' : 'podiums'}`);
   bits.push(`${c.races} races`);
   return bits.join(' · ');
@@ -1156,7 +1157,7 @@ function renderPrMarble() {
     mainAction = `<button class="prm-follow" id="prWatchFinishBtn">🏆 Watch finish</button>`;
   } else if (st.status === 'eliminated') {
     const e = eliminationInfo(followId);
-    status = e ? `Eliminated in ${e.label}${e.rank ? ` · finished ${ordinal(e.rank)}` : ''}` : 'Eliminated';
+    status = e ? `Out — ${ordinal(e.rank || 0)} in ${raceLabelShort(e.race)}` : 'Eliminated';
     // An eliminated marble isn't racing — the useful next step is backing one
     // that still is.
     mainAction = `<button class="prm-follow" id="prSurvivorBtn">🔁 Follow a survivor</button>`;
