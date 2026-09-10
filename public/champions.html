@@ -117,7 +117,8 @@
   .step { display: flex; flex-direction: column; min-width: 86px; padding: 7px 10px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); }
   .step i { font-style: normal; font-size: 9px; letter-spacing: 0.2em; color: var(--muted); font-weight: 800; }
   .step b { font-size: 15px; font-weight: 900; color: var(--accent); line-height: 1.25; }
-  .step small { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .step small { font-size: 10.5px; color: var(--muted); }
+  .step small:empty { display: none; }
   .step.wild b { color: var(--live); }
   .arrow { color: var(--line2); font-weight: 900; font-size: 18px; }
   .final { margin-top: 12px; }
@@ -266,10 +267,10 @@
         const color = t.final && t.final[0] ? t.final[0].color : null;
         const isWild = t.path.some((p) => p.roundKey === 'semis' && p.rank === 2);
         const road = t.path
-          .map((p) => `<span class="step${p.roundKey === 'semis' && p.rank === 2 ? ' wild' : ''}"><i>${roundLabel(p)}</i><b>${p.rank ? ordinal(p.rank) : '—'}</b><small>${p.timeSec != null ? p.timeSec.toFixed(2) + 's' : 'DNF'}</small></span>`)
+          .map((p) => `<span class="step${p.roundKey === 'semis' && p.rank === 2 ? ' wild' : ''}"><i>${roundLabel(p)}</i><b>${p.rank ? ordinal(p.rank) : '—'}</b><small>${p.timeSec == null ? 'DNF' : ''}</small></span>`)
           .join('<span class="arrow" aria-hidden="true">›</span>');
         const finalRows = (t.final || [])
-          .map((f) => `<div class="frow${f.rank === 1 ? ' win' : ''}"><span class="pos">${f.rank}</span><span class="sw" style="background:${esc(f.color)}"></span><a href="/gallery#${f.marbleId}">#${pad(f.marbleId)} ${esc(f.marbleName)}</a><span class="t">${f.timeSec != null ? f.timeSec.toFixed(2) + 's' : 'DNF'}</span></div>`)
+          .map((f) => `<div class="frow${f.rank === 1 ? ' win' : ''}"><span class="pos">${f.rank}</span><span class="sw" style="background:${esc(f.color)}"></span><a href="/gallery#${f.marbleId}">#${pad(f.marbleId)} ${esc(f.marbleName)}</a><span class="t">${f.timeSec == null ? 'DNF' : ''}</span></div>`)
           .join('');
         return (
           `<article class="champ">` +

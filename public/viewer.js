@@ -634,7 +634,7 @@ function renderRecent() {
     .map((r) => {
       const w = r.result[0];
       const label = raceLabelShort(r);
-      const t = w.timeSec != null ? w.timeSec.toFixed(1) + 's' : 'DNF';
+      const t = w.timeSec != null ? '' : 'DNF'; // finish times aren't comparable across courses
       return (
         `<div class="recent-item"><span class="swatch" style="background:${w.color}"></span>` +
         `<span class="ri-label">${label}</span>` +
@@ -680,7 +680,7 @@ function bracketSlotRows(race) {
     .map((s) => {
       const rank = rankBySlot[s.slot];
       const done = rank != null;
-      const t = done ? (timeBySlot[s.slot] != null ? timeBySlot[s.slot].toFixed(1) + 's' : 'DNF') : '';
+      const t = done && timeBySlot[s.slot] == null ? 'DNF' : ''; // only flag non-finishers
       return (
         `<div class="bd-slot${rank === 1 ? ' win' : ''}">` +
         `<span class="pos">${done ? rank : ''}</span>` +
@@ -1661,7 +1661,7 @@ function showChampionCelebration(champion) {
     .map(
       (p) =>
         `<span class="co-step"><i>${roundShort(p.race)}</i><b>${p.rank ? ordinal(p.rank) : '—'}</b>` +
-        `<small>${p.timeSec != null ? p.timeSec.toFixed(1) + 's' : ''}</small></span>`
+        `<small>${p.timeSec == null ? 'DNF' : ''}</small></span>`
     )
     .join('<span class="co-arrow" aria-hidden="true">›</span>');
   const bits = [];
@@ -2492,7 +2492,7 @@ function renderBracketCompact() {
       `<span class="bc-l">${label}</span>` +
       (w
         ? `<span class="bc-w"><span class="swatch" style="background:${w.color}"></span>#${numOf(w.marbleId)} ${w.marbleName}` +
-          `<small>${w.timeSec != null ? w.timeSec.toFixed(1) + 's' : 'DNF'}</small></span>`
+          `${w.timeSec == null ? '<small>DNF</small>' : ''}</span>`
         : `<span class="bc-w muted">${cur ? '● live now' : race.status === 'announced' ? 'up next' : race.roster.map((s) => numOf(s.marbleId)).join(' · ')}</span>`) +
       `</div>`
     );
