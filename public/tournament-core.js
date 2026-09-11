@@ -101,7 +101,7 @@
         'Sparkly', 'Peeled Out', 'Aerys II', 'Grumpy', 'Versal',
         'Geared Up', 'Red Nose', 'Rotten', 'Serenity', 'Fluffy',
         'Mickey', 'Phoenix', 'Geometric', 'Marmy', 'Burnout',
-        'Entertainer', 'Relaxer', 'Cowboy', 'Refunder', 'Detroiter',
+        'Entertainer', 'Relaxer', 'Mulligan', 'Refunder', 'Detroiter',
       ];
       const idx = (((id - 1) % 100) + 100) % 100;
       return NAMES[idx];
