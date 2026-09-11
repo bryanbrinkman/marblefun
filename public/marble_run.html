@@ -704,12 +704,17 @@ setIsoCamera(camYaw, camPitch, camDistance);
 // hoisted function + this early init keep the original block readable.
 let _lowQ = false;
 let _lowQUserSet = false; // true once the user has picked via the ⚡ button
+const _coarsePointer = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
 try {
   const saved = localStorage.getItem('marbleLowQ');
   if (saved === '1' || saved === '0') { _lowQ = saved === '1'; _lowQUserSet = true; }
-  else _lowQ = detectLowGfx(); // first visit: auto-pick from device capability
-} catch (e) { _lowQ = detectLowGfx(); }
-const _coarsePointer = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  // First visit: phones and tablets start on the low tier regardless of how
+  // capable their GPU claims to be — shadows + MSAA + 3x DPR on a 6" screen is
+  // where the frame rate goes, and the visual difference is negligible at that
+  // size. Desktops auto-pick from device capability (and the fps watchdog
+  // below still drops a struggling one). The ⚡ toggle overrides either way.
+  else _lowQ = _coarsePointer || detectLowGfx();
+} catch (e) { _lowQ = _coarsePointer || detectLowGfx(); }
 
 let renderer;
 try {
