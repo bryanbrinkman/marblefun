@@ -1129,7 +1129,7 @@ body.tv-on #controlsBtn::after { content: ''; width: 7px; height: 7px; border-ra
   .rb-name { display: none; } /* rank · swatch · number — the lower third carries the name */
   .rb-pct { width: 12px; font-size: 10px; }
   /* Half-size lower third on phones: a caption, not a billboard. */
-  .race-hud { left: 10px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); max-width: calc(100vw - 20px); gap: 2px; }
+  .race-hud { left: 10px; bottom: calc(74px + env(safe-area-inset-bottom, 0px)); max-width: calc(100vw - 20px); gap: 2px; }
   .rh-num, .rh-pos { font-size: 12px; }
   .rh-name { font-size: 11px; max-width: 40vw; }
   .rh-main { padding: 4px 8px; gap: 6px; border-left-width: 3px; border-radius: 0 7px 7px 7px; }
