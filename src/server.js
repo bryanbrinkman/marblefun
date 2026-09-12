@@ -11,6 +11,7 @@ const { Tournament } = require('./tournament');
 const { Scheduler } = require('./scheduler');
 const { createSimulator } = require('./simulator');
 const ssr = require('./ssr');
+const { toMasterBuf, makeCommitment } = require('./seeds');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -43,7 +44,11 @@ function buildConfig() {
     port: envInt('PORT', 8080),
     host: process.env.HOST || '0.0.0.0',
     dbPath: process.env.DB_PATH || path.join(__dirname, '..', 'data', 'tournament.db'),
-    masterSeed: (envInt('MASTER_SEED', 424242) >>> 0) >>> 0,
+    // 64 hex chars (256-bit) or a legacy integer — see seeds.toMasterBuf.
+    masterSeed: process.env.MASTER_SEED && process.env.MASTER_SEED !== '' ? process.env.MASTER_SEED : 424242,
+    // Public randomness beacon folded into every race seed at race_start.
+    beaconSource: process.env.PUBLIC_BEACON || 'drand', // drand | nist | none
+    beaconUrl: process.env.PUBLIC_BEACON_URL || null,
     headless: process.env.HEADLESS !== '0',
     announceLeadMs: envInt('ANNOUNCE_LEAD_MS', fast ? 6000 : 30000),
     interRaceGapMs: envInt('INTER_RACE_GAP_MS', fast ? 2500 : 6000),
@@ -88,6 +93,43 @@ function sendJSON(res, code, obj) {
     'Access-Control-Allow-Headers': 'content-type, x-admin-token',
   });
   res.end(JSON.stringify(obj));
+}
+
+// The peer's address as the proxy saw it (Fly sets fly-client-ip; a generic
+// proxy sets x-forwarded-for), else the socket's.
+function clientIp(req) {
+  const h = req.headers || {};
+  const fly = h['fly-client-ip'];
+  if (fly) return String(fly).trim();
+  const xff = h['x-forwarded-for'];
+  if (xff) return String(xff).split(',')[0].trim();
+  return (req.socket && req.socket.remoteAddress) || 'unknown';
+}
+
+// Small JSON request body (rejects anything over `limit` bytes).
+function readJsonBody(req, limit = 4096) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > limit) {
+        reject(new Error('body too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      if (!chunks.length) return resolve({});
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      } catch {
+        reject(new Error('invalid JSON'));
+      }
+    });
+    req.on('error', reject);
+  });
 }
 
 function serveStatic(req, res) {
@@ -166,7 +208,7 @@ async function main() {
   const cfg = buildConfig();
   console.log('[server] config:', {
     port: cfg.port,
-    masterSeed: cfg.masterSeed,
+    beacon: cfg.beaconSource,
     announceLeadMs: cfg.announceLeadMs,
     interRaceGapMs: cfg.interRaceGapMs,
     fastDemo: process.env.FAST_DEMO === '1',
@@ -392,6 +434,23 @@ async function main() {
       }
       return sendJSON(res, 200, hof || { tournamentsCompleted: 0, racesRun: 0, distinctChampions: 0, currentChampion: null, mostTitles: [], repeatChampions: [], longestStreak: null });
     }
+    // Public contribution to the next race seed: POST /api/race/:key/client-seed
+    // with {"seed": "<64 hex chars>"} while the race is announced (T-30s → gate).
+    // One seed per IP per race; folded into the race seed at race_start.
+    const csm = url.pathname.match(/^\/api\/race\/([a-z]+:\d+)\/client-seed$/);
+    if (csm) {
+      if (req.method !== 'POST') return sendJSON(res, 405, { ok: false, error: 'use POST' });
+      if (!scheduler) return sendJSON(res, 503, { ok: false, error: 'no tournament running' });
+      const raceKey = csm[1];
+      readJsonBody(req, 2048)
+        .then((body) => {
+          const r = scheduler.addClientSeed(raceKey, clientIp(req), body && body.seed);
+          if (!r.ok) return sendJSON(res, r.reason === 'window closed' ? 409 : 400, { ok: false, error: r.reason, count: r.count });
+          return sendJSON(res, 200, { ok: true, accepted: !!r.accepted, count: r.count, closesAt: r.closesAt || null, note: r.reason || null });
+        })
+        .catch((e) => sendJSON(res, 400, { ok: false, error: e.message || 'bad request' }));
+      return;
+    }
     if (url.pathname === '/api/admin' || url.pathname.startsWith('/api/admin/')) {
       try {
         return handleAdmin(req, res, url);
@@ -460,7 +519,7 @@ async function main() {
     simulator = await createSimulator({
       url: `${localUrl}/marble_run.html`,
       // Any valid seed; every race rebuilds the course for its own trackSeed.
-      trackSeed: cfg.masterSeed,
+      trackSeed: 1,
       headless: cfg.headless,
     });
     console.log('[server] simulator ready (course built)');
@@ -470,11 +529,19 @@ async function main() {
     // The first tournament uses the configured masterSeed. Assigned to the
     // outer `startTournament` so the admin API can restart/reset.
     startTournament = (masterSeed) => {
-      tournament = new Tournament(masterSeed >>> 0);
+      // The tournament id is mixed into every seed derivation, so the DB row
+      // (which assigns the id) comes first; the commitment is persisted with it
+      // so a finished tournament stays verifiable across restarts.
+      const masterBuf = toMasterBuf(masterSeed);
+      const commitment = makeCommitment(masterBuf);
       const tournamentId = db.createTournament({
-        masterSeed: tournament.masterSeed,
+        masterSeed: masterBuf.readUInt32BE(0) >>> 0, // legacy uint32 view
+        masterSeedHex: masterBuf.toString('hex'),
+        commit: commitment.commit,
+        commitSalt: commitment.salt,
         createdAt: Date.now(),
       });
+      tournament = new Tournament(masterBuf, tournamentId);
       db.insertMarbles(tournamentId, tournament.marbles);
       scheduler = new Scheduler({
         tournament,
@@ -483,7 +550,9 @@ async function main() {
         tournamentId,
         broadcast: (msg) => wss.broadcast(msg),
         config: {
-          masterSeed: tournament.masterSeed,
+          commit: commitment,
+          beaconSource: cfg.beaconSource,
+          beaconUrl: cfg.beaconUrl,
           announceLeadMs: cfg.announceLeadMs,
           interRaceGapMs: cfg.interRaceGapMs,
           intermissionMs: cfg.intermissionMs,

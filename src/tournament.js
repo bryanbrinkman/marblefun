@@ -1,6 +1,6 @@
 'use strict';
 
-const { deriveSeed, mix32 } = require('./seeds');
+const { toMasterBuf, drawSeedFor, trackSeedFor } = require('./seeds');
 
 // =========================================================
 // Tournament model — 100 marbles, brackets of 5
@@ -64,10 +64,23 @@ function chunk(arr, size) {
 }
 
 class Tournament {
-  // seed: master uint32. All courses/races derive from it, so the entire
-  // tournament is reproducible.
-  constructor(masterSeed) {
-    this.masterSeed = masterSeed >>> 0;
+  // masterSeed: a 32-byte Buffer / 64-hex string (or a legacy uint32, which
+  // is expanded — see seeds.toMasterBuf). tournamentId is mixed into every
+  // derivation so two tournaments can never share a course or a draw even if
+  // an operator reused a master seed.
+  //
+  // Courses and bracket draws derive from the master seed alone. RACE seeds do
+  // NOT: they are fixed at race_start from masterSeed + a public contribution
+  // the house can't control (see scheduler._start), so `race.raceSeed` is null
+  // until then.
+  constructor(masterSeed, tournamentId = 0) {
+    this.masterSeedBuf = toMasterBuf(masterSeed);
+    this.masterSeedHex = this.masterSeedBuf.toString('hex');
+    // Legacy uint32 view of the master seed — kept only so older payload
+    // consumers reading `masterSeed` as a number keep getting a number. It is
+    // NOT sufficient to re-derive anything; use masterSeedHex.
+    this.masterSeed = this.masterSeedBuf.readUInt32BE(0) >>> 0;
+    this.tournamentId = tournamentId >>> 0;
 
     // 100 marbles with stable ids and display names. Names are DETERMINISTIC
     // and permanent: 10 adjectives × 10 nouns = exactly 100 unique combos, so
@@ -120,9 +133,12 @@ class Tournament {
   // Create a race object for a round given its participant marble ids.
   _makeRace(roundIdx, indexInRound, participantIds) {
     const round = ROUNDS[roundIdx];
-    const raceSeed = deriveSeed(this.masterSeed, 0x5A17, roundIdx + 1, indexInRound + 1);
+    const key = round.key + ':' + indexInRound;
+    // Fixed at race_start (scheduler): sha256(master ‖ tid ‖ raceKey ‖ publicContribution).
+    const raceSeed = null;
     // Each race runs on its own course, so the track changes every race.
-    const trackSeed = deriveSeed(this.masterSeed, 0x7A2C, roundIdx + 1, indexInRound + 1);
+    // Candidate 0; the scheduler re-rolls (attempt 1, 2, …) if it's a dud.
+    const trackSeed = trackSeedFor(this.masterSeedBuf, this.tournamentId, key, 0);
     const roster = participantIds.map((mid, slot) => ({
       slot,
       marbleId: mid,
@@ -131,23 +147,29 @@ class Tournament {
       color: COLOR_SLOTS[slot].color,
     }));
     return {
-      key: round.key + ':' + indexInRound,
+      key,
       roundIdx,
       roundKey: round.key,
       roundTitle: round.title,
       indexInRound,
       trackSeed,
+      trackAttempt: 0,
       raceSeed,
       roster, // slot -> marble
       result: null, // filled after the race runs
     };
   }
 
+  // Candidate course seed #attempt for a race (attempt 0 is the default).
+  trackSeedCandidate(race, attempt) {
+    return trackSeedFor(this.masterSeedBuf, this.tournamentId, race.key, attempt);
+  }
+
   _buildHeats() {
     // Draw: shuffle all 100 marbles deterministically, then chunk into 20 heats.
     const order = shuffled(
       this.marbles.map((m) => m.id),
-      deriveSeed(this.masterSeed, 1, 0xD3A) // heats draw seed
+      drawSeedFor(this.masterSeedBuf, this.tournamentId, 'heats')
     );
     const groups = chunk(order, LANE);
     const races = groups.map((g, i) => this._makeRace(0, i, g));
@@ -182,7 +204,7 @@ class Tournament {
     if (last.key === 'heats') {
       // 20 heat winners -> 4 semis of 5 (seeded draw).
       const winners = last.races.map((r) => this._winner(r));
-      const drawn = shuffled(winners, deriveSeed(this.masterSeed, 2, 0x5E1));
+      const drawn = shuffled(winners, drawSeedFor(this.masterSeedBuf, this.tournamentId, 'semis'));
       const groups = chunk(drawn, LANE);
       const races = groups.map((g, i) => this._makeRace(1, i, g));
       const round = { key: 'semis', title: 'Semifinals', idx: 1, races };
@@ -204,7 +226,7 @@ class Tournament {
       }
       const finalists = winners.concat([wild.marbleId]);
       // Seed the final's lane order.
-      const drawn = shuffled(finalists, deriveSeed(this.masterSeed, 3, 0xF1A));
+      const drawn = shuffled(finalists, drawSeedFor(this.masterSeedBuf, this.tournamentId, 'final'));
       const races = [this._makeRace(2, 0, drawn)];
       const round = { key: 'final', title: 'Final', idx: 2, races, wildcard: wild.marbleId };
       this.rounds.push(round);

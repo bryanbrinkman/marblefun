@@ -319,9 +319,16 @@ function renderCurrent(race) {
   title.textContent = raceLabel(race);
   // Seeds are disclosed progressively (trackSeed at announce, raceSeed at the
   // gate), so show only what's been revealed rather than "undefined".
+  const mine = _mySeeds[race.key];
+  const included = mine && race.clientSeeds && race.clientSeeds.includes(mine);
   el('seedline').textContent =
     `${raceLabel(race)} · track seed ${race.trackSeed != null ? race.trackSeed : '—'}` +
-    (race.raceSeed != null ? ` · race seed ${race.raceSeed}` : ' · race seed revealed at the gate');
+    (race.raceSeed != null
+      ? ` · race seed ${race.raceSeed}` +
+        (race.publicContribution ? ` · public ${race.publicContribution.slice(0, 12)}… (${race.publicSource || 'n/a'}${race.clientSeeds ? `, ${race.clientSeeds.length} viewer seeds` : ''})` : '') +
+        (mine ? (included ? ' · your seed was included ✓' : ' · your seed was not included') : '')
+      : ' · race seed fixed at the gate from the house seed + public randomness' +
+        (mine ? ' · your seed is in' : ''));
   // The print link always exports the course on screen.
   const pl = el('printLink');
   if (pl) pl.href = race.trackSeed != null ? '/print?seed=' + race.trackSeed : '/print';
@@ -1457,6 +1464,23 @@ function renderAll() {
   renderPreRace();
 }
 
+// ---- public contribution -------------------------------------------------------
+// Every viewer quietly contributes 32 random bytes to the next race seed during
+// the announce window (one per IP; the server folds them all in at the gate).
+// The seed we sent is kept so the details panel can confirm it was included.
+let _mySeeds = {}; // raceKey -> hex
+async function submitClientSeed(race, win) {
+  if (mode !== 'server' || !race || !win || !win.endpoint || !window.crypto) return;
+  try {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const seed = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+    const r = await fetch(win.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seed }) });
+    const d = await r.json().catch(() => null);
+    if (d && d.ok && d.accepted) _mySeeds[race.key] = seed;
+  } catch {}
+}
+
 // ---- message handling ----------------------------------------------------
 
 function ingestSnapshot(msg) {
@@ -1966,16 +1990,24 @@ function onMessage(msg) {
       startedRaces.delete(race.key);
       renderAll();
       scheduleStart(race);
+      submitClientSeed(race, msg.clientSeedWindow);
       break;
     }
     case 'race_start': {
       clockOffset = msg.serverNow - Date.now();
       const race = model.racesByKey.get(msg.raceKey);
       if (race) {
-        // The outcome seed is revealed here, at the gate. Fold it (and the
-        // final trackSeed) into the race before replaying.
+        // The outcome seed is fixed here, at the gate, from the house's master
+        // seed + the public contribution. Fold everything into the race so the
+        // details panel can show it and the replay uses the right seed.
         if (msg.trackSeed != null) race.trackSeed = msg.trackSeed;
         if (msg.raceSeed != null) race.raceSeed = msg.raceSeed;
+        if (msg.publicContribution) {
+          race.publicContribution = msg.publicContribution;
+          race.publicSource = msg.publicSource;
+          race.clientSeeds = msg.clientSeeds || [];
+          race.beacon = msg.beacon || null;
+        }
         startReplay(race);
       }
       break;

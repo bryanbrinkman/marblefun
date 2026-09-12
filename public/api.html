@@ -110,31 +110,34 @@
   </div>
 
   <div class="card">
-    <h2>The race lifecycle (a.k.a. your prediction window)</h2>
+    <h2>The race lifecycle</h2>
     <div class="timeline">
       <div class="tl"><div class="dot"><i></i></div><div class="body">
         <b>race_announced</b> <span class="when">T−30s</span><br />
         <span class="muted">The 5-marble roster, the <b>track seed</b>, and
-        <code>scheduledStart</code> (epoch ms) go public — <i>not</i> the race seed.
-        You know the field and the course but not the outcome: this is your
-        prediction window.</span>
+        <code>scheduledStart</code> (epoch ms) go public — <i>not</i> the race seed,
+        which does not exist yet. The <b>client seed window</b> opens: anyone may
+        <code>POST /api/race/:key/client-seed</code> 32 random bytes (one per IP) that
+        will be folded into the race seed.</span>
       </div></div>
       <div class="tl"><div class="dot"><i></i></div><div class="body">
         <b>race_start</b> <span class="when">T+0</span><br />
-        <span class="muted">The gate opens and the <b>race seed</b> is revealed.
-        Selection closes — the outcome is now determined and computable, and the
-        marbles are visibly running it out.</span>
+        <span class="muted">The window closes, the server fetches a public randomness
+        beacon pulse, computes <code>publicContribution</code> from the pulse + every
+        client seed, derives the <b>race seed</b> from its committed master seed and that
+        contribution, and broadcasts all of it. The outcome is determined and computable
+        from this instant — and not one moment before, by anyone.</span>
       </div></div>
       <div class="tl"><div class="dot"><i></i></div><div class="body">
         <b>race_result</b> <span class="when">≈ T+60–120s</span><br />
-        <span class="muted">Official finishing order with times, revealed after the marbles
-        visibly cross the line. Score your predictions. Ranks 1–5; a stuck marble records a
-        <code>timeSec: null</code> DNF.</span>
+        <span class="muted">Official finishing order, revealed after the marbles
+        visibly cross the line, together with the same seed inputs. Ranks 1–5; a stuck
+        marble records a <code>timeSec: null</code> DNF.</span>
       </div></div>
       <div class="tl"><div class="dot"><i></i></div><div class="body">
         <b>tournament_complete</b> <span class="when">every ~25 races</span><br />
-        <span class="muted">A champion is crowned; a fresh 100-marble tournament starts
-        about 30 seconds later, forever.</span>
+        <span class="muted">A champion is crowned and the master seed + commit salt are
+        revealed; a fresh 100-marble tournament starts about 30 seconds later, forever.</span>
       </div></div>
     </div>
     <p class="muted">Timing tip: compare <code>scheduledStart</code> against the <code>serverNow</code>
@@ -151,8 +154,8 @@ console.log(next.race.raceKey, next.race.roster, new Date(next.race.scheduledSta
 const ws = new WebSocket('wss://marblerun.fun/ws');
 ws.onmessage = (e) =&gt; {
   const msg = JSON.parse(e.data);
-  if (msg.type === 'race_announced') openPicks(msg.race);      // track seed + roster + start time
-  if (msg.type === 'race_start')     closePicks(msg.raceKey);
+  if (msg.type === 'race_announced') openPicks(msg.race);      // track seed + roster + start time (+ clientSeedWindow)
+  if (msg.type === 'race_start')     closePicks(msg.raceKey);   // raceSeed + publicContribution + clientSeeds + beacon
   if (msg.type === 'race_result')    scoreResult(msg.raceKey, msg.result); // [{rank, marbleId, …}]
 };</code></pre>
     <p class="muted">CORS is open (<code>Access-Control-Allow-Origin: *</code>) on all
@@ -187,7 +190,8 @@ ws.onmessage = (e) =&gt; {
     "roundKey": "heats",           // heats = qualifying, semis = finals, final = championship
     "indexInRound": 7,
     "trackSeed": 1970251534,       // course = f(trackSeed) — present from announce
-    // "raceSeed" appears only once status is "running": outcome = f(trackSeed, raceSeed)
+    // once status is "running": "raceSeed", "publicContribution", "publicSource",
+    // "clientSeeds", "beacon" — outcome = f(trackSeed, raceSeed)
     "scheduledStart": 1786000023456,
     "status": "announced",         // pending → announced → running → done
     "roster": [
@@ -198,13 +202,52 @@ ws.onmessage = (e) =&gt; {
   }
 }</code></pre>
 
+    <div class="ep"><span class="method" style="background:rgba(255,157,60,.15);color:var(--accent2);border-color:rgba(255,157,60,.4)">POST</span><span class="path">/api/race/:key/client-seed</span></div>
+    <p class="muted">Contribute to the next race seed. Body <code>{"seed": "&lt;64 hex chars&gt;"}</code>
+    (32 random bytes). Accepted only while that race is <code>announced</code> (from
+    <code>race_announced</code> until <code>scheduledStart</code>); one seed per IP per race;
+    at most 256 per race. Returns <code>{ ok, accepted, count, closesAt }</code>; <code>409</code>
+    once the gate has opened, <code>400</code> for a malformed seed. Every accepted seed appears
+    verbatim in that race's <code>race_start</code>, <code>race_result</code> and
+    <code>/api/history</code> entry, so you can confirm yours went in — and since the seed is
+    folded in with everyone else's and a public beacon pulse, no single contributor (the
+    house included) can steer the result.</p>
+<pre><code>const seed = [...crypto.getRandomValues(new Uint8Array(32))].map(b =&gt; b.toString(16).padStart(2, '0')).join('');
+await fetch(`https://marblerun.fun/api/race/${race.key}/client-seed`, {
+  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ seed }),
+});</code></pre>
+
+    <div class="card" style="margin:14px 0 4px;padding:12px 14px">
+      <h3 style="margin-top:0">Seed derivation — exact byte layout</h3>
+      <p class="muted">All hashes are SHA-256; a "seed" is the first 4 bytes of the digest read as a
+      big-endian uint32. <code>‖</code> is byte concatenation, <code>u32be</code> a 4-byte big-endian
+      integer, strings are UTF-8.</p>
+<pre><code>masterSeed          = 32 random bytes (revealed at tournament_complete as masterSeedHex)
+commit              = sha256( masterSeed ‖ commitSalt[32] )                     // published from the first snapshot
+drawSeed(round)     = sha256( masterSeed ‖ u32be(tournamentId) ‖ "draw:" + roundKey )[0..4]
+trackSeed(race, n)  = sha256( masterSeed ‖ u32be(tournamentId) ‖ raceKey ‖ "track" ‖ u8(n) )[0..4]   // n = trackAttempt (0 unless the course was re-rolled)
+publicContribution  = sha256( "marblerun-public-v1" ‖ beaconBytes ‖ seed_1 ‖ seed_2 ‖ … )
+   beaconBytes      = beacon ? utf8( beacon.source + ":" + beacon.round + ":" + beacon.value ) : ""
+   seed_i           = the accepted client seeds as 32-byte values, deduplicated, sorted as lowercase hex
+raceSeed            = sha256( masterSeed ‖ u32be(tournamentId) ‖ raceKey ‖ publicContribution[32] )[0..4]</code></pre>
+      <p class="muted"><code>publicSource</code> tells you what went into the public half:
+      <code>beacon+clients</code>, <code>beacon</code>, <code>clients</code>,
+      <code>stale-beacon…</code> (the beacon was unreachable at the gate, so the last pulse the
+      server had seen was used — check its <code>round</code>), or <code>degraded</code> (no
+      beacon and no client seeds — the race ran on the house seed alone; treat such a race as
+      unverified-fair). The beacon pulse can be checked against the beacon's own archive
+      (<code>beacon.url</code>).</p>
+    </div>
+
     <div class="ep"><span class="method">GET</span><span class="path">/api/history?limit=50</span></div>
     <p class="muted">Recent completed races across tournaments, newest first (max 200).
     Each entry has the seeds, timing, and full results — everything needed to score
     predictions or audit after the fact:</p>
 <pre><code>{ "races": [ {
   "tournamentId": 41, "raceKey": "heats:6", "roundKey": "heats", "indexInRound": 6,
-  "trackSeed": 2094821771, "raceSeed": 912004183,
+  "trackSeed": 2094821771, "trackAttempt": 0, "raceSeed": 912004183,
+  "publicContribution": "c0df65a2…", "publicSource": "beacon+clients",
+  "clientSeeds": ["9f3a…", …], "beacon": { "source": "drand", "round": 4711234, "value": "e1b0…", "url": "https://api.drand.sh/public/latest" },
   "scheduledStart": 1785999900000, "startedAt": 1785999900012, "revealedAt": 1785999978450,
   "results": [
     { "rank": 1, "marbleId": 73, "marbleName": "Molder", "lane": "GREEN", "color": "#4d9c56", "timeSec": 58.3 },
@@ -241,11 +284,11 @@ ws.onmessage = (e) =&gt; {
       <tr><th>type</th><th>when</th><th>payload highlights</th></tr>
       <tr><td><code>snapshot</code></td><td>on connect</td><td>same shape as <code>/api/state</code></td></tr>
       <tr><td><code>round_built</code></td><td>a round's bracket forms</td><td><code>round.races[]</code> (rosters; seeds only as disclosed)</td></tr>
-      <tr><td><code>race_announced</code></td><td>T−30s</td><td><code>race</code> (roster, <code>trackSeed</code>, <code>scheduledStart</code> — no <code>raceSeed</code>), <code>serverNow</code></td></tr>
-      <tr><td><code>race_start</code></td><td>gate opens</td><td><code>raceKey</code>, <code>trackSeed</code>, <code>raceSeed</code> (revealed now), <code>serverNow</code></td></tr>
-      <tr><td><code>race_result</code></td><td>after the finish</td><td><code>raceKey</code>, <code>result[]</code> (ranks/times), fresh <code>standings</code></td></tr>
+      <tr><td><code>race_announced</code></td><td>T−30s</td><td><code>race</code> (roster, <code>trackSeed</code>, <code>scheduledStart</code> — no <code>raceSeed</code>), <code>clientSeedWindow</code>, <code>serverNow</code></td></tr>
+      <tr><td><code>race_start</code></td><td>gate opens</td><td><code>raceKey</code>, <code>trackSeed</code>, <code>raceSeed</code>, <code>publicContribution</code>, <code>publicSource</code>, <code>clientSeeds[]</code>, <code>beacon</code>, <code>serverNow</code></td></tr>
+      <tr><td><code>race_result</code></td><td>after the finish</td><td><code>raceKey</code>, <code>result[]</code> (ranks/times), the same seed inputs as <code>race_start</code>, fresh <code>standings</code></td></tr>
       <tr><td><code>paused</code></td><td>admin pause/resume</td><td><code>paused: true|false</code></td></tr>
-      <tr><td><code>tournament_complete</code></td><td>champion crowned</td><td><code>champion {id, name}</code>, <code>masterSeed</code>, <code>commitSalt</code>, <code>commit</code></td></tr>
+      <tr><td><code>tournament_complete</code></td><td>champion crowned</td><td><code>champion {id, name}</code>, <code>masterSeedHex</code>, <code>commitSalt</code>, <code>commit</code> (<code>masterSeed</code> is a legacy uint32 view)</td></tr>
     </table>
     <p class="muted" style="margin-top:8px">Reconnect with backoff and re-sync from
     <code>/api/state</code> — snapshots are idempotent.</p>

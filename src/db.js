@@ -67,6 +67,15 @@ CREATE TABLE IF NOT EXISTS results (
 );
 `;
 
+function safeJson(text, fallback) {
+  if (text == null) return fallback;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return fallback;
+  }
+}
+
 class DB {
   constructor(file) {
     if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -98,28 +107,42 @@ class DB {
   // Additive, backward-compatible schema changes for databases created by
   // earlier builds. Each is idempotent: check the column list, add if missing.
   _migrate() {
-    const cols = this.db.prepare(`PRAGMA table_info(tournaments)`).all().map((c) => c.name);
+    const addCol = (table, col, type) => {
+      const cols = this.db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+      if (!cols.includes(col)) this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+    };
     // completed_at: when the champion was crowned. Older rows keep NULL; the
     // history views fall back to the final race's revealed_at for those.
-    if (!cols.includes('completed_at')) {
-      this.db.exec(`ALTER TABLE tournaments ADD COLUMN completed_at INTEGER`);
-    }
+    addCol('tournaments', 'completed_at', 'INTEGER');
+    // 256-bit master seed + the fairness commitment, so a finished tournament
+    // stays verifiable across server restarts. (master_seed keeps the legacy
+    // uint32 view for old readers.)
+    addCol('tournaments', 'master_seed_hex', 'TEXT');
+    addCol('tournaments', 'commit_hash', 'TEXT');
+    addCol('tournaments', 'commit_salt', 'TEXT');
+    // Two-party race seeds: the public contribution the race seed was derived
+    // from, where it came from, and its raw inputs (client seeds + beacon pulse).
+    addCol('races', 'public_contribution', 'TEXT');
+    addCol('races', 'public_source', 'TEXT');
+    addCol('races', 'client_seeds', 'TEXT'); // JSON array of 64-hex strings
+    addCol('races', 'beacon', 'TEXT'); // JSON {source, round, value, …}
+    addCol('races', 'track_attempt', 'INTEGER');
   }
 
-  createTournament({ masterSeed, createdAt }) {
+  createTournament({ masterSeed, masterSeedHex = null, commit = null, commitSalt = null, createdAt }) {
     const info = this.db
       .prepare(
-        `INSERT INTO tournaments (master_seed, created_at, status)
-         VALUES (?, ?, 'running')`
+        `INSERT INTO tournaments (master_seed, master_seed_hex, commit_hash, commit_salt, created_at, status)
+         VALUES (?, ?, ?, ?, ?, 'running')`
       )
-      .run(masterSeed, createdAt);
+      .run(masterSeed, masterSeedHex, commit, commitSalt, createdAt);
     return Number(info.lastInsertRowid);
   }
 
   // A race's track can be re-derived if the original seed built an unwinnable
   // course (see scheduler._computeOrder); keep the stored record accurate.
-  updateRaceTrackSeed(raceId, trackSeed) {
-    this.db.prepare(`UPDATE races SET track_seed = ? WHERE id = ?`).run(trackSeed, raceId);
+  updateRaceTrackSeed(raceId, trackSeed, attempt = null) {
+    this.db.prepare(`UPDATE races SET track_seed = ?, track_attempt = ? WHERE id = ?`).run(trackSeed, attempt, raceId);
   }
 
   insertMarbles(tournamentId, marbles) {
@@ -145,7 +168,7 @@ class DB {
         race.roundIdx,
         race.indexInRound,
         race.trackSeed,
-        race.raceSeed
+        race.raceSeed == null ? 0 : race.raceSeed // fixed at race_start (markStarted)
       );
     const raceId = Number(info.lastInsertRowid);
     const slotStmt = this.db.prepare(
@@ -166,10 +189,26 @@ class DB {
       .run(scheduledStart, announcedAt, raceId);
   }
 
-  markStarted(raceId, startedAt) {
+  // The race seed and its public inputs are fixed at the gate — record them.
+  markStarted(raceId, startedAt, seeds = null) {
+    if (!seeds) {
+      this.db.prepare(`UPDATE races SET status='running', started_at=? WHERE id=?`).run(startedAt, raceId);
+      return;
+    }
     this.db
-      .prepare(`UPDATE races SET status='running', started_at=? WHERE id=?`)
-      .run(startedAt, raceId);
+      .prepare(
+        `UPDATE races SET status='running', started_at=?, race_seed=?, public_contribution=?, public_source=?,
+                          client_seeds=?, beacon=? WHERE id=?`
+      )
+      .run(
+        startedAt,
+        seeds.raceSeed,
+        seeds.publicContribution || null,
+        seeds.publicSource || null,
+        JSON.stringify(seeds.clientSeeds || []),
+        seeds.beacon ? JSON.stringify(seeds.beacon) : null,
+        raceId
+      );
   }
 
   saveResult(raceId, order, revealedAt) {
@@ -248,7 +287,7 @@ class DB {
   championHistory(limit = 100) {
     const tours = this.db
       .prepare(
-        `SELECT t.id, t.master_seed, t.created_at, t.completed_at, t.champion_marble_id,
+        `SELECT t.id, t.master_seed, t.master_seed_hex, t.commit_hash, t.commit_salt, t.created_at, t.completed_at, t.champion_marble_id,
                 COALESCE(m.name, 'Marble ' || substr('00' || t.champion_marble_id, -2)) AS champion_name
            FROM tournaments t
            LEFT JOIN marbles m ON m.tournament_id = t.id AND m.marble_id = t.champion_marble_id
@@ -259,7 +298,7 @@ class DB {
       .all(limit);
     const pathStmt = this.db.prepare(
       `SELECT r.race_key, r.round_key, r.round_idx, r.index_in_round, r.track_seed, r.race_seed,
-              r.revealed_at, res.rank, res.time_sec
+              r.public_contribution, r.revealed_at, res.rank, res.time_sec
          FROM results res JOIN races r ON r.id = res.race_id
         WHERE r.tournament_id = ? AND res.marble_id = ?
         ORDER BY r.round_idx, r.index_in_round`
@@ -280,6 +319,7 @@ class DB {
         indexInRound: p.index_in_round,
         trackSeed: p.track_seed,
         raceSeed: p.race_seed,
+        publicContribution: p.public_contribution || null,
         rank: p.rank,
         timeSec: p.time_sec,
         revealedAt: p.revealed_at,
@@ -288,6 +328,9 @@ class DB {
       return {
         tournamentId: t.id,
         masterSeed: t.master_seed,
+        masterSeedHex: t.master_seed_hex || null,
+        commit: t.commit_hash || null,
+        commitSalt: t.commit_salt || null,
         createdAt: t.created_at,
         // Older rows predate completed_at — the final's reveal is the crowning.
         completedAt: t.completed_at || (finalRow && finalRow.revealedAt) || null,
@@ -404,7 +447,8 @@ class DB {
     const races = this.db
       .prepare(
         `SELECT id, tournament_id, race_key, round_key, index_in_round,
-                track_seed, race_seed, scheduled_start, started_at, revealed_at
+                track_seed, track_attempt, race_seed, scheduled_start, started_at, revealed_at,
+                public_contribution, public_source, client_seeds, beacon
            FROM races
           WHERE revealed_at IS NOT NULL
           ORDER BY revealed_at DESC, id DESC
@@ -421,10 +465,16 @@ class DB {
       roundKey: r.round_key,
       indexInRound: r.index_in_round,
       trackSeed: r.track_seed,
+      trackAttempt: r.track_attempt == null ? 0 : r.track_attempt,
       raceSeed: r.race_seed,
       scheduledStart: r.scheduled_start,
       startedAt: r.started_at,
       revealedAt: r.revealed_at,
+      // Two-party seed inputs (null for races recorded before the scheme).
+      publicContribution: r.public_contribution || null,
+      publicSource: r.public_source || null,
+      clientSeeds: safeJson(r.client_seeds, []),
+      beacon: safeJson(r.beacon, null),
       results: resStmt.all(r.id).map((x) => ({
         rank: x.rank,
         marbleId: x.marble_id,
