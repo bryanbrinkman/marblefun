@@ -93,7 +93,9 @@ Environment knobs:
 | Var | Default | Meaning |
 |-----|---------|---------|
 | `PORT` | `8080` | HTTP + WebSocket port |
-| `MASTER_SEED` | `424242` | Seeds the first tournament of a fresh database (every later one — including after a restart — draws a random seed) |
+| `MASTER_SEED` | `424242` | Seeds the FIRST tournament of a fresh database only; 64 hex chars (256-bit) preferred, a decimal integer is accepted for demos (expanded via sha256 — low entropy, don't use in production). Every later tournament draws 32 random bytes from `crypto.randomBytes` |
+| `PUBLIC_BEACON` | `drand` | Public randomness source folded into every race seed at race_start: `drand`, `nist`, or `none` (client seeds only) |
+| `PUBLIC_BEACON_URL` | – | Override the beacon endpoint URL |
 | `ANNOUNCE_LEAD_MS` | `30000` | How far ahead races are announced |
 | `INTER_RACE_GAP_MS` | `6000` | Pause between a reveal and the next announcement |
 | `INTERMISSION_MS` | `30000` | How long the champion is celebrated before the next tournament starts |

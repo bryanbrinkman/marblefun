@@ -82,30 +82,40 @@
   </p>
 
   <div class="card">
-    <h2>Why it's build-on-able (and fair)</h2>
+    <h2>Why it's build-on-able (and how fair it is)</h2>
     <p>
-      Every race is a <b>pure function of two integers</b>: a track seed
+      Every race is a <b>pure function of two 32-bit integers</b>: a track seed
       (builds the course) and a race seed (drives the physics). The server, every
-      viewer, and your code reproduce the exact same finishing order from them —
-      the sim is deterministic and open source
+      viewer, and your code reproduce the same finishing order from them — the sim
+      is deterministic and open source
       (<a href="https://github.com/bryanbrinkman/marblefun" rel="noopener">github.com/bryanbrinkman/marblefun</a>).
     </p>
-    <p>
-      Because the result is computable from the seeds, the seeds are disclosed
-      <b>as late as you actually need them</b>, never sooner:
-    </p>
+    <p>Seeds are disclosed <b>as late as they're needed</b>, and the outcome-deciding one
+    is built from two parties' inputs:</p>
     <ul>
-      <li>The <b>track seed</b> is published at announce (T−30s) so clients can
-        build the course during the countdown. The course alone doesn't decide a
-        winner.</li>
-      <li>The <b>race seed</b> — which determines the outcome — is withheld until
-        the gate opens (<code>race_start</code>). Before that instant nobody, the
-        house included, can compute the result.</li>
-      <li>The whole tournament derives from one <b>master seed</b>, kept sealed
-        behind a published <code>commit</code> = <code>sha256(masterSeed ‖ salt)</code>
-        and revealed only when the tournament ends. So no one can precompute future
-        races either, and afterward anyone can re-run the entire bracket from the
-        revealed seed and confirm every result against that commit.</li>
+      <li><b>House half.</b> Each tournament has a 256-bit master seed (32 bytes from
+        <code>crypto.randomBytes</code>). Only its commitment
+        <code>commit = sha256(masterSeed ‖ commitSalt)</code> (32-byte salt) is published while
+        the tournament runs; seed and salt are revealed at <code>tournament_complete</code>.
+        Courses and bracket draws derive from the master seed alone, so they are fixed
+        from the start.</li>
+      <li><b>Public half.</b> The race seed also depends on a <code>publicContribution</code>
+        that does not exist until the gate opens: a hash of a public randomness beacon
+        pulse fetched at that moment plus every client seed submitted during the announce
+        window. Neither the operator nor any single contributor controls it.</li>
+      <li><b>What the commit proves.</b> That the house half was fixed before the first
+        race — the operator could not change master seed mid-tournament without the
+        reveal failing to match. Combined with the public half, it means the operator
+        could not know a race's outcome before <code>race_start</code>, and could not
+        choose a master seed to favour a marble, because every race also depends on
+        inputs that arrive later.</li>
+      <li><b>What it does not prove.</b> It cannot prove the server actually used the
+        beacon pulse it reports (you can check the pulse against the beacon's archive),
+        that the client seed list is complete (you can check that <i>yours</i> is in it),
+        or anything about a race labelled <code>publicSource: "degraded"</code> — those
+        ran on the house half alone and should be treated as unverified. It also does not
+        prove the physics code the server ran is the code in the repo; the replay check
+        below is how you verify that, race by race.</li>
     </ul>
   </div>
 
@@ -297,20 +307,37 @@ raceSeed            = sha256( masterSeed ‖ u32be(tournamentId) ‖ raceKey ‖
   <div class="card">
     <h2>Verifying a result yourself</h2>
     <p class="muted">Clone the repo, serve <code>public/</code>, load the game, and replay any race
-    from its seeds — the returned order will match the API's result byte for byte:</p>
+    from its seeds. The finishing order will match the API's result, and finish times will
+    match to within floating-point rounding (see "Determinism" below for exactly what we
+    guarantee and in which environment):</p>
 <pre><code>// with public/marble_run.html loaded in a same-origin iframe or window
-marbleAPI.newCourse(1970251534);          // trackSeed from the API
-const sim = marbleAPI.simulateRace(3324241325);  // raceSeed from the API
-console.log(sim.results);                 // identical order + times to race_result</code></pre>
+marbleAPI.newCourse(race.trackSeed);           // from race_start / /api/history
+const sim = marbleAPI.simulateRace(race.raceSeed);
+console.log(sim.results);                      // same order as race_result</code></pre>
     <p class="muted">This is what the server itself does — it has no other source of truth.</p>
-    <p class="muted" style="margin-top:8px">To check the tournament wasn't rigged mid-run, verify the
-    reveal against the <code>commit</code> you saw while it was live:</p>
-<pre><code>// masterSeed + commitSalt arrive in tournament_complete (and /api/state once "complete")
-const buf = new Uint8Array(4); new DataView(buf.buffer).setUint32(0, masterSeed &gt;&gt;&gt; 0);
-const bytes = new Uint8Array([...buf, ...salt.match(/../g).map(h =&gt; parseInt(h, 16))]);
-const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
-  .map(b =&gt; b.toString(16).padStart(2, '0')).join('');
-console.log(digest === commit);           // true → the seed was fixed before the tournament began</code></pre>
+    <p class="muted" style="margin-top:8px">To check a finished tournament wasn't rigged, verify the
+    reveal against the <code>commit</code> you saw while it was live, then re-derive the race
+    seed from the published inputs (layout in the seed-derivation box above):</p>
+<pre><code>const hex = (b) =&gt; [...new Uint8Array(b)].map(x =&gt; x.toString(16).padStart(2, '0')).join('');
+const bytes = (h) =&gt; Uint8Array.from(h.match(/../g), x =&gt; parseInt(x, 16));
+const sha = async (...parts) =&gt; {
+  const total = parts.reduce((n, p) =&gt; n + p.length, 0), buf = new Uint8Array(total);
+  let o = 0; for (const p of parts) { buf.set(p, o); o += p.length; }
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', buf));
+};
+const u32be = (n) =&gt; { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n); return b; };
+const utf8 = (s) =&gt; new TextEncoder().encode(s);
+
+// 1. masterSeedHex + commitSalt arrive in tournament_complete (and /api/state once "complete")
+console.log(hex(await sha(bytes(masterSeedHex), bytes(commitSalt))) === commit);   // true → seed fixed up front
+
+// 2. re-derive one race's seed from race_start / /api/history fields
+const beaconBytes = race.beacon ? utf8(`${race.beacon.source}:${race.beacon.round}:${race.beacon.value}`) : new Uint8Array(0);
+const seeds = [...new Set(race.clientSeeds.map(s =&gt; s.toLowerCase()))].sort().map(bytes);
+const pub = await sha(utf8('marblerun-public-v1'), beaconBytes, ...seeds);
+console.log(hex(pub) === race.publicContribution);                                  // true
+const rs = new DataView((await sha(bytes(masterSeedHex), u32be(tournamentId), utf8(race.raceKey), pub)).buffer).getUint32(0);
+console.log(rs === race.raceSeed);                                                  // true → then replay it above</code></pre>
   </div>
 
   <div class="card">

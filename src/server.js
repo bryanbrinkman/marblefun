@@ -11,7 +11,7 @@ const { Tournament } = require('./tournament');
 const { Scheduler } = require('./scheduler');
 const { createSimulator } = require('./simulator');
 const ssr = require('./ssr');
-const { toMasterBuf, makeCommitment } = require('./seeds');
+const { toMasterBuf, makeCommitment, randomMasterSeed } = require('./seeds');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -64,9 +64,19 @@ function buildConfig() {
   return cfg;
 }
 
-// A fresh, well-distributed 32-bit seed for a new tournament.
+// A fresh 256-bit master seed for a new tournament (crypto.randomBytes). A
+// 32-bit seed could be brute-forced against the published commit in seconds;
+// 256 bits cannot.
 function randomSeed() {
-  return (Date.now() ^ ((Math.random() * 0xffffffff) >>> 0)) >>> 0;
+  return randomMasterSeed();
+}
+// Admin-supplied seed: 64 hex chars, or a decimal integer (legacy — expanded
+// via sha256, low entropy; fine for reproducing a demo, not for production).
+function parseSeedArg(raw) {
+  if (raw == null || raw === '') return randomSeed();
+  const v = String(raw).trim();
+  if (/^[0-9a-fA-F]{64}$/.test(v) || /^\d+$/.test(v)) return v;
+  throw new Error('seed must be 64 hex chars or a decimal integer');
 }
 
 // Serialize an array of flat row objects to CSV (RFC-4180-ish quoting).
@@ -303,12 +313,16 @@ async function main() {
         scheduler && scheduler.resume();
         return sendJSON(res, 200, { ok: true, paused: false });
       case 'restart': {
-        const raw = url.searchParams.get('seed');
-        const seed = raw != null && raw !== '' ? parseInt(raw, 10) >>> 0 : randomSeed();
+        let seed;
+        try {
+          seed = parseSeedArg(url.searchParams.get('seed'));
+        } catch (e) {
+          return sendJSON(res, 400, { ok: false, error: e.message });
+        }
         if (!startTournament) return sendJSON(res, 503, { ok: false, error: 'simulator not ready' });
         if (scheduler) scheduler.stop();
         startTournament(seed);
-        return sendJSON(res, 200, { ok: true, restarted: true, seed });
+        return sendJSON(res, 200, { ok: true, restarted: true, seed: toMasterBuf(seed).toString('hex') });
       }
       case 'reset-stats': {
         if (!startTournament || !db) return sendJSON(res, 503, { ok: false, error: 'not ready' });
@@ -560,7 +574,7 @@ async function main() {
           watchOverrideMs: cfg.watchOverrideMs,
           onTournamentComplete: () => {
             const next = randomSeed();
-            console.log(`[server] tournament ${tournamentId} complete — starting next (seed ${next})`);
+            console.log(`[server] tournament ${tournamentId} complete — starting next (fresh 256-bit seed)`);
             startTournament(next);
           },
         },
@@ -577,7 +591,7 @@ async function main() {
     const priorTournaments = db.statsSummary().tournaments;
     const firstSeed = priorTournaments > 0 ? randomSeed() : cfg.masterSeed;
     if (priorTournaments > 0)
-      console.log(`[server] ${priorTournaments} tournament(s) on record — starting a fresh one with seed ${firstSeed}`);
+      console.log(`[server] ${priorTournaments} tournament(s) on record — starting a fresh one with a random 256-bit seed`);
     startTournament(firstSeed);
   } catch (err) {
     simFailed = true;
