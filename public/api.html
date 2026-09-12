@@ -341,6 +341,35 @@ console.log(rs === race.raceSeed);                                              
   </div>
 
   <div class="card">
+    <h2>Determinism — what we guarantee, and where</h2>
+    <p class="muted">The sim is a fixed-timestep (1/120 s) physics loop seeded from
+    <code>raceSeed</code>. Nothing on the outcome path reads a clock, <code>Math.random</code>,
+    or an implementation-defined function: track geometry and blade collisions use a
+    pure-arithmetic trig implementation (<code>DMath</code> in <code>marble_run.html</code>),
+    and everything else is IEEE-754 add/multiply/divide/sqrt/floor, which every JavaScript
+    engine rounds identically. Rendering (cameras, confetti, easing) is free to use
+    <code>Math.*</code> because it never feeds back into the physics.</p>
+    <ul class="muted">
+      <li><b>Canonical environment:</b> Node ≥ 22.5 driving Playwright's bundled Chromium
+        (the <code>Dockerfile</code> pins <code>playwright@^1.49</code>), running the
+        <code>public/marble_run.html</code> at the deployed repo commit. That is what the
+        server uses, and what <code>/api/history</code> results were computed on.</li>
+      <li><b>Guarantee:</b> in the canonical environment, replaying <code>(trackSeed, raceSeed)</code>
+        reproduces the recorded finishing order and finish times <i>exactly</i>. CI enforces
+        this on every push by replaying <code>test/fixtures/races.json</code>
+        (<code>npm run test:replay</code>).</li>
+      <li><b>Other browsers:</b> by construction the same result is expected in any
+        spec-compliant engine (Safari, Firefox), and viewers watch exactly that replay —
+        but we only <i>test</i> the canonical environment, so treat cross-engine identity as
+        designed-for rather than certified. If you find a divergence, the seeds in
+        <code>/api/history</code> are a complete bug report.</li>
+      <li><b>Physics changes</b> deliberately alter outcomes for future races; the fixtures are
+        re-recorded in the same commit, and results already in <code>/api/history</code> stay
+        as recorded (they reproduce on the commit that produced them).</li>
+    </ul>
+  </div>
+
+  <div class="card">
     <h2>House rules</h2>
     <ul class="muted">
       <li><b>Fair use:</b> prefer the WebSocket over polling; if you must poll, keep it to

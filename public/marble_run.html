@@ -885,6 +885,58 @@ function makeRng(seed) {
 }
 
 // =========================================================
+// DETERMINISM — cross-engine trig
+// =========================================================
+// Math.sin/cos/atan2 (and pow/exp/log) are implementation-defined in the last
+// bits: V8, JavaScriptCore and SpiderMonkey may disagree by an ulp, and one ulp
+// in a track sample or a fan-blade normal is enough to diverge a 90-second
+// chaotic race. Everything on the outcome path therefore uses these pure
+// IEEE-754 implementations — only +, −, ×, ÷ and floor, which every engine
+// rounds identically — instead of Math.*. Accuracy ≈ 1e-10, far below what
+// the geometry needs; consistency is the point. Rendering-only code (cameras,
+// confetti, easing) keeps using Math.* freely.
+const DMath = (() => {
+  const PI = Math.PI, TWO_PI = 2 * Math.PI, HALF_PI = Math.PI / 2, QUARTER_PI = Math.PI / 4;
+  const TAN_PI_8 = 0.41421356237309503; // tan(π/8)
+  // Reduce to [-π, π].
+  function reduce(x) {
+    return x - TWO_PI * Math.floor((x + PI) / TWO_PI);
+  }
+  // sin on |x| ≤ π/2 — Taylor to x^17 (error < 2e-10 at π/2).
+  function sinCore(x) {
+    const x2 = x * x;
+    return x * (1 + x2 * (-1 / 6 + x2 * (1 / 120 + x2 * (-1 / 5040 + x2 * (1 / 362880 + x2 * (-1 / 39916800 + x2 * (1 / 6227020800 + x2 * (-1 / 1307674368000 + x2 / 355687428096000))))))));
+  }
+  function sin(x) {
+    x = reduce(x);
+    if (x > HALF_PI) x = PI - x;
+    else if (x < -HALF_PI) x = -PI - x;
+    return sinCore(x);
+  }
+  function cos(x) {
+    return sin(x + HALF_PI);
+  }
+  // atan on |u| ≤ tan(π/8) — Taylor to u^19 (error < 4e-9).
+  function atanSmall(u) {
+    const u2 = u * u;
+    return u * (1 + u2 * (-1 / 3 + u2 * (1 / 5 + u2 * (-1 / 7 + u2 * (1 / 9 + u2 * (-1 / 11 + u2 * (1 / 13 + u2 * (-1 / 15 + u2 * (1 / 17 - u2 / 19)))))))));
+  }
+  // atan on [0, 1]: fold [tan(π/8), 1] onto the small range via atan(t) = π/4 + atan((t−1)/(t+1)).
+  function atanUnit(t) {
+    return t > TAN_PI_8 ? QUARTER_PI + atanSmall((t - 1) / (t + 1)) : atanSmall(t);
+  }
+  function atan2(y, x) {
+    if (x === 0 && y === 0) return 0;
+    const ax = Math.abs(x), ay = Math.abs(y);
+    // Core angle in [0, π/2] from the ratio ≤ 1.
+    const a = ax >= ay ? atanUnit(ay / ax) : HALF_PI - atanUnit(ax / ay);
+    const q = x >= 0 ? a : PI - a;
+    return y >= 0 ? q : -q;
+  }
+  return { sin, cos, atan2 };
+})();
+
+// =========================================================
 // DETERMINISM — seeded RNG streams + simulation clock
 // =========================================================
 // Every race-affecting random draw goes through one of three seeded streams so
@@ -1849,8 +1901,8 @@ function buildCurveFromPath(cells) {
       const radius = cs / 2;
       const entryVec = new THREE.Vector3(entry.x - arcCenter.x, 0, entry.z - arcCenter.z);
       const exitVec  = new THREE.Vector3(exit.x  - arcCenter.x, 0, exit.z  - arcCenter.z);
-      const startAngle = Math.atan2(entryVec.z, entryVec.x);
-      let endAngle = Math.atan2(exitVec.z, exitVec.x);
+      const startAngle = DMath.atan2(entryVec.z, entryVec.x); // DMath: track geometry is on the outcome path
+      let endAngle = DMath.atan2(exitVec.z, exitVec.x);
 
       let delta = endAngle - startAngle;
       while (delta > Math.PI) delta -= 2 * Math.PI;
@@ -1870,9 +1922,9 @@ function buildCurveFromPath(cells) {
         const a = startAngle + delta * t;
         const y = entryYWorld + (exitYWorld - entryYWorld) * t;
         points.push(new THREE.Vector3(
-          arcCenter.x + Math.cos(a) * radius,
+          arcCenter.x + DMath.cos(a) * radius,
           y,
-          arcCenter.z + Math.sin(a) * radius
+          arcCenter.z + DMath.sin(a) * radius
         ));
       }
     } else if (c.type === 'ramp') {
@@ -1926,7 +1978,7 @@ function buildCurveFromPath(cells) {
           const yLinear = entry.y + (exit.y - entry.y) * u;
           // Cosine bowl: deepest at u=0.5, returns to 0 at u=0 and u=1
           const uCentered = (u - 0.5) * 2; // -1..1
-          const dipY = -dipDepth * (0.5 * (1 + Math.cos(Math.PI * uCentered)));
+          const dipY = -dipDepth * (0.5 * (1 + DMath.cos(Math.PI * uCentered)));
           points.push(new THREE.Vector3(x, yLinear + dipY, z));
         }
       } else {
@@ -5285,7 +5337,7 @@ function stepPhysics(dt) {
 
       // Marble angle from fan center (in the convention θ=atan2(dx,dz) so that
       // local +X = world +X when outDir=0, matching dirAngle math).
-      const phi = Math.atan2(dx, dz);
+      const phi = DMath.atan2(dx, dz); // DMath: blade collisions decide outcomes
       // Each blade b is at world angle: dirAngle(outDir) + fan.angle + b*π/2.
       const baseAngle = dirAngle(fc.cell.outDir) + fc.fan.angle;
       const halfT = fc.fan.bladeT / 2;
@@ -5296,8 +5348,8 @@ function stepPhysics(dt) {
         let dphi = phi - bladeAngle;
         dphi = ((dphi % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
         // Marble's "along blade" coord (tangent) and "perpendicular" coord
-        const along = r * Math.cos(dphi);
-        const perp  = r * Math.sin(dphi);
+        const along = r * DMath.cos(dphi);
+        const perp  = r * DMath.sin(dphi);
         // Blade occupies along ∈ [0, reach], perp ∈ [-halfT, halfT]
         if (along < -CONFIG.marbleRadius || along > reach + CONFIG.marbleRadius) continue;
         if (Math.abs(perp) > minNorm) continue;
@@ -5306,8 +5358,8 @@ function stepPhysics(dt) {
         const signP = perp >= 0 ? 1 : -1;
         // Perpendicular unit vector in world XZ (to the blade direction): rotate
         // (sin(bladeAngle), cos(bladeAngle)) by +90° → (cos(bladeAngle), -sin(bladeAngle)).
-        const perpX = Math.cos(bladeAngle);
-        const perpZ = -Math.sin(bladeAngle);
+        const perpX = DMath.cos(bladeAngle);
+        const perpZ = -DMath.sin(bladeAngle);
         m.pos.x += perpX * signP * overshoot;
         m.pos.z += perpZ * signP * overshoot;
         // Reflect velocity component along the perpendicular axis

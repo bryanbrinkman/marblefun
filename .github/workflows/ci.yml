@@ -1,0 +1,27 @@
+# Continuous integration: unit suite + the replay regression that backs the
+# determinism claim on /api (recorded races must reproduce identically in the
+# canonical environment: Node 22 + Playwright's Chromium, this commit).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Unit + replay regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Unit tests (no browser)
+        run: npm test
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save playwright@^1.49.0
+          npx playwright install --with-deps chromium
+      - name: Replay regression (real sim, headless)
+        run: npm run test:replay

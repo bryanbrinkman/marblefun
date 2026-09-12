@@ -64,9 +64,9 @@ The viewer works **with or without a server**:
   bracket, announces each race, drives the real race in the iframe, reads the
   finishing order back out of the game, records it, and advances — looping
   forever with a fresh tournament after each champion. No backend required.
-  `public/tournament-core.js` is a browser copy of the bracket/seed logic and
-  is byte-for-byte consistent with the server, so a local tournament is just as
-  deterministic.
+  `public/tournament-core.js` is a browser copy of the bracket logic (with its
+  own 32-bit seed derivation — there is no house to commit to in local mode), so
+  a local tournament is just as deterministic.
 
 Because the whole `public/` folder is self-sufficient in local mode, deploying
 to a static host is just "serve `public/`". Server mode additionally needs a
@@ -124,6 +124,8 @@ viewer's own marble gets a shot) can be tuned without touching the viewer.
 ## Test
 
 ```bash
-npm test          # fast, browser-free: bracket funnel, seeds, scheduler, DB, WS framing
+npm test          # fast, browser-free: bracket funnel, seeds, scheduler, DB, WS framing, SSR, TV director
+npm run test:replay                            # REAL sim in headless Chromium: recorded races must reproduce identically (CI)
+npm run record:replay -- http://localhost:8080 # re-record test/fixtures/races.json after an intentional physics change
 node headless_test.js [trackSeed] [raceSeed]   # runs the REAL sim headlessly, proves determinism
 ```
