@@ -102,6 +102,8 @@ Environment knobs:
 | `DB_PATH` | `data/tournament.db` | SQLite file |
 | `FAST_DEMO=1` | – | Short lead / gap for demos |
 | `RACE_WATCH_OVERRIDE_MS` | – | Reveal after a fixed delay instead of the real race length (testing) |
+| `API_RATE_LIMIT` / `API_RATE_WINDOW_MS` | `30` / `60000` | Per-IP request cap on `/api/*` (429 + Retry-After past it) |
+| `WS_MAX_PER_IP` | `5` | Concurrent WebSocket connections per IP |
 
 Public read API (documented in full at `/api`):
 

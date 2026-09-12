@@ -12,6 +12,7 @@ const { Scheduler } = require('./scheduler');
 const { createSimulator } = require('./simulator');
 const ssr = require('./ssr');
 const { toMasterBuf, makeCommitment, randomMasterSeed } = require('./seeds');
+const { RateLimiter, clientIp } = require('./ratelimit');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -60,6 +61,11 @@ function buildConfig() {
         ? 15000
         : null,
     adminToken: process.env.ADMIN_TOKEN || '', // '' = admin API unprotected
+    // Abuse limits (per client IP). REST: requests per window on /api/*;
+    // WS: concurrent sockets. See "House rules" on /api.
+    apiRateLimit: envInt('API_RATE_LIMIT', 30),
+    apiRateWindowMs: envInt('API_RATE_WINDOW_MS', 60000),
+    wsMaxPerIp: envInt('WS_MAX_PER_IP', 5),
   };
   return cfg;
 }
@@ -103,17 +109,6 @@ function sendJSON(res, code, obj) {
     'Access-Control-Allow-Headers': 'content-type, x-admin-token',
   });
   res.end(JSON.stringify(obj));
-}
-
-// The peer's address as the proxy saw it (Fly sets fly-client-ip; a generic
-// proxy sets x-forwarded-for), else the socket's.
-function clientIp(req) {
-  const h = req.headers || {};
-  const fly = h['fly-client-ip'];
-  if (fly) return String(fly).trim();
-  const xff = h['x-forwarded-for'];
-  if (xff) return String(xff).split(',')[0].trim();
-  return (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 
 // Small JSON request body (rejects anything over `limit` bytes).
@@ -365,9 +360,25 @@ async function main() {
     }
   }
 
+  const apiLimiter = new RateLimiter({ limit: cfg.apiRateLimit, windowMs: cfg.apiRateWindowMs });
+
   const httpServer = http.createServer((req, res) => {
    try {
     const url = new URL(req.url, 'http://localhost');
+    // Per-IP rate limit on every API call (preflights excluded — browsers send
+    // them, not scripts). 429 + Retry-After; the static site is never limited.
+    if (url.pathname.startsWith('/api/') && req.method !== 'OPTIONS') {
+      const rl = apiLimiter.hit(clientIp(req));
+      if (!rl.ok) {
+        res.writeHead(429, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+          'Retry-After': String(rl.retryAfterSec),
+          'X-RateLimit-Limit': String(cfg.apiRateLimit),
+        });
+        return res.end(JSON.stringify({ ok: false, error: 'rate limited', retryAfterSec: rl.retryAfterSec, limit: `${cfg.apiRateLimit} requests per ${Math.round(cfg.apiRateWindowMs / 1000)}s per IP` }));
+      }
+    }
     if (req.method === 'OPTIONS' && url.pathname.startsWith('/api/')) {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
@@ -509,8 +520,14 @@ async function main() {
    }
   });
 
-  const wss = new WSServer(httpServer, '/ws');
+  const wss = new WSServer(httpServer, '/ws', { maxPerIp: cfg.wsMaxPerIp, clientIp });
   wss.on('connection', (conn) => {
+    // The protocol is server → client. Anything a client sends is ignored
+    // (and a flood closes the socket — see ws.js); log a sample for diagnosis.
+    let logged = 0;
+    conn.on('message', (txt) => {
+      if (logged++ < 2) console.warn('[ws] ignoring unexpected client message from', conn.ip, JSON.stringify(String(txt).slice(0, 80)));
+    });
     // Bring the new client fully up to date. If there's no live tournament
     // (simulator/DB unavailable), tell the client so it falls back to running
     // the tournament in-browser instead of waiting forever on a live server.

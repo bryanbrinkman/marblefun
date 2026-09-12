@@ -18,10 +18,12 @@ const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 // generous. A single frame or the unparsed read buffer exceeding the cap, or a
 // client whose outbound backlog balloons because it can't keep up, gets the
 // connection closed rather than letting either buffer grow without bound.
-const MAX_FRAME_BYTES = 1 << 20; // 1 MiB: largest inbound frame we'll accept
-const MAX_READ_BUFFER = (1 << 20) + 4096; // headroom over one max frame
+const MAX_FRAME_BYTES = 4096; // 4 KiB: clients have nothing bigger to say (a seed is 64 bytes)
+const MAX_READ_BUFFER = MAX_FRAME_BYTES * 2 + 64; // headroom over one max frame
 const MAX_SEND_BACKLOG = 4 << 20; // 4 MiB of unflushed outbound = drop the client
 const HEARTBEAT_MS = 30000; // ping cadence; a client silent for two rounds is dead
+const MAX_INBOUND_MESSAGES = 120; // text frames per connection before we assume a misbehaving client
+const DEFAULT_MAX_PER_IP = 5; // concurrent sockets per client address
 
 function acceptKey(key) {
   return crypto
@@ -64,7 +66,9 @@ class WSConnection extends EventEmitter {
     this.open = true;
     this.isAlive = true; // flipped false each heartbeat, back true on pong
     this._buf = Buffer.alloc(0);
+    this._inbound = 0; // text frames received — the protocol is server→client; chatter is ignored, floods are cut
     socket.on('data', (chunk) => this._onData(chunk));
+    socket.on('end', () => this._onClose()); // peer finished — free its per-IP slot right away
     socket.on('close', () => this._onClose());
     socket.on('error', () => this._onClose());
   }
@@ -166,6 +170,13 @@ class WSConnection extends EventEmitter {
         // pong -> peer is alive
         this.isAlive = true;
       } else if (opcode === 0x1 || opcode === 0x0) {
+        // The wire protocol is one-way (server → client); nothing a client
+        // sends is acted on. Surface it for logging only, and drop a client
+        // that keeps talking — it's not a viewer.
+        if (++this._inbound > MAX_INBOUND_MESSAGES) {
+          this.close(1008); // policy violation
+          return;
+        }
         this.emit('message', payload.toString('utf8'));
       }
       // 0x2 binary ignored
@@ -215,9 +226,12 @@ class WSConnection extends EventEmitter {
 class WSServer extends EventEmitter {
   // httpServer: a node http.Server. path: only upgrade requests to this path
   // are accepted as websockets.
-  constructor(httpServer, path = '/ws') {
+  constructor(httpServer, path = '/ws', { maxPerIp = DEFAULT_MAX_PER_IP, clientIp = null } = {}) {
     super();
     this.path = path;
+    this.maxPerIp = maxPerIp;
+    this._clientIp = clientIp || ((req) => (req.socket && req.socket.remoteAddress) || 'unknown');
+    this.perIp = new Map(); // ip -> open connection count
     this.connections = new Set();
     httpServer.on('upgrade', (req, socket) => this._onUpgrade(req, socket));
     // Heartbeat: each round, reap any connection that didn't pong since the
@@ -255,6 +269,17 @@ class WSServer extends EventEmitter {
       socket.destroy();
       return;
     }
+    // Per-IP concurrency cap: a handful of tabs is fine, a socket flood is not.
+    const ip = this._clientIp(req);
+    const open = this.perIp.get(ip) || 0;
+    if (this.maxPerIp > 0 && open >= this.maxPerIp) {
+      try {
+        socket.write('HTTP/1.1 429 Too Many Requests\r\nRetry-After: 30\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\ntoo many websocket connections from this address\n');
+      } catch {}
+      socket.destroy();
+      return;
+    }
+    this.perIp.set(ip, open + 1);
     const headers = [
       'HTTP/1.1 101 Switching Protocols',
       'Upgrade: websocket',
@@ -266,8 +291,14 @@ class WSServer extends EventEmitter {
     socket.setNoDelay(true);
 
     const conn = new WSConnection(socket);
+    conn.ip = ip;
     this.connections.add(conn);
-    conn.on('close', () => this.connections.delete(conn));
+    conn.on('close', () => {
+      this.connections.delete(conn);
+      const n = (this.perIp.get(ip) || 1) - 1;
+      if (n <= 0) this.perIp.delete(ip);
+      else this.perIp.set(ip, n);
+    });
     this.emit('connection', conn);
   }
 
@@ -292,4 +323,4 @@ class WSServer extends EventEmitter {
   }
 }
 
-module.exports = { WSServer, encodeFrame, acceptKey };
+module.exports = { WSServer, encodeFrame, acceptKey, MAX_FRAME_BYTES, DEFAULT_MAX_PER_IP };

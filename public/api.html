@@ -372,8 +372,14 @@ console.log(rs === race.raceSeed);                                              
   <div class="card">
     <h2>House rules</h2>
     <ul class="muted">
-      <li><b>Fair use:</b> prefer the WebSocket over polling; if you must poll, keep it to
-        one <code>/api/state</code> every few seconds. Be gentle — this runs on a small box.</li>
+      <li><b>Rate limits:</b> <b>30 requests per minute per IP</b> across all
+        <code>/api/*</code> endpoints (CORS preflights don't count); over that you get
+        <code>429</code> with a <code>Retry-After</code> header — honour it. WebSockets:
+        <b>5 concurrent connections per IP</b> (a sixth upgrade is refused with 429).
+        Client→server WebSocket frames are capped at 4 KiB and ignored — the protocol is
+        one-way — and a client that keeps sending is disconnected. Prefer the WebSocket over
+        polling; if you must poll, one <code>/api/state</code> every few seconds is plenty.
+        This runs on a small box.</li>
       <li><b>No keys, no signup:</b> the read API is open. If your project gets serious
         traffic, <a href="https://twitter.com/bryanbrinkman" rel="noopener">say hi</a> so we don't mistake you for a runaway script.</li>
       <li><b>Stability:</b> payload shapes above are intended to stay stable; new fields may

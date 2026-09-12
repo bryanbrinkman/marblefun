@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "headless": "node headless_test.js",
-    "test": "node test/ui-state.test.js && node test/tv-director.test.js && node test/ssr.test.js && node test/determinism.test.js",
+    "test": "node test/ui-state.test.js && node test/tv-director.test.js && node test/ssr.test.js && node test/ratelimit.test.js && node test/determinism.test.js",
     "test:replay": "node test/replay.test.js",
     "record:replay": "node test/replay.test.js --record"
   },
