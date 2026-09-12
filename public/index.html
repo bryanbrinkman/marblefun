@@ -114,11 +114,11 @@
              offline, local). Live is the normal state and stays quiet. -->
         <div class="conn" id="conn" role="status" data-state="connecting">…</div>
         <!-- My marble: your pick at a glance; opens the picker. -->
-        <button class="follow-pill" id="followPill" aria-haspopup="dialog" title="Your marble — tap to change">
+        <button class="follow-pill" id="followPill" aria-haspopup="dialog" title="Your marble — tap to change" aria-label="Your marble — pick or change">
           <span class="fp-swatch" id="fpSwatch" hidden aria-hidden="true"></span>
           <span class="fp-text" id="fpText">Pick a marble</span>
         </button>
-        <button class="ctl-btn" id="controlsBtn" aria-expanded="false" aria-controls="controlsPop" title="Cameras">🎥<span class="ctl-word"> Cameras</span></button>
+        <button class="ctl-btn" id="controlsBtn" aria-expanded="false" aria-controls="controlsPop" title="Cameras" aria-label="Cameras">🎥<span class="ctl-word"> Cameras</span></button>
         <button class="ctl-btn more-btn" id="moreBtn" aria-expanded="false" aria-controls="morePop" title="More" aria-label="More">☰<span class="ctl-word"> More</span></button>
       </div>
     </header>
@@ -176,8 +176,8 @@
         <h2 class="hero-brand" id="heroTitle">100 marbles. 25 races. One champion. Forever.</h2>
         <p class="hero-tag">Pick a marble and follow it through the tournament.</p>
         <div class="hero-actions">
-          <button class="hero-btn primary" id="heroPick">PICK A MARBLE</button>
-          <button class="hero-btn" id="heroSkip">WATCH THE RACE</button>
+          <button class="hero-btn primary" id="heroPick" aria-label="Pick a marble">PICK A MARBLE</button>
+          <button class="hero-btn" id="heroSkip" aria-label="Watch the race">WATCH THE RACE</button>
         </div>
         <div class="pr-journey hero-journey" role="img" aria-label="Tournament progress: 100 started, 20 advance, 5 finalists, 1 champion">
           <span class="j-stage" data-stage="heats"><b>100</b><i>started</i></span>
@@ -288,8 +288,8 @@
         </div>
         <div class="picker-tools">
           <input id="pickerSearch" type="search" placeholder="Search number or name…" aria-label="Search marbles by number or name" />
-          <button id="pickerRandom" class="pr-btn">🎲 Surprise me</button>
-          <button id="pickerClear" class="pr-btn subtle">Unfollow</button>
+          <button id="pickerRandom" class="pr-btn" aria-label="Pick a random marble for me">🎲 Surprise me</button>
+          <button id="pickerClear" class="pr-btn subtle" aria-label="Stop following my marble">Unfollow</button>
         </div>
         <div class="picker-grid" id="pickerGrid"></div>
         <div class="picker-note" id="pickerNote">Your pick is remembered on this device. The camera follows it whenever it races.</div>
@@ -366,7 +366,7 @@
         <div class="co-meta" id="coMeta"></div>
         <div class="co-you" id="coYou" hidden></div>
         <div class="co-actions">
-          <button class="co-share" id="coShare">📣 Share the moment</button>
+          <button class="co-share" id="coShare" aria-label="Share the champion moment">📣 Share the moment</button>
           <a class="co-link" href="/champions">🏆 Champions history</a>
         </div>
       </div>
@@ -375,12 +375,12 @@
 
     <!-- ================= BOTTOM NAV: marbles · champions · results ============= -->
     <nav class="corner-links" aria-label="Marbles and history">
-      <a href="/gallery" title="Meet all 100 marbles — names, stats and owners">🔮<span> Marbles</span></a>
-      <a href="/champions" title="Every champion, every tournament">🏆<span> Champions</span></a>
+      <a href="/gallery" title="Meet all 100 marbles — names, stats and owners" aria-label="Marble gallery">🔮<span> Marbles</span></a>
+      <a href="/champions" title="Every champion, every tournament" aria-label="Champions history">🏆<span> Champions</span></a>
     </nav>
 
     <!-- Shown while a manual camera is in charge: one tap back to the director. -->
-    <button class="tv-return" id="tvReturn" hidden>📺 Back to TV mode</button>
+    <button class="tv-return" id="tvReturn" hidden aria-label="Back to TV mode (auto-directed camera)">📺 Back to TV mode</button>
 
     <!-- Bracket: a classic two-sided "Road to the Final" that slides up from the
          bottom as a lower third, toggled by the button in the corner. -->

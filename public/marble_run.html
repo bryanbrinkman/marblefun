@@ -442,21 +442,21 @@
 </div>
 
 <div id="topMenu">
-  <button id="startBtn" class="icon-text" title="Start the race">
+  <button id="startBtn" class="icon-text" title="Start the race" aria-label="Start the race">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="6"/>
       <circle cx="10" cy="10" r="1.4" fill="currentColor"/>
     </svg>
     <span>RACE</span>
   </button>
-  <button id="restart" class="icon-text" title="Generate a new course">
+  <button id="restart" class="icon-text" title="Generate a new course" aria-label="Generate a new course">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
       <path d="M3 12a9 9 0 1 0 3-6.7"/>
       <polyline points="3 3 3 9 9 9"/>
     </svg>
     <span>NEW</span>
   </button>
-  <button id="actionCam" title="Cycle camera mode">
+  <button id="actionCam" title="Cycle camera mode" aria-label="Cycle camera mode">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <!-- Video camera (camcorder style): rectangular body with a wedge lens
            poking out the right side. Reads as "video" rather than "photo." -->
@@ -464,7 +464,7 @@
       <path d="M15 11l5-3v8l-5-3z"/>
     </svg>
   </button>
-  <button id="soundBtn" title="Toggle sound effects">
+  <button id="soundBtn" title="Toggle sound effects" aria-label="Toggle sound effects" aria-pressed="false">
     <!-- Sound on: speaker + 2 sound waves. Default (off) state hides the waves. -->
     <svg class="icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M4 9v6h4l5 4V5L8 9H4z"/>
@@ -492,7 +492,7 @@
       <polyline points="4 15 9 15 9 20"/>
     </svg>
   </button>
-  <button id="lqBtn" aria-pressed="false" title="Low-quality mode — smoother on older phones & PCs">
+  <button id="lqBtn" aria-pressed="false" title="Low-quality mode — smoother on older phones & PCs" aria-label="Toggle low-quality mode">
     <!-- Lightning bolt: performance / low-power rendering. -->
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M13 2 L4 14 h7 l-1 8 l10-13 h-7 z"/>
@@ -8067,7 +8067,10 @@ function toggleSound() {
     _muteRolls();
   }
   const btn = document.getElementById('soundBtn');
-  if (btn) btn.classList.toggle('active', _soundEnabled);
+  if (btn) {
+    btn.classList.toggle('active', _soundEnabled);
+    btn.setAttribute('aria-pressed', _soundEnabled ? 'true' : 'false');
+  }
 }
 document.getElementById('soundBtn').addEventListener('click', toggleSound);
 // Remember the choice: if sound was on last visit, re-enable it on the first
