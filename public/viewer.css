@@ -156,6 +156,10 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 .upnext-marbles { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .upnext-marbles .um { display: flex; align-items: center; gap: 5px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 3px 7px; font-size: 11px; font-variant-numeric: tabular-nums; }
 .upnext-marbles .um .swatch { width: 10px; height: 10px; border-radius: 50%; }
+/* Marble artwork in any round swatch: the image is circle-cropped over the
+   lane color, which stays as the fallback (and shows while it loads). */
+.sk { position: relative; overflow: hidden; }
+.sk img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
 
 .recent { display: flex; flex-direction: column; gap: 6px; }
 .recent-item { display: flex; align-items: center; gap: 9px; font-size: 12px; padding: 7px 9px; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; animation: slidein .4s ease; }
@@ -711,10 +715,18 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 .picker-grid::-webkit-scrollbar { width: 8px; }
 .picker-grid::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 999px; }
 .pk {
-  cursor: pointer; text-align: center; padding: 8px 2px; border-radius: 9px;
+  cursor: pointer; text-align: center; padding: 7px 2px 6px; border-radius: 9px;
   background: var(--panel2); border: 1px solid var(--line); color: var(--text);
   font: 700 11.5px/1 inherit; font-variant-numeric: tabular-nums;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
 }
+/* The marble in its tile: artwork circle-cropped over the lane color (see .sk). */
+.pk-ball {
+  display: block; width: 30px; height: 30px; border-radius: 50%; flex: none;
+  border: 1px solid rgba(255, 255, 255, 0.25); box-shadow: inset -3px -4px 6px rgba(0, 0, 0, 0.35);
+}
+.pk.out .pk-ball { filter: grayscale(0.7) brightness(0.7); }
+.pk-num { display: block; }
 .pk:hover { border-color: var(--accent); }
 .pk.out { opacity: 0.45; text-decoration: line-through; } /* non-color cue */
 .pk.champ { border-color: var(--champ); color: var(--champ); }

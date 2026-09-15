@@ -7,7 +7,21 @@ tournament stays perfectly deterministic and in sync for everyone.
 Marbles with no skin fall back to their default solid color, so you can skin as
 many or as few as you like.
 
-## Turn it on
+## Default: discovered from the artwork folders
+
+In server mode the manifest is **built automatically**: the server lists the
+two artwork directories (`MARBLE_IMG_DIR` — 2D images used as circle-cropped
+avatars everywhere in the UI — and `MARBLE_GLB_DIR` — the GLB models that race
+on the track; both default to the marbles' IPFS folders) and maps each file to
+a marble by **name** (`Toad.png`, `get-that-bread.glb`) or by **number**
+(`041.png`, `marble_41.glb`; a 0…99 set is treated as 0-based). The result is
+served at `/marbles/manifest.json`, re-listed every 6 h and cached on disk so
+a gateway hiccup at boot keeps the last good set. A marble with both an image
+and a model races as the model and uses the image as its avatar. A hand-written
+`manifest.json` here still overrides any field per marble (and carries owner
+credits) — see below.
+
+## Turn it on (manual manifest)
 
 1. Drop your assets in this folder (`public/marbles/`).
 2. Copy `manifest.example.json` to **`manifest.json`** and list which marble

@@ -104,6 +104,9 @@ Environment knobs:
 | `RACE_WATCH_OVERRIDE_MS` | – | Reveal after a fixed delay instead of the real race length (testing) |
 | `API_RATE_LIMIT` / `API_RATE_WINDOW_MS` | `30` / `60000` | Per-IP request cap on `/api/*` (429 + Retry-After past it) |
 | `WS_MAX_PER_IP` | `5` | Concurrent WebSocket connections per IP |
+| `MARBLE_IMG_DIR` | the marbles' IPFS image folder | Directory (URL) of the 100 marbles' 2D artwork — listed at boot and every `SKINS_REFRESH_MS`, mapped to marbles by number or name (see `src/skins.js`), served as `/marbles/manifest.json`. `none` disables |
+| `MARBLE_GLB_DIR` | the marbles' IPFS GLB folder | Same for the 3D models that race on the track. `none` disables |
+| `SKINS_REFRESH_MS` | `21600000` (6 h) | How often the artwork directories are re-listed |
 
 Public read API (documented in full at `/api`):
 

@@ -200,7 +200,9 @@ function scheduleStart(race) {
   // on the stage; then the build waits for the actual start (the mid-race
   // catch-up in startRace absorbs the extra build time deterministically).
   if (!replaying) {
-    ensureCourse(race.trackSeed);
+    // Dress the field as soon as it stands at the gate, so the models are
+    // loaded and on the marbles before the gate opens (not popping in mid-race).
+    ensureCourse(race.trackSeed).then((a) => applyRaceSkins(a, race));
     applyFollow(race); // marker on your marble while it waits at the gate
   }
   if (delay <= 0) {
@@ -351,7 +353,7 @@ function renderRoster(race) {
     const div = document.createElement('div');
     div.className = 'lane' + (rank === 1 ? ' win' : '');
     div.innerHTML =
-      `<span class="swatch" style="background:${s.color}"></span>` +
+      swatchHtml(s.marbleId, s.color) +
       `<span class="lane-name">${s.marbleName}</span>` +
       (rank ? `<span class="rank">#${rank}</span>` : '');
     wrap.appendChild(div);
@@ -471,7 +473,7 @@ function renderRaceHud(race, prog) {
   }
   hud.classList.toggle('mine', !!mine);
   if (slot) {
-    el('rhSwatch').style.background = slot.color;
+    paintSwatch(el('rhSwatch'), slot.marbleId, slot.color);
     el('rhSwatch').hidden = false;
     el('rhNum').textContent = '#' + numOf(slot.marbleId);
     el('rhName').textContent = slot.marbleName;
@@ -505,7 +507,7 @@ function renderRaceBoard(race, prog) {
       const pct = p.finished ? '✓' : ''; // rank order says it all — no percentages
       return (
         `<div class="rb-row${mine ? ' mine' : ''}${p.finished ? ' done' : ''}${i === 0 ? ' lead' : ''}">` +
-        `<span class="rb-pos">${i + 1}</span><span class="rb-sw" style="background:${s.color}"></span>` +
+        `<span class="rb-pos">${i + 1}</span>${swatchHtml(s.marbleId, s.color, 'rb-sw')}` +
         `<span class="rb-num">${numOf(s.marbleId)}</span><span class="rb-name">${s.marbleName}</span>` +
         `<span class="rb-pct">${pct}</span></div>`
       );
@@ -571,13 +573,13 @@ function watchLeadChanges(prog) {
   _leadToastAt = now;
   const s = cur.roster.find((x) => x.lane === lead.lane);
   if (!s) return;
-  showToast(`⚡ ${s.marbleName} takes the lead!`, s.color);
+  showToast(`⚡ ${s.marbleName} takes the lead!`, s.color, s.marbleId);
   announce(`${s.marbleName} takes the lead.`);
 }
-function showToast(text, color) {
+function showToast(text, color, marbleId = null) {
   const t = el('raceToast');
   if (!t) return;
-  t.innerHTML = `<span class="swatch" style="background:${color || 'var(--accent)'}"></span>${text}`;
+  t.innerHTML = swatchHtml(marbleId, color) + text;
   t.hidden = false;
   t.classList.remove('show');
   void t.offsetWidth; // restart the pop animation
@@ -623,7 +625,7 @@ function renderUpNext() {
     next.roster
       .map(
         (s) =>
-          `<span class="um"><span class="swatch" style="background:${s.color}"></span>${shortName(s.marbleName)}</span>`
+          `<span class="um">${swatchHtml(s.marbleId, s.color)}${shortName(s.marbleName)}</span>`
       )
       .join('') +
     `</div>`;
@@ -645,7 +647,7 @@ function renderRecent() {
       const label = raceLabelShort(r);
       const t = w.timeSec != null ? '' : 'DNF'; // finish times aren't comparable across courses
       return (
-        `<div class="recent-item"><span class="swatch" style="background:${w.color}"></span>` +
+        `<div class="recent-item">${swatchHtml(w.marbleId, w.color)}` +
         `<span class="ri-label">${label}</span>` +
         `<span class="ri-win">${w.marbleName}</span>` +
         `<span class="ri-t">${t}</span></div>`
@@ -693,7 +695,7 @@ function bracketSlotRows(race) {
       return (
         `<div class="bd-slot${rank === 1 ? ' win' : ''}">` +
         `<span class="pos">${done ? rank : ''}</span>` +
-        `<span class="swatch" style="background:${s.color}"></span>` +
+        swatchHtml(s.marbleId, s.color) +
         `<span class="nm">${shortName(s.marbleName)}</span>` +
         `<span class="t">${t}</span></div>`
       );
@@ -848,7 +850,7 @@ function renderFollowPill() {
   const cur = model.currentKey && model.racesByKey.get(model.currentKey);
   const slot = cur && cur.roster.find((x) => x.marbleId === followId);
   sw.hidden = false;
-  sw.style.background = slot ? slot.color : marbleColor(followId);
+  paintSwatch(sw, followId, slot ? slot.color : marbleColor(followId));
   const status =
     st.status === 'champion' ? '🏆 champion' : st.status === 'eliminated' ? 'out' : slot && !cur.result ? 'racing' : 'alive';
   tx.textContent = `#${numOf(followId)} ${shortName(st.name)} · ${status}`;
@@ -892,7 +894,13 @@ function buildPickerGrid() {
         (m.status === 'eliminated' ? ' out' : m.status === 'champion' ? ' champ' : '') +
         (m.id === followId ? ' followed' : '');
       const label = (m.status === 'champion' ? '🏆' : '') + String(m.id).padStart(2, '0');
-      return `<button class="pk${cls}" data-id="${m.id}" title="${m.name} — ${m.status}">${label}</button>`;
+      // Each tile shows the marble itself (its artwork, circle-cropped, or its
+      // color) above the number, so you can pick by look as well as by number.
+      return (
+        `<button class="pk${cls}" data-id="${m.id}" title="${m.name} — ${m.status}">` +
+        swatchHtml(m.id, marbleColor(m.id), 'pk-ball') +
+        `<span class="pk-num">${label}</span></button>`
+      );
     })
     .join('');
 }
@@ -922,6 +930,34 @@ function setFollow(id, opts = {}) {
 // A two-second beat after choosing: the marble, big, with its number and name.
 // Then it fades and the tournament carries on around your pick.
 let _pcTimer = 0;
+// The marble's 2D artwork (from marbles/manifest.json), or null for a plain
+// colored ball.
+function skinImgUrl(id) {
+  if (id == null || !marbleManifest) return null;
+  const sk = marbleManifest[id] || marbleManifest[String(id)];
+  return sk && sk.img ? String(sk.img) : null;
+}
+// A round swatch: the lane color, with the marble's artwork circle-cropped on
+// top when it has some (the color stays underneath as the loading/fallback).
+function swatchHtml(id, color, cls = 'swatch') {
+  const bg = `style="background:${color || 'var(--accent)'}"`;
+  const url = skinImgUrl(id);
+  if (!url) return `<span class="${cls}" ${bg}></span>`;
+  const safe = url.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  return `<span class="${cls} sk" ${bg}><img src="${safe}" alt="" loading="lazy" decoding="async" onerror="this.remove()"></span>`;
+}
+// Same for a fixed element (HUD / follow pill swatches): paint the artwork as
+// a cover background over the lane color.
+function paintSwatch(elm, id, color) {
+  if (!elm) return;
+  const url = skinImgUrl(id);
+  elm.style.background = color || '';
+  if (url) {
+    elm.style.backgroundImage = `url("${url}")`;
+    elm.style.backgroundSize = 'cover';
+    elm.style.backgroundPosition = 'center';
+  }
+}
 function ballStyleFor(id) {
   const skin = marbleManifest && (marbleManifest[id] || marbleManifest[String(id)]);
   if (skin && skin.img) return `background-image:url('${skin.img}');background-size:cover;background-position:center`;
@@ -1442,7 +1478,7 @@ function renderPreRace() {
           return (
             `<button class="um${mine ? ' followed' : ''}" data-guess="${s.marbleId}"` +
             ` aria-pressed="${mine ? 'true' : 'false'}" title="Pick ${s.marbleName} to win">` +
-            `<span class="swatch" style="background:${s.color}"></span>${shortName(s.marbleName)}` +
+            swatchHtml(s.marbleId, s.color) + shortName(s.marbleName) +
             (mine ? ' 🎯' : '') +
             `</button>`
           );
@@ -2581,7 +2617,7 @@ function renderBracketCompact() {
       `<div class="bc-row${cur ? ' current' : ''}${race.result ? ' done' : ''}${mine ? ' mine' : ''}">` +
       `<span class="bc-l">${label}</span>` +
       (w
-        ? `<span class="bc-w"><span class="swatch" style="background:${w.color}"></span>#${numOf(w.marbleId)} ${w.marbleName}` +
+        ? `<span class="bc-w">${swatchHtml(w.marbleId, w.color)}#${numOf(w.marbleId)} ${w.marbleName}` +
           `${w.timeSec == null ? '<small>DNF</small>' : ''}</span>`
         : `<span class="bc-w muted">${cur ? '● live now' : race.status === 'announced' ? 'up next' : race.roster.map((s) => numOf(s.marbleId)).join(' · ')}</span>`) +
       `</div>`
@@ -2949,7 +2985,14 @@ let marbleManifest = null;
 fetch('marbles/manifest.json', { cache: 'no-store' })
   .then((r) => (r.ok ? r.json() : null))
   .then((m) => {
-    if (m && typeof m === 'object') marbleManifest = m;
+    if (!m || typeof m !== 'object') return;
+    marbleManifest = m;
+    // Anything already on screen was drawn with plain colors — repaint so the
+    // artwork shows up without waiting for the next state change.
+    try {
+      if (model.standings && model.standings.length) renderAll();
+      renderFollowPill();
+    } catch {}
   })
   .catch(() => {});
 

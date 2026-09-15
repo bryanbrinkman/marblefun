@@ -4039,7 +4039,10 @@ function applyMarbleSkin(m) {
   const skin = _marbleSkins[m.name];
   if (!skin) return;
   try {
-    if (skin.img) {
+    // A marble may carry both: the GLB is what races (it IS the marble), the
+    // image is its 2D avatar for the viewer's UI — so the model wins here and
+    // the image only wraps the sphere when there's no model.
+    if (skin.img && !skin.glb) {
       _texLoader = _texLoader || new THREE.TextureLoader();
       _texLoader.setCrossOrigin('anonymous');
       _texLoader.load(skin.img, (tex) => {
@@ -4104,6 +4107,10 @@ function applyMarbleSkin(m) {
         wrapper.add(model);
         wrapper.scale.set(kx, ky, kz);
         wrapper.position.set(-center.x * kx, -center.y * ky, -center.z * kz);
+        // The skin map may have changed while this model was in flight — only
+        // dress the marble if this is still its skin, and never stack two.
+        if (!_marbleSkins || _marbleSkins[m.name] !== skin) return;
+        if (m.skinModel) m.mesh.remove(m.skinModel);
         if (m.mesh.material) m.mesh.material.visible = false; // hide the default sphere
         m.mesh.add(wrapper);
         m.skinModel = wrapper;
@@ -6815,7 +6822,16 @@ window.marbleAPI = {
   // { RED: { img: 'marbles/001.png' }, BLUE: { glb: 'marbles/012.glb' } }.
   // Cosmetic only; must be set before the race's marbles are (re)created.
   setMarbleSkins(map) {
-    _marbleSkins = map || null;
+    const next = map || null;
+    // Same map again (the host re-asserts skins at announce AND at start) →
+    // nothing to do; re-dressing would only flicker the models.
+    if (JSON.stringify(next) === JSON.stringify(_marbleSkins)) return;
+    _marbleSkins = next;
+    // Marbles already standing at the gate are re-dressed on the spot, so the
+    // call order (course built first, skins second — or the reverse) is moot.
+    if (typeof marbles !== 'undefined' && marbles) {
+      marbles.forEach((m) => { _clearSkin(m); applyMarbleSkin(m); });
+    }
   },
   // Follow one lane (color-name) with the follow-style cameras and mark it
   // with a chevron. Pass null to go back to tracking the leader. Cosmetic only.

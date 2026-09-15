@@ -13,8 +13,22 @@ const { createSimulator } = require('./simulator');
 const ssr = require('./ssr');
 const { toMasterBuf, makeCommitment, randomMasterSeed } = require('./seeds');
 const { RateLimiter, clientIp } = require('./ratelimit');
+const { createSkinRegistry } = require('./skins');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+
+// Where the marbles' artwork lives (flat directories of images / GLB models,
+// one file per marble — see src/skins.js for how files map to marbles). These
+// are public content addresses, not deployment hosts; override or disable
+// ('none') with MARBLE_IMG_DIR / MARBLE_GLB_DIR.
+const DEFAULT_MARBLE_IMG_DIR = 'https://moccasin-faithful-asp-799.mypinata.cloud/ipfs/bafybeib74dmhx2kwpjirgov7mb2lwyghlhqyb5i5wn7if7hylcrzydktke/';
+const DEFAULT_MARBLE_GLB_DIR = 'https://moccasin-faithful-asp-799.mypinata.cloud/ipfs/bafybeigr666ifcnkglwzfnq7d3bn2ve36f3hqrexlotm44c6drxhrbc3u4/';
+function envDir(name, def) {
+  const v = process.env[name];
+  if (v == null) return def;
+  const s = v.trim();
+  return s === '' || s.toLowerCase() === 'none' ? null : s;
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -66,6 +80,10 @@ function buildConfig() {
     apiRateLimit: envInt('API_RATE_LIMIT', 30),
     apiRateWindowMs: envInt('API_RATE_WINDOW_MS', 60000),
     wsMaxPerIp: envInt('WS_MAX_PER_IP', 5),
+    // Marble artwork directories (null = off). Re-listed every SKINS_REFRESH_MS.
+    marbleImgDir: envDir('MARBLE_IMG_DIR', DEFAULT_MARBLE_IMG_DIR),
+    marbleGlbDir: envDir('MARBLE_GLB_DIR', DEFAULT_MARBLE_GLB_DIR),
+    skinsRefreshMs: envInt('SKINS_REFRESH_MS', 6 * 3600 * 1000),
   };
   return cfg;
 }
@@ -333,9 +351,21 @@ async function main() {
 
   // ---- server-rendered pages -------------------------------------------------
   const SSR_PAGES = { '/': 'index.html', '/index.html': 'index.html', '/gallery': 'gallery.html', '/champions': 'champions.html' };
+  // Marble skins: artwork discovered from the configured directories, with
+  // public/marbles/manifest.json (if present) overriding field by field. Served
+  // at /marbles/manifest.json (below) and fed to the server-rendered pages.
+  const skins = createSkinRegistry({
+    imgDir: cfg.marbleImgDir,
+    glbDir: cfg.marbleGlbDir,
+    names: Array.from({ length: 100 }, (_, i) => Tournament.marbleNameFor(i + 1)),
+    staticManifestPath: path.join(PUBLIC_DIR, 'marbles', 'manifest.json'),
+    cachePath: path.join(path.dirname(cfg.dbPath), 'skins-cache.json'),
+    refreshMs: cfg.skinsRefreshMs,
+    log: (msg) => console.log('[' + msg.replace(/^skins: /, 'skins] ')),
+  }).start();
   function readManifest() {
     try {
-      return JSON.parse(fs.readFileSync(path.join(PUBLIC_DIR, 'marbles', 'manifest.json'), 'utf8')) || {};
+      return skins.manifest();
     } catch {
       return {};
     }
@@ -490,6 +520,16 @@ async function main() {
     // through to the static handler — only "/api/…" subpaths are endpoints.
     if (url.pathname.startsWith('/api/')) {
       return sendJSON(res, 404, { ok: false, error: 'unknown endpoint' });
+    }
+    // The skin manifest is assembled at runtime (discovered artwork + the
+    // static file's overrides), so it's answered here, not from disk.
+    if (url.pathname === '/marbles/manifest.json' && req.method === 'GET') {
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Access-Control-Allow-Origin': '*',
+      });
+      return res.end(JSON.stringify(readManifest()));
     }
     // Crawlable pages: fill the client containers server-side (see src/ssr.js)
     // so no-JS clients and crawlers get real content; the client hydrates over
