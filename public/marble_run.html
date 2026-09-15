@@ -4238,6 +4238,7 @@ function applyMarbleSkin(m) {
         if (m.mesh.material) m.mesh.material.visible = false; // hide the default sphere
         m.mesh.add(wrapper);
         m.skinModel = wrapper;
+        _ensureLaneMarker(m); // the lane-colour cone over a model-dressed marble
       };
       // One download + parse per URL (see _loadGlb), cloned onto every marble
       // that wears it — and usually already warm from preloadSkins().
@@ -4322,9 +4323,74 @@ function _prepareSkinTemplate(template) {
   });
 }
 
+// ---- lane markers --------------------------------------------------------------
+// A model-dressed marble no longer carries its lane colour, so a small
+// upside-down cone in that colour hovers over it — the same colour as the
+// marble's dot in the standings board and the top lane tracker, so spectators
+// can tell which marble is which. Only marbles wearing a GLB get one (a plain
+// coloured sphere IS its own marker). Cosmetic; never touches the physics.
+let _laneConeGeo = null;
+let _laneConeOutlineGeo = null;
+let _laneOutlineMat = null;
+const LANE_CONE_H = 0.24;
+function _ensureLaneMarker(m) {
+  if (!m || !m.mesh || m.laneMarker || window.__headlessNoGL) return;
+  if (!_laneConeGeo) {
+    _laneConeGeo = new THREE.ConeGeometry(0.13, LANE_CONE_H, 16);
+    _laneConeGeo.rotateX(Math.PI); // tip down, pointing at the marble
+    _laneConeOutlineGeo = new THREE.ConeGeometry(0.13 * 1.3, LANE_CONE_H * 1.2, 16);
+    _laneConeOutlineGeo.rotateX(Math.PI);
+    // Dark rim (back faces of a slightly larger cone) so the colour reads on
+    // any background — wood, grass or sky.
+    _laneOutlineMat = new THREE.MeshBasicMaterial({ color: 0x2a1c10, side: THREE.BackSide, toneMapped: false });
+  }
+  const g = new THREE.Group();
+  const cone = new THREE.Mesh(_laneConeGeo, new THREE.MeshBasicMaterial({ color: m.color, toneMapped: false }));
+  const outline = new THREE.Mesh(_laneConeOutlineGeo, _laneOutlineMat);
+  g.add(outline);
+  g.add(cone);
+  g.renderOrder = 25;
+  g.visible = false;
+  scene.add(g);
+  m.laneMarker = g;
+}
+function _removeLaneMarker(m) {
+  if (!m || !m.laneMarker) return;
+  scene.remove(m.laneMarker);
+  m.laneMarker.traverse((n) => {
+    if (n.isMesh && n.material && n.material !== _laneOutlineMat) n.material.dispose();
+  });
+  m.laneMarker = null;
+}
+function updateLaneMarkers() {
+  if (typeof marbles === 'undefined' || !marbles || !marbles.length) return;
+  // Keep a readable on-screen size when the camera is far out: never smaller
+  // than ~16 px tall, otherwise true world size (the overview would shrink a
+  // fixed cone to a speck).
+  const worldPerPx = (2 * camSize * zoomFactor) / Math.max(1, window.innerHeight);
+  const k = Math.max(1, (16 * worldPerPx) / LANE_CONE_H);
+  const t = performance.now() / 380;
+  for (let i = 0; i < marbles.length; i++) {
+    const m = marbles[i];
+    const mk = m.laneMarker;
+    if (!mk) continue;
+    if (!m.skinModel || !m.mesh || !m.mesh.visible) {
+      mk.visible = false;
+      continue;
+    }
+    mk.visible = true;
+    const p = m.mesh.position;
+    const bob = Math.sin(t + i * 1.3) * 0.03;
+    mk.position.set(p.x, p.y + CONFIG.marbleRadius + 0.08 + (LANE_CONE_H * 0.6) * k + bob, p.z);
+    mk.scale.setScalar(k);
+    mk.rotation.y = t * 0.5; // a slow spin catches the eye without distracting
+  }
+}
+
 // Remove any skin from a marble, restoring its default colored sphere.
 function _clearSkin(m) {
   if (!m || !m.mesh) return;
+  _removeLaneMarker(m);
   if (m.skinModel) {
     // Dispose the per-marble cloned materials (their textures are shared from
     // the cached GLB template, so leave those alone).
@@ -4473,6 +4539,7 @@ function createMarbles() {
   for (const m of marbles) {
     if (m.mesh && m.mesh.parent) m.mesh.parent.remove(m.mesh);
     if (m.shadowBlob && m.shadowBlob.parent) m.shadowBlob.parent.remove(m.shadowBlob);
+    _removeLaneMarker(m);
   }
   marbles.length = 0;
   _ensureShadowAssets();
@@ -8990,6 +9057,7 @@ function animate() {
   updateMarbleVisuals(frameTime);
   updateConstructIntro();
   updateFollowMarker();
+  updateLaneMarkers();
   updateRollSounds(frameTime);
   updateGateAnimation(frameTime);
   updateFans(frameTime);
