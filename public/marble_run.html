@@ -4074,17 +4074,46 @@ function _skinEnvMap() {
   return _skinEnv;
 }
 
+// Textures inside a skin: shown exactly as painted. The renderer outputs
+// linear (the wooden world is authored that way), so a texture tagged sRGB by
+// GLTFLoader would be gamma-decoded in the shader and never re-encoded — every
+// midtone lands ~2× darker than the artist saw it. Passing it through as-is
+// matches what the exporter's own viewer shows.
+function _conditionSkinTexture(tex) {
+  if (!tex || tex.__skinFixed) return;
+  tex.__skinFixed = true;
+  tex.encoding = THREE.LinearEncoding;
+  tex.anisotropy = _maxAniso;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.needsUpdate = true;
+}
+
 function _brightenSkinMaterial(mat) {
   if (!mat) return;
-  const env = _skinEnvMap();
   const pbr = 'metalness' in mat;
   const transmission = mat.transmission != null ? mat.transmission : 0;
   const opacity = mat.opacity != null ? mat.opacity : 1;
   // A shell: anything transmissive, or genuinely see-through.
   const glass = transmission > 0 || opacity < 1;
+  _conditionSkinTexture(mat.map);
+  _conditionSkinTexture(mat.emissiveMap);
+  // Unlit art (KHR_materials_unlit → MeshBasicMaterial; the marble exporter's
+  // layered "ink" shells are all unlit) is meant to display exactly as
+  // painted: no environment (a basic material with an envMap multiplies it in
+  // and turns into a mirror — the "silver ball"), no tone mapping (ACES dims
+  // and desaturates flat colour), no lighting tricks.
+  if (mat.isMeshBasicMaterial) {
+    mat.envMap = null;
+    mat.toneMapped = false;
+    if (glass) { mat.transparent = true; mat.depthWrite = false; }
+    mat.needsUpdate = true;
+    return;
+  }
+  const env = _skinEnvMap();
   if (env && 'envMap' in mat) {
     mat.envMap = env;
-    mat.envMapIntensity = glass ? 1.3 : 0.55;
+    mat.envMapIntensity = glass ? 1.1 : 0.55;
   }
   if (glass) {
     if (transmission > 0) {
@@ -4094,7 +4123,7 @@ function _brightenSkinMaterial(mat) {
     mat.transparent = true;
     // Visible glass: never fully clear (the shell must read as a sphere), never
     // so opaque it hides the core.
-    mat.opacity = Math.max(transmission > 0 ? 0.28 : 0.26, Math.min(opacity, 0.85));
+    mat.opacity = Math.max(transmission > 0 ? 0.28 : 0.24, Math.min(opacity, 0.85));
     if (pbr) {
       mat.metalness = 0;
       mat.roughness = Math.min(mat.roughness != null ? mat.roughness : 0.1, 0.12);
@@ -4113,10 +4142,6 @@ function _brightenSkinMaterial(mat) {
       mat.roughness = Math.min(mat.roughness != null ? mat.roughness : 0.5, 0.8);
     }
     if (mat.map) {
-      mat.map.anisotropy = _maxAniso;
-      mat.map.generateMipmaps = true;
-      mat.map.minFilter = THREE.LinearMipmapLinearFilter;
-      mat.map.needsUpdate = true;
       if (mat.emissive) { mat.emissive.set(0xffffff); mat.emissiveMap = mat.map; mat.emissiveIntensity = 0.4; }
     } else if (mat.emissive && mat.color) {
       mat.emissive.copy(mat.color); mat.emissiveIntensity = 0.35;
@@ -4138,7 +4163,6 @@ function applyMarbleSkin(m) {
       _texLoader.setCrossOrigin('anonymous');
       _texLoader.load(skin.img, (tex) => {
         if (!m.mesh || !m.mesh.material) return;
-        tex.encoding = THREE.sRGBEncoding;
         const mat = m.mesh.material;
         mat.map = tex;
         mat.color.set(0xffffff);
@@ -4183,6 +4207,15 @@ function applyMarbleSkin(m) {
           }
         });
         if (box.isEmpty()) return;
+        // Concentric translucent shells share one centre, so distance sorting
+        // can't order them — draw small to large explicitly (inner layers
+        // first, the outer glass last) or the layering flickers per frame.
+        const shells = [];
+        const ws = new THREE.Vector3();
+        model.traverse((n) => {
+          if (n.isMesh) shells.push({ n, s: n.getWorldScale(ws).length() });
+        });
+        shells.sort((a, b) => a.s - b.s).forEach((x, i) => { x.n.renderOrder = 10 + i; });
         const size = new THREE.Vector3();
         box.getSize(size);
         // Fit PER-AXIS on a wrapper group (whose axes match the space the box
