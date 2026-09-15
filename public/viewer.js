@@ -954,13 +954,16 @@ function paintSwatch(elm, id, color) {
   elm.style.background = color || '';
   if (url) {
     elm.style.backgroundImage = `url("${url}")`;
-    elm.style.backgroundSize = 'cover';
+    elm.style.backgroundSize = SKIN_BG_SIZE;
     elm.style.backgroundPosition = 'center';
   }
 }
+// The 2D artwork has a margin around the sphere; zooming by --skin-zoom (set
+// in viewer.css) makes the marble's own edge meet the circle's edge.
+const SKIN_BG_SIZE = 'calc(100% * var(--skin-zoom, 1))';
 function ballStyleFor(id) {
   const skin = marbleManifest && (marbleManifest[id] || marbleManifest[String(id)]);
-  if (skin && skin.img) return `background-image:url('${skin.img}');background-size:cover;background-position:center`;
+  if (skin && skin.img) return `background-image:url('${skin.img}');background-size:${SKIN_BG_SIZE};background-position:center`;
   const c = marbleColor(id);
   return `--c1:${c};--c2:${shadeColor(c, 0.45)}`;
 }
@@ -1194,7 +1197,7 @@ function renderPrMarble() {
   const num = String(followId).padStart(2, '0');
   const skin = marbleManifest && (marbleManifest[followId] || marbleManifest[String(followId)]);
   const ballStyle = skin && skin.img
-    ? `background-image:url('${skin.img}');background-size:cover;background-position:center`
+    ? `background-image:url('${skin.img}');background-size:${SKIN_BG_SIZE};background-position:center`
     : `background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.92), rgba(255,255,255,0) 34%),` +
       `radial-gradient(circle at 50% 45%, ${marbleColor(followId)} 0%, #131a2a 135%)`;
   const rows = []; // [label, value, cls]

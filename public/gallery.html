@@ -21,6 +21,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
   :root {
+    --skin-zoom: 1.34; /* artwork margin → sphere fills the circle (keep in sync with viewer.css) */
     --bg: #0a0d14; --panel: rgba(20, 26, 40, 0.72); --panel2: rgba(27, 34, 51, 0.8);
     --line: rgba(120, 140, 175, 0.22); --text: #eaf0f8; --muted: #97a4ba;
     --accent: #ffcf5c; --live: #35d07f;
@@ -67,7 +68,8 @@
   .card:hover, .card:focus-visible { border-color: var(--accent); transform: translateY(-2px); outline: none; }
   .ball {
     width: 62px; height: 62px; border-radius: 50%; margin: 0 auto 9px;
-    background-size: cover; background-position: center;
+    /* Artwork is zoomed so the sphere's edge meets the circle (see --skin-zoom). */
+    background-size: calc(100% * var(--skin-zoom, 1)); background-position: center;
     box-shadow: inset -6px -8px 14px rgba(0,0,0,.45), 0 4px 10px rgba(0,0,0,.4);
   }
   .m-num { font-size: 10.5px; color: var(--muted); letter-spacing: 1px; font-weight: 700; }
@@ -273,7 +275,7 @@
     const c = carOf(id);
     const owner = ownerOf(id);
     document.getElementById('dBall').style.cssText = ballStyle(id, skinOf(id)) +
-      ';background-size:cover;background-position:center';
+      ';background-size:calc(100% * var(--skin-zoom, 1));background-position:center';
     document.getElementById('dNum').textContent = '#' + pad(id);
     document.getElementById('dName').textContent = nameFor(id);
     document.getElementById('dOwner').innerHTML = owner

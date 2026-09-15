@@ -55,7 +55,7 @@ function champHue(id) {
 }
 function champBall(id, color, manifest) {
   const sk = manifest && (manifest[id] || manifest[String(id)]);
-  if (sk && sk.img) return `background-image:url('${esc(sk.img)}');background-size:cover;background-position:center`;
+  if (sk && sk.img) return `background-image:url('${esc(sk.img)}');background-size:calc(100% * var(--skin-zoom, 1));background-position:center`;
   const c = color || champHue(id);
   return `--c1:${c};--c2:color-mix(in srgb, ${c} 45%, #000)`;
 }
