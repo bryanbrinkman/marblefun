@@ -4239,23 +4239,87 @@ function applyMarbleSkin(m) {
         m.mesh.add(wrapper);
         m.skinModel = wrapper;
       };
-      // Load a given GLB once, then clone it for every marble — loading a
-      // multi-MB model per marble per race would be wasteful.
-      if (_glbCache[skin.glb]) { place(_glbCache[skin.glb]); return; }
-      ensureGLTFLoader().then((Loader) => {
-        if (!Loader || !m.mesh) return;
-        const loader = new Loader();
-        if (loader.setCrossOrigin) loader.setCrossOrigin('anonymous');
-        loader.load(skin.glb, (gltf) => {
-          const template = gltf.scene || gltf.scenes[0];
-          _glbCache[skin.glb] = template;
-          place(template);
-        });
-      });
+      // One download + parse per URL (see _loadGlb), cloned onto every marble
+      // that wears it — and usually already warm from preloadSkins().
+      _loadGlb(skin.glb).then(place).catch(() => {});
     }
   } catch (e) {
     /* skin failure never breaks the race */
   }
+}
+
+// ---- GLB loading: one download + parse per URL, shared by every marble that
+// wears it, and warmable ahead of time (marbleAPI.preloadSkins) so the models
+// are already on the device when the field is created — on a phone a 5-model
+// race is 10–25 MB, which must not start downloading at the gate. A failed
+// load is retried once and logged once.
+let _glbInflight = {};
+let _glbFailed = {};
+function _loadGlb(url) {
+  if (_glbCache[url]) return Promise.resolve(_glbCache[url]);
+  if (_glbInflight[url]) return _glbInflight[url];
+  const attempt = (retries) =>
+    new Promise((resolve, reject) => {
+      ensureGLTFLoader().then((Loader) => {
+        if (!Loader) return reject(new Error('GLTFLoader unavailable'));
+        const loader = new Loader();
+        if (loader.setCrossOrigin) loader.setCrossOrigin('anonymous');
+        loader.load(url, (gltf) => resolve(gltf.scene || gltf.scenes[0]), undefined, (err) => reject(err || new Error('load failed')));
+      });
+    }).catch((err) => (retries > 0 ? new Promise((r) => setTimeout(r, 1500)).then(() => attempt(retries - 1)) : Promise.reject(err)));
+  _glbInflight[url] = attempt(1).then(
+    (template) => {
+      _prepareSkinTemplate(template);
+      _glbCache[url] = template;
+      delete _glbInflight[url];
+      return template;
+    },
+    (err) => {
+      delete _glbInflight[url];
+      if (!_glbFailed[url]) {
+        _glbFailed[url] = true;
+        console.warn('[marble] skin model failed to load:', url, (err && (err.message || err.type)) || err);
+      }
+      throw err;
+    }
+  );
+  return _glbInflight[url];
+}
+// Texture budget: a phone can't hold fourteen full-size layers × five marbles
+// (a 1024² layer is ~5 MB of GPU memory with mipmaps; the set would run to
+// hundreds of MB and the context dies). Cap each skin texture's edge — 512 on
+// touch / low-quality devices, 1024 otherwise — by redrawing oversized images
+// onto a canvas once, at parse time, before anything is uploaded.
+const _skinTexCap = _coarsePointer || _lowQ ? 512 : 1024;
+function _prepareSkinTemplate(template) {
+  const seen = new Set();
+  template.traverse((n) => {
+    if (!n.isMesh || !n.material) return;
+    const mats = Array.isArray(n.material) ? n.material : [n.material];
+    for (const mm of mats) {
+      for (const key of ['map', 'emissiveMap', 'alphaMap']) {
+        const tex = mm[key];
+        if (!tex || seen.has(tex)) continue;
+        seen.add(tex);
+        const img = tex.image;
+        const w = img && (img.naturalWidth || img.videoWidth || img.width);
+        const h = img && (img.naturalHeight || img.videoHeight || img.height);
+        if (!w || !h || Math.max(w, h) <= _skinTexCap) continue;
+        try {
+          const k = _skinTexCap / Math.max(w, h);
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(w * k));
+          c.height = Math.max(1, Math.round(h * k));
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          tex.image = c;
+          if (typeof img.close === 'function') img.close(); // ImageBitmap → free the full-size copy
+          tex.needsUpdate = true;
+        } catch (e) {
+          /* keep the original */
+        }
+      }
+    }
+  });
 }
 
 // Remove any skin from a marble, restoring its default colored sphere.
@@ -6956,6 +7020,22 @@ window.marbleAPI = {
     if (typeof marbles !== 'undefined' && marbles) {
       marbles.forEach((m) => { _clearSkin(m); applyMarbleSkin(m); });
     }
+  },
+  // Warm the model cache for upcoming races — download + parse only, nothing
+  // is shown — so the marbles are dressed the instant they're created rather
+  // than mid-race. Returns how many new downloads were started. Cosmetic only.
+  preloadSkins(urls) {
+    let started = 0;
+    for (const u of urls || []) {
+      if (!u || _glbCache[u] || _glbInflight[u]) continue;
+      started++;
+      _loadGlb(u).catch(() => {});
+    }
+    return started;
+  },
+  // Which model URLs are ready / still downloading (diagnostics).
+  skinCacheStatus() {
+    return { ready: Object.keys(_glbCache), loading: Object.keys(_glbInflight), failed: Object.keys(_glbFailed) };
   },
   // Follow one lane (color-name) with the follow-style cameras and mark it
   // with a chevron. Pass null to go back to tracking the leader. Cosmetic only.

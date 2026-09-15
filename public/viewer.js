@@ -1528,6 +1528,33 @@ function renderAll() {
     if (!replaying) clearLanes();
   }
   renderPreRace();
+  preloadRaceSkins();
+}
+
+// Warm the game's model cache ahead of time: the race in progress or up next,
+// plus the one after it (so the download runs during the previous race, not
+// during the countdown). Called on every model update — the game dedupes — and
+// once the manifest and the game are both ready. On a phone this is the
+// difference between marbles dressed at the gate and plain balls all race.
+let _preloadedKey = '';
+function preloadRaceSkins() {
+  if (!marbleManifest) return;
+  const a = api();
+  if (!a || typeof a.preloadSkins !== 'function') return;
+  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
+  const upcoming = orderedRaces().filter((r) => !r.result && r.roster);
+  const races = cur && !cur.result && cur.roster ? [cur, ...upcoming.filter((r) => r !== cur)] : upcoming;
+  const urls = [];
+  for (const r of races.slice(0, 2)) {
+    for (const s of r.roster) {
+      const sk = marbleManifest[s.marbleId] || marbleManifest[String(s.marbleId)];
+      if (sk && sk.glb && !urls.includes(sk.glb)) urls.push(sk.glb);
+    }
+  }
+  const key = urls.join('|');
+  if (!urls.length || key === _preloadedKey) return;
+  _preloadedKey = key;
+  try { a.preloadSkins(urls); } catch {}
 }
 
 // ---- public contribution -------------------------------------------------------
@@ -2993,6 +3020,9 @@ fetch('marbles/manifest.json', { cache: 'no-store' })
       if (model.standings && model.standings.length) renderAll();
       renderFollowPill();
     } catch {}
+    // Start pulling the upcoming races' models the moment the game can take
+    // them (page load may beat the iframe; the state may beat the manifest).
+    whenApiReady().then(() => preloadRaceSkins());
   })
   .catch(() => {});
 

@@ -63,8 +63,10 @@ Keys are the marble number (1–100). Each entry has **either** `img` **or**
   deliberately non-spherical art gets stretched to a ball. Keep it **low-poly** and embed textures in the `.glb` (binary glTF).
 - Export as **`.glb`** (binary glТF 2.0), save as e.g. `012.glb`, point the
   manifest at it.
-- Note: only the 5 marbles in the current race load their assets (lazy per
-  race), so 100 skins is fine — but keep each `.glb` reasonably small.
+- Note: only the marbles in the current and next race load their models
+  (preloaded on page load and as soon as a race is drawn, so they're on the
+  device before the gate opens), so 100 skins is fine — but keep each `.glb`
+  reasonably small; phones download them over the air.
 
 ## Hosting off-site (IPFS / Arweave / CDN)
 
