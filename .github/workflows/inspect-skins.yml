@@ -9,6 +9,10 @@ on:
       glbs:
         description: 'How many GLBs to inspect'
         default: '4'
+  # Also runs whenever this file changes (dispatch needs a permission the
+  # deploy integration lacks) — bump the `run:` comment below to re-run.
+  push:
+    paths: ['.github/workflows/inspect-skins.yml']
 
 jobs:
   inspect:
@@ -46,7 +50,8 @@ jobs:
           EOF
       - name: GLB headers + material dump
         run: |
-          node - "${{ github.event.inputs.glbs }}" <<'EOF'
+          # run: 1
+          node - "${{ github.event.inputs.glbs || '5' }}" <<'EOF'
           const fs = require('fs');
           const n = parseInt(process.argv[2] || '4', 10);
           const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
