@@ -217,6 +217,7 @@
          Countdown, what's next, the road to the champion, and things to do. -->
     <section class="prerace" id="preRace" hidden>
       <div class="pr-card" id="prCard">
+        <button class="pr-close" id="prClose" aria-label="Minimize race info to see the track" title="Minimize">✕</button>
         <div class="pr-context"><span class="pr-state" id="prState">Between races</span><span class="pr-flavor" id="prFlavor"></span></div>
         <div class="pr-title" id="prTitle"></div>
         <div class="pr-journey" id="journey" role="img" aria-label="Tournament progress: 100 started, 20 advance, 5 finalists, 1 champion">
@@ -243,6 +244,11 @@
         </a>
         <button class="pr-how" id="prHow" hidden>How it works</button>
       </div>
+      <!-- Minimized state: a one-line chip that keeps the countdown readable and
+           restores the card on tap, so the track stays in view between races. -->
+      <button class="pr-mini" id="prMini" hidden aria-label="Show race info">
+        <span class="pr-mini-text" id="prMiniText"></span><span class="pr-mini-caret" aria-hidden="true">▾</span>
+      </button>
     </section>
 
     <!-- Mid-race event toast (lead changes, your marble's moves). -->

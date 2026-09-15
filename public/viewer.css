@@ -522,7 +522,7 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 }
 .prerace[hidden] { display: none; }
 .pr-card {
-  pointer-events: auto; text-align: center;
+  pointer-events: auto; text-align: center; position: relative;
   width: min(360px, 92vw); padding: 12px 16px 12px; border-radius: 14px;
   /* Lighter/more see-through so the action stays visible behind it. */
   background: linear-gradient(180deg, rgba(14, 18, 28, 0.5), rgba(10, 13, 20, 0.58));
@@ -531,8 +531,33 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
   animation: prIn 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes prIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-/* One combined context line: STATE · phase flavor. */
-.pr-context { font-size: 11px; color: var(--muted); font-weight: 700; }
+.pr-card[hidden] { display: none; }
+/* ✕ in the top-right corner: folds the card into the chip below so the track
+   is visible between races. */
+.pr-close {
+  position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 8px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--panel2); color: var(--muted); border: 1px solid var(--line); font-size: 12px; line-height: 1;
+  transition: color 0.15s, border-color 0.15s;
+}
+.pr-close:hover, .pr-close:focus-visible { color: var(--text); border-color: var(--muted); }
+/* Minimized chip: one line of countdown + a caret, same top-docked spot. */
+.pr-mini {
+  pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; max-width: min(360px, 92vw);
+  padding: 7px 12px 7px 14px; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(180deg, rgba(14, 18, 28, 0.55), rgba(10, 13, 20, 0.62));
+  border: 1px solid var(--line); box-shadow: var(--shadow); color: var(--text);
+  -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
+  font: inherit; font-size: 12.5px; font-weight: 800; font-variant-numeric: tabular-nums;
+  animation: prIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pr-mini[hidden] { display: none; }
+.pr-mini:hover, .pr-mini:focus-visible { border-color: var(--muted); }
+.pr-mini-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-mini-caret { color: var(--muted); font-size: 12px; flex: none; }
+/* One combined context line: STATE · phase flavor. Inset so it never runs
+   under the ✕. */
+.pr-context { font-size: 11px; color: var(--muted); font-weight: 700; margin: 0 26px; }
 .pr-state { letter-spacing: 1.8px; text-transform: uppercase; }
 .pr-flavor { font-weight: 600; }
 .pr-flavor:not(:empty)::before { content: ' · '; color: var(--line2); }
@@ -1176,6 +1201,9 @@ body.tv-on #controlsBtn::after { content: ''; width: 7px; height: 7px; border-ra
 @media (pointer: coarse) {
   .follow-pill, .ctl-btn { min-height: 38px; padding-top: 8px; padding-bottom: 8px; }
   .bd-close, .picker-close, .side-close, .co-close, .replay-chip button, .live-intro button { min-width: 38px; min-height: 38px; }
+  .pr-close { width: 34px; height: 34px; top: 4px; right: 4px; }
+  .pr-mini { min-height: 38px; }
+  .pr-context { margin: 0 30px; }
   .brand { min-height: 36px; }
   .conn, .watching { min-height: 34px; display: inline-flex; align-items: center; }
   .cp-kbd summary { padding: 12px 2px; }

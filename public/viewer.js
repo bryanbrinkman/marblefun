@@ -130,6 +130,7 @@ async function startReplay(race) {
   // compact for the rest of this browser session.
   markOnboarded();
   showFullOnce = false;
+  preRaceMin = false; // a minimized card unfolds again for the next gap
   if (race.key === model.currentKey) renderCurrent(race);
   renderRaceHud(race, null);
 }
@@ -1315,6 +1316,24 @@ function tickPreRaceCountdown() {
   if (v.st === 'TOURNAMENT_COMPLETE') return; // static copy set by renderPreRace
   el('prTitle').textContent = v.primary;
   el('prFlavor').textContent = v.secondary;
+  syncPrMini();
+}
+
+// ---- minimize (✕) --------------------------------------------------------------
+// Folds the between-races card into a one-line chip so the track is visible.
+// Cleared when the next race goes live (each gap gets a fresh card) and never
+// applied to the champion card.
+let preRaceMin = false;
+function setPreRaceMin(on) {
+  preRaceMin = !!on;
+  renderPreRace();
+  // Keep keyboard focus on the control that just appeared.
+  const target = el(preRaceMin ? 'prMini' : 'prClose');
+  if (target && !el('preRace').hidden && !target.hidden) target.focus({ preventScroll: true });
+}
+function syncPrMini() {
+  const t = el('prMiniText');
+  if (t) t.textContent = el('prTitle').textContent || 'Race info';
 }
 function startedRacesHasCurrent() {
   const cur = model.currentKey && model.racesByKey.get(model.currentKey);
@@ -1355,6 +1374,15 @@ function renderPreRace() {
   }
   panel.hidden = false;
 
+  // Minimized (✕): the card folds into a one-line chip so the track is
+  // visible; the chip keeps the countdown sentence readable. The champion
+  // card always unfolds — that moment is the whole point.
+  if (model.champion) preRaceMin = false;
+  const card = el('prCard');
+  const mini = el('prMini');
+  card.hidden = preRaceMin;
+  mini.hidden = !preRaceMin;
+
   // Compact after onboarding (this session), except for the champion moment.
   const compact = isOnboarded() && !showFullOnce && !model.champion;
   el('prCard').classList.toggle('compact', compact);
@@ -1390,6 +1418,7 @@ function renderPreRace() {
     title.textContent = 'Racing resumes soon';
     flavor.textContent = 'The marbles are catching their breath';
     starters.innerHTML = '';
+    syncPrMini();
     return;
   }
 
@@ -1397,6 +1426,7 @@ function renderPreRace() {
   state.textContent = v.eyebrow;
   title.textContent = v.primary;
   flavor.textContent = v.secondary;
+  syncPrMini();
   // Replays don't make sense seconds before a live start or with no results.
   if (v.st === 'STARTING') el('watchLatestBtn').hidden = true;
   // Call-the-winner: the five starters are tappable — backing one makes it
@@ -2633,6 +2663,8 @@ function renderBracketCompact() {
 // ---- pre-race actions ------------------------------------------------------
 if (el('watchLatestBtn')) el('watchLatestBtn').addEventListener('click', startLatestReplay);
 if (el('replayExit')) el('replayExit').addEventListener('click', () => stopReplay(true));
+if (el('prClose')) el('prClose').addEventListener('click', () => setPreRaceMin(true));
+if (el('prMini')) el('prMini').addEventListener('click', () => setPreRaceMin(false));
 if (el('prHow'))
   el('prHow').addEventListener('click', () => {
     showFullOnce = true; // re-expand until the next race starts
@@ -2834,6 +2866,7 @@ document.addEventListener('keydown', (e) => {
     el('moreBtn').setAttribute('aria-expanded', 'false');
   } else if (el('bracketDock').classList.contains('open')) el('bracketClose').click();
   else if (!document.body.classList.contains('stats-hidden')) setStatsOpen(false);
+  else if (!el('preRace').hidden && !preRaceMin && !model.champion) setPreRaceMin(true);
 });
 
 // ---- iOS viewport pinning ---------------------------------------------------
