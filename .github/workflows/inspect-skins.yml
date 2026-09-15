@@ -1,0 +1,86 @@
+# Manual diagnostics for the marble artwork folders: lists both directories,
+# runs the same discovery the server does, and dumps the material setup of a
+# few GLBs (this is what the game has to light correctly). Run it from the
+# Actions tab when the marbles look wrong; read the job log.
+name: inspect-skins
+on:
+  workflow_dispatch:
+    inputs:
+      glbs:
+        description: 'How many GLBs to inspect'
+        default: '4'
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Directory listings + discovery
+        run: |
+          node - <<'EOF'
+          const { discoverSkins, fetchListing } = require('./src/skins');
+          const { Tournament } = require('./src/tournament');
+          const IMG = process.env.MARBLE_IMG_DIR || 'https://moccasin-faithful-asp-799.mypinata.cloud/ipfs/bafybeib74dmhx2kwpjirgov7mb2lwyghlhqyb5i5wn7if7hylcrzydktke/';
+          const GLB = process.env.MARBLE_GLB_DIR || 'https://moccasin-faithful-asp-799.mypinata.cloud/ipfs/bafybeigr666ifcnkglwzfnq7d3bn2ve36f3hqrexlotm44c6drxhrbc3u4/';
+          (async () => {
+            for (const [label, dir] of [['IMAGES', IMG], ['MODELS', GLB]]) {
+              console.log(`\n=== ${label} ${dir}`);
+              try {
+                const entries = await fetchListing(dir);
+                console.log(entries.length + ' files');
+                for (const e of entries) console.log('  ' + e.name + '  ->  ' + e.url);
+              } catch (e) { console.log('LISTING FAILED: ' + e.message); }
+            }
+            const names = Array.from({ length: 100 }, (_, i) => Tournament.marbleNameFor(i + 1));
+            const r = await discoverSkins({ imgDir: IMG, glbDir: GLB, names });
+            console.log('\n=== DISCOVERY', JSON.stringify(r.stats), JSON.stringify(r.sources));
+            const ids = Object.keys(r.manifest);
+            console.log('matched marbles: ' + ids.length + ' → ' + ids.slice(0, 12).join(',') + (ids.length > 12 ? ',…' : ''));
+            for (const id of ids.slice(0, 5)) console.log('  ' + id + ' ' + JSON.stringify(r.manifest[id]));
+            require('fs').writeFileSync('manifest.json', JSON.stringify(r.manifest, null, 1));
+          })();
+          EOF
+      - name: GLB headers + material dump
+        run: |
+          node - "${{ github.event.inputs.glbs }}" <<'EOF'
+          const fs = require('fs');
+          const n = parseInt(process.argv[2] || '4', 10);
+          const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+          const urls = Object.entries(manifest).filter(([, v]) => v.glb).slice(0, n);
+          const img = Object.values(manifest).find((v) => v.img);
+          (async () => {
+            if (img) {
+              const h = await fetch(img.img, { method: 'HEAD' });
+              console.log('\n=== IMAGE HEAD', img.img, h.status, Object.fromEntries([...h.headers].filter(([k]) => /content-type|content-length|access-control/i.test(k))));
+            }
+            fs.mkdirSync('glbs', { recursive: true });
+            for (const [id, v] of urls) {
+              const res = await fetch(v.glb);
+              const buf = Buffer.from(await res.arrayBuffer());
+              fs.writeFileSync(`glbs/${id}.glb`, buf);
+              console.log(`\n=== GLB #${id} ${v.glb}\n  HTTP ${res.status} ${buf.length} bytes`, Object.fromEntries([...res.headers].filter(([k]) => /content-type|access-control/i.test(k))));
+              if (buf.readUInt32LE(0) !== 0x46546c67) { console.log('  not a GLB (magic mismatch); first bytes: ' + buf.slice(0, 64).toString('utf8')); continue; }
+              const jsonLen = buf.readUInt32LE(12);
+              const g = JSON.parse(buf.slice(20, 20 + jsonLen).toString('utf8'));
+              console.log('  generator:', g.asset && g.asset.generator, ' extensionsUsed:', g.extensionsUsed);
+              console.log('  nodes:', (g.nodes || []).map((x) => x.name + (x.scale ? ' scale=' + x.scale : '') + (x.rotation ? ' rot' : '')).join(' | '));
+              console.log('  meshes:', (g.meshes || []).map((m) => `${m.name}[${m.primitives.map((p) => 'mat' + p.material + (p.attributes.COLOR_0 != null ? '+vcol' : '') + (p.attributes.TEXCOORD_0 != null ? '+uv' : '')).join(',')}]`).join(' | '));
+              console.log('  images:', (g.images || []).length, ' textures:', (g.textures || []).length, ' samplers:', (g.samplers || []).length);
+              (g.materials || []).forEach((m, i) => console.log(`  material[${i}] ${JSON.stringify(m)}`));
+              // bounds of the first mesh position accessor
+              const acc = (g.accessors || []).filter((a) => a.type === 'VEC3' && a.min && a.max);
+              acc.slice(0, 3).forEach((a) => console.log('  bounds min=' + a.min.map((x) => x.toFixed(3)) + ' max=' + a.max.map((x) => x.toFixed(3))));
+            }
+          })();
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skins-inspection
+          path: |
+            manifest.json
+            glbs/
+          if-no-files-found: ignore
