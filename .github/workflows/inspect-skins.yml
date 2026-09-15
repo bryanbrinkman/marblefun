@@ -50,7 +50,7 @@ jobs:
           EOF
       - name: GLB headers + material dump
         run: |
-          # run: 3
+          # run: 4
           node - "${{ github.event.inputs.glbs || '5' }}" <<'EOF'
           const fs = require('fs');
           const n = parseInt(process.argv[2] || '4', 10);
@@ -104,7 +104,8 @@ jobs:
           for mid in ['1', '2', '3', '41', '98']:
               url = m.get(mid, {}).get('img')
               if not url: continue
-              im = Image.open(io.BytesIO(urllib.request.urlopen(url).read())).convert('RGB')
+              req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (inspect-skins)', 'Accept': 'image/*'})
+              im = Image.open(io.BytesIO(urllib.request.urlopen(req).read())).convert('RGB')
               w, h = im.size
               px = im.load()
               # background = mean of the four corners; marble = pixels far from it
