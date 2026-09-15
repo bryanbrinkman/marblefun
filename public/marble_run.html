@@ -4018,18 +4018,109 @@ try { _maxAniso = renderer.capabilities && renderer.capabilities.getMaxAnisotrop
 // Fix: hold metalness low (so lighting is diffuse, not reflection-dependent),
 // give the surface a modest self-illumination from its own texture so the
 // brightness floor is size-independent, and use full anisotropy + mipmaps.
+//
+// Glass: many marble models are a colored core inside a clear outer shell.
+// Two things made that shell invisible here: (1) the shell is usually exported
+// with KHR_materials_transmission, and this THREE build (r128) has no
+// transmission render pass — a transmissive material draws as nothing/black;
+// (2) even as plain alpha glass, a clear sphere is only visible through what
+// it REFLECTS, and the wooden world has no environment map. So skins get a
+// small baked studio environment of their own (below), and a transmissive
+// shell is re-expressed as glossy alpha glass with a visible opacity floor.
+let _skinEnv = null;
+let _skinEnvTried = false;
+function _skinEnvMap() {
+  if (_skinEnv || _skinEnvTried) return _skinEnv;
+  _skinEnvTried = true;
+  try {
+    if (window.__headlessNoGL || !THREE.PMREMGenerator || !renderer || !renderer.render) return null;
+    const room = new THREE.Scene();
+    // Sky dome: warm white above, cool horizon, soft ground below.
+    const skyGeo = new THREE.SphereGeometry(10, 24, 16);
+    const pos = skyGeo.attributes.position;
+    const col = new Float32Array(pos.count * 3);
+    const top = new THREE.Color(0xfff8ea), horizon = new THREE.Color(0xd8e6f2), ground = new THREE.Color(0x7d6a4e);
+    const c = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i) / 10;
+      c.copy(horizon).lerp(y >= 0 ? top : ground, Math.abs(y));
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+    }
+    skyGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    room.add(new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ side: THREE.BackSide, vertexColors: true })));
+    // Soft-box panels: the bright highlights that make a sphere read as glass.
+    const panel = (w, h, x, y, z, k) => {
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(k, k, k), side: THREE.DoubleSide })
+      );
+      m.position.set(x, y, z);
+      m.lookAt(0, 0, 0);
+      room.add(m);
+    };
+    panel(4, 3, 3, 5, 2, 6);      // key, high right
+    panel(3, 3, -4, 3, -2, 3);    // fill, left
+    panel(6, 1.5, 0, 2, -5, 2.5); // long strip behind
+    const gen = new THREE.PMREMGenerator(renderer);
+    _skinEnv = gen.fromScene(room, 0.04).texture;
+    gen.dispose();
+    room.traverse((n) => {
+      if (n.geometry) n.geometry.dispose();
+      if (n.material) n.material.dispose();
+    });
+  } catch (e) {
+    _skinEnv = null;
+  }
+  return _skinEnv;
+}
+
 function _brightenSkinMaterial(mat) {
   if (!mat) return;
-  if ('metalness' in mat && mat.metalness != null) mat.metalness = Math.min(mat.metalness, 0.1);
-  if ('roughness' in mat && mat.roughness != null) mat.roughness = Math.min(mat.roughness, 0.85);
-  if (mat.map) {
-    mat.map.anisotropy = _maxAniso;
-    mat.map.generateMipmaps = true;
-    mat.map.minFilter = THREE.LinearMipmapLinearFilter;
-    mat.map.needsUpdate = true;
-    if (mat.emissive) { mat.emissive.set(0xffffff); mat.emissiveMap = mat.map; mat.emissiveIntensity = 0.4; }
-  } else if (mat.emissive && mat.color) {
-    mat.emissive.copy(mat.color); mat.emissiveIntensity = 0.3;
+  const env = _skinEnvMap();
+  const pbr = 'metalness' in mat;
+  const transmission = mat.transmission != null ? mat.transmission : 0;
+  const opacity = mat.opacity != null ? mat.opacity : 1;
+  // A shell: anything transmissive, or genuinely see-through.
+  const glass = transmission > 0 || opacity < 1;
+  if (env && 'envMap' in mat) {
+    mat.envMap = env;
+    mat.envMapIntensity = glass ? 1.3 : 0.55;
+  }
+  if (glass) {
+    if (transmission > 0) {
+      mat.transmission = 0; // no transmission pass in r128 → would draw black
+      if ('transmissionMap' in mat) mat.transmissionMap = null;
+    }
+    mat.transparent = true;
+    // Visible glass: never fully clear (the shell must read as a sphere), never
+    // so opaque it hides the core.
+    mat.opacity = Math.max(transmission > 0 ? 0.28 : 0.26, Math.min(opacity, 0.85));
+    if (pbr) {
+      mat.metalness = 0;
+      mat.roughness = Math.min(mat.roughness != null ? mat.roughness : 0.1, 0.12);
+    }
+    if (mat.color) mat.color.lerp(new THREE.Color(0xffffff), 0.6); // tinted shells stay bright
+    if (mat.emissive) { mat.emissive.set(0xffffff); mat.emissiveMap = null; mat.emissiveIntensity = 0.05; }
+    if ('clearcoat' in mat) { mat.clearcoat = 1; mat.clearcoatRoughness = 0.05; }
+    mat.depthWrite = false;
+    mat.side = THREE.FrontSide;
+  } else {
+    // Opaque parts: hold metalness low so lighting stays diffuse (a bit more is
+    // fine once there's an environment to reflect), and give the surface a
+    // modest self-illumination so brightness doesn't collapse at a distance.
+    if (pbr) {
+      mat.metalness = Math.min(mat.metalness != null ? mat.metalness : 0, env ? 0.25 : 0.1);
+      mat.roughness = Math.min(mat.roughness != null ? mat.roughness : 0.5, 0.8);
+    }
+    if (mat.map) {
+      mat.map.anisotropy = _maxAniso;
+      mat.map.generateMipmaps = true;
+      mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+      mat.map.needsUpdate = true;
+      if (mat.emissive) { mat.emissive.set(0xffffff); mat.emissiveMap = mat.map; mat.emissiveIntensity = 0.4; }
+    } else if (mat.emissive && mat.color) {
+      mat.emissive.copy(mat.color); mat.emissiveIntensity = 0.35;
+    }
   }
   mat.needsUpdate = true;
 }
