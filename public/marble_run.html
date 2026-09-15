@@ -4332,13 +4332,13 @@ function _prepareSkinTemplate(template) {
 let _laneConeGeo = null;
 let _laneConeOutlineGeo = null;
 let _laneOutlineMat = null;
-const LANE_CONE_H = 0.24;
+const LANE_CONE_H = 0.12;
 function _ensureLaneMarker(m) {
   if (!m || !m.mesh || m.laneMarker || window.__headlessNoGL) return;
   if (!_laneConeGeo) {
-    _laneConeGeo = new THREE.ConeGeometry(0.13, LANE_CONE_H, 16);
+    _laneConeGeo = new THREE.ConeGeometry(0.065, LANE_CONE_H, 16);
     _laneConeGeo.rotateX(Math.PI); // tip down, pointing at the marble
-    _laneConeOutlineGeo = new THREE.ConeGeometry(0.13 * 1.3, LANE_CONE_H * 1.2, 16);
+    _laneConeOutlineGeo = new THREE.ConeGeometry(0.065 * 1.3, LANE_CONE_H * 1.2, 16);
     _laneConeOutlineGeo.rotateX(Math.PI);
     // Dark rim (back faces of a slightly larger cone) so the colour reads on
     // any background — wood, grass or sky.
@@ -4365,10 +4365,10 @@ function _removeLaneMarker(m) {
 function updateLaneMarkers() {
   if (typeof marbles === 'undefined' || !marbles || !marbles.length) return;
   // Keep a readable on-screen size when the camera is far out: never smaller
-  // than ~16 px tall, otherwise true world size (the overview would shrink a
+  // than ~8 px tall, otherwise true world size (the overview would shrink a
   // fixed cone to a speck).
   const worldPerPx = (2 * camSize * zoomFactor) / Math.max(1, window.innerHeight);
-  const k = Math.max(1, (16 * worldPerPx) / LANE_CONE_H);
+  const k = Math.max(1, (8 * worldPerPx) / LANE_CONE_H);
   const t = performance.now() / 380;
   for (let i = 0; i < marbles.length; i++) {
     const m = marbles[i];
