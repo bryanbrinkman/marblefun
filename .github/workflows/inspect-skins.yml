@@ -50,7 +50,7 @@ jobs:
           EOF
       - name: GLB headers + material dump
         run: |
-          # run: 1
+          # run: 2
           node - "${{ github.event.inputs.glbs || '5' }}" <<'EOF'
           const fs = require('fs');
           const n = parseInt(process.argv[2] || '4', 10);
@@ -75,6 +75,18 @@ jobs:
               console.log('  nodes:', (g.nodes || []).map((x) => x.name + (x.scale ? ' scale=' + x.scale : '') + (x.rotation ? ' rot' : '')).join(' | '));
               console.log('  meshes:', (g.meshes || []).map((m) => `${m.name}[${m.primitives.map((p) => 'mat' + p.material + (p.attributes.COLOR_0 != null ? '+vcol' : '') + (p.attributes.TEXCOORD_0 != null ? '+uv' : '')).join(',')}]`).join(' | '));
               console.log('  images:', (g.images || []).length, ' textures:', (g.textures || []).length, ' samplers:', (g.samplers || []).length);
+              // Embedded image sizes + pixel dimensions (PNG IHDR / JPEG SOF) — GPU memory on phones.
+              const binStart = 20 + jsonLen + 8;
+              (g.images || []).forEach((im, k) => {
+                const bv = g.bufferViews[im.bufferView];
+                const d = buf.slice(binStart + bv.byteOffset, binStart + bv.byteOffset + bv.byteLength);
+                let dims = '?';
+                if (d[0] === 0x89 && d[1] === 0x50) dims = d.readUInt32BE(16) + 'x' + d.readUInt32BE(20);
+                else if (d[0] === 0xff && d[1] === 0xd8) { let o = 2; while (o < d.length) { if (d[o] !== 0xff) { o++; continue; } const mk = d[o + 1]; const len = d.readUInt16BE(o + 2); if (mk >= 0xc0 && mk <= 0xcf && mk !== 0xc4 && mk !== 0xc8 && mk !== 0xcc) { dims = d.readUInt16BE(o + 7) + 'x' + d.readUInt16BE(o + 5); break; } o += 2 + len; } }
+                if (k < 3 || k === (g.images || []).length - 1) console.log(`  image[${k}] ${im.mimeType} ${bv.byteLength} bytes ${dims}`);
+              });
+              const meshVerts = (g.accessors || []).filter((a) => a.type === 'VEC3').reduce((t, a) => t + a.count, 0);
+              console.log('  total VEC3 accessor elements:', meshVerts);
               (g.materials || []).forEach((m, i) => console.log(`  material[${i}] ${JSON.stringify(m)}`));
               // bounds of the first mesh position accessor
               const acc = (g.accessors || []).filter((a) => a.type === 'VEC3' && a.min && a.max);
