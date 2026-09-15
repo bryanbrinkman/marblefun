@@ -4107,6 +4107,9 @@ function _brightenSkinMaterial(mat) {
     mat.envMap = null;
     mat.toneMapped = false;
     if (glass) { mat.transparent = true; mat.depthWrite = false; }
+    // Phones: fourteen double-sided translucent layers per marble is a lot of
+    // overdraw for a tiled GPU — front faces only on the low tier.
+    if (_lowQ && mat.side === THREE.DoubleSide) mat.side = THREE.FrontSide;
     mat.needsUpdate = true;
     return;
   }
@@ -4238,6 +4241,7 @@ function applyMarbleSkin(m) {
         if (m.mesh.material) m.mesh.material.visible = false; // hide the default sphere
         m.mesh.add(wrapper);
         m.skinModel = wrapper;
+        m.skinUrl = skin.glb; // which cached template this marble wears (eviction guard)
         _ensureLaneMarker(m); // the lane-colour cone over a model-dressed marble
       };
       // One download + parse per URL (see _loadGlb), cloned onto every marble
@@ -4256,6 +4260,27 @@ function applyMarbleSkin(m) {
 // load is retried once and logged once.
 let _glbInflight = {};
 let _glbFailed = {};
+// Parse one model at a time on phones (two on desktop): ten models arriving
+// together means ~140 texture decodes in flight at once, and that memory
+// spike is what gets a mobile tab killed. Downloads still overlap; only the
+// parse/decode step is serialized.
+const _glbMaxParallel = _coarsePointer ? 1 : 2;
+let _glbActive = 0;
+const _glbWaiting = [];
+function _glbSlot() {
+  if (_glbActive < _glbMaxParallel) {
+    _glbActive++;
+    return Promise.resolve();
+  }
+  return new Promise((r) => _glbWaiting.push(r)).then(() => {
+    _glbActive++;
+  });
+}
+function _glbRelease() {
+  _glbActive = Math.max(0, _glbActive - 1);
+  const next = _glbWaiting.shift();
+  if (next) next();
+}
 function _loadGlb(url) {
   if (_glbCache[url]) return Promise.resolve(_glbCache[url]);
   if (_glbInflight[url]) return _glbInflight[url];
@@ -4268,13 +4293,22 @@ function _loadGlb(url) {
         loader.load(url, (gltf) => resolve(gltf.scene || gltf.scenes[0]), undefined, (err) => reject(err || new Error('load failed')));
       });
     }).catch((err) => (retries > 0 ? new Promise((r) => setTimeout(r, 1500)).then(() => attempt(retries - 1)) : Promise.reject(err)));
-  _glbInflight[url] = attempt(1).then(
-    (template) => {
-      _prepareSkinTemplate(template);
-      _glbCache[url] = template;
-      delete _glbInflight[url];
-      return template;
-    },
+  _glbInflight[url] = _glbSlot()
+    .then(() => attempt(1))
+    .then(
+      (template) => {
+        _glbRelease();
+        _prepareSkinTemplate(template);
+        _glbCache[url] = template;
+        delete _glbInflight[url];
+        return template;
+      },
+      (err) => {
+        _glbRelease();
+        throw err;
+      }
+    )
+    .catch(
     (err) => {
       delete _glbInflight[url];
       if (!_glbFailed[url]) {
@@ -4286,12 +4320,48 @@ function _loadGlb(url) {
   );
   return _glbInflight[url];
 }
+// Drop cached templates nobody needs: not in `keep` (the current and next
+// race, per the host) and not worn by a marble on the track. Without this the
+// cache grows by five models a race — a whole tournament is a hundred models,
+// far more than a phone can hold.
+function _evictGlbExcept(keep) {
+  const keepSet = new Set(keep || []);
+  if (typeof marbles !== 'undefined' && marbles) for (const m of marbles) if (m.skinUrl) keepSet.add(m.skinUrl);
+  for (const url of Object.keys(_glbCache)) {
+    if (keepSet.has(url)) continue;
+    const template = _glbCache[url];
+    delete _glbCache[url];
+    try {
+      const seenTex = new Set();
+      template.traverse((n) => {
+        if (!n.isMesh) return;
+        if (n.geometry) n.geometry.dispose();
+        const mats = Array.isArray(n.material) ? n.material : [n.material];
+        for (const mm of mats) {
+          if (!mm) continue;
+          for (const key of ['map', 'emissiveMap', 'alphaMap', 'normalMap', 'roughnessMap', 'metalnessMap']) {
+            const tex = mm[key];
+            if (tex && !seenTex.has(tex)) {
+              seenTex.add(tex);
+              if (tex.image && typeof tex.image.close === 'function') tex.image.close();
+              tex.dispose();
+            }
+          }
+          mm.dispose();
+        }
+      });
+    } catch (e) {
+      /* best effort */
+    }
+  }
+}
 // Texture budget: a phone can't hold fourteen full-size layers × five marbles
 // (a 1024² layer is ~5 MB of GPU memory with mipmaps; the set would run to
-// hundreds of MB and the context dies). Cap each skin texture's edge — 512 on
-// touch / low-quality devices, 1024 otherwise — by redrawing oversized images
-// onto a canvas once, at parse time, before anything is uploaded.
-const _skinTexCap = _coarsePointer || _lowQ ? 512 : 1024;
+// hundreds of MB and the context dies). Cap each skin texture's edge — 256 on
+// touch / low-quality devices (the marbles are a few dozen px there), 1024
+// otherwise — by redrawing oversized images onto a canvas once, at parse
+// time, before anything is uploaded; the full-size decode is closed.
+const _skinTexCap = _coarsePointer || _lowQ ? 256 : 1024;
 function _prepareSkinTemplate(template) {
   const seen = new Set();
   template.traverse((n) => {
@@ -4400,6 +4470,7 @@ function _clearSkin(m) {
     });
     m.mesh.remove(m.skinModel);
     m.skinModel = null;
+    m.skinUrl = null;
   }
   const mat = m.mesh.material;
   if (mat) {
@@ -7092,6 +7163,10 @@ window.marbleAPI = {
   // is shown — so the marbles are dressed the instant they're created rather
   // than mid-race. Returns how many new downloads were started. Cosmetic only.
   preloadSkins(urls) {
+    // `urls` is also the retain set: anything cached that isn't listed (and
+    // isn't on a marble right now) is released first, so memory stays flat
+    // across a whole tournament instead of growing by five models a race.
+    _evictGlbExcept(urls);
     let started = 0;
     for (const u of urls || []) {
       if (!u || _glbCache[u] || _glbInflight[u]) continue;
