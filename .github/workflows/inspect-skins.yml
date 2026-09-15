@@ -50,7 +50,7 @@ jobs:
           EOF
       - name: GLB headers + material dump
         run: |
-          # run: 2
+          # run: 3
           node - "${{ github.event.inputs.glbs || '5' }}" <<'EOF'
           const fs = require('fs');
           const n = parseInt(process.argv[2] || '4', 10);
@@ -93,6 +93,40 @@ jobs:
               acc.slice(0, 3).forEach((a) => console.log('  bounds min=' + a.min.map((x) => x.toFixed(3)) + ' max=' + a.max.map((x) => x.toFixed(3))));
             }
           })();
+          EOF
+      - name: Measure the marble inside the 2D artwork (how much margin to zoom away)
+        run: |
+          pip install --quiet pillow
+          python3 - <<'EOF'
+          import json, io, urllib.request
+          from PIL import Image
+          m = json.load(open('manifest.json'))
+          for mid in ['1', '2', '3', '41', '98']:
+              url = m.get(mid, {}).get('img')
+              if not url: continue
+              im = Image.open(io.BytesIO(urllib.request.urlopen(url).read())).convert('RGB')
+              w, h = im.size
+              px = im.load()
+              # background = mean of the four corners; marble = pixels far from it
+              corners = [px[0,0], px[w-1,0], px[0,h-1], px[w-1,h-1]]
+              bg = tuple(sum(c[i] for c in corners)/4 for i in range(3))
+              def far(p): return sum(abs(p[i]-bg[i]) for i in range(3)) > 60
+              xs, ys = [], []
+              step = max(1, w//400)
+              for y in range(0, h, step):
+                  for x in range(0, w, step):
+                      if far(px[x,y]): xs.append(x); ys.append(y)
+              if not xs: print(mid, 'no marble found'); continue
+              bw, bh = max(xs)-min(xs), max(ys)-min(ys)
+              cx, cy = (max(xs)+min(xs))/2, (max(ys)+min(ys))/2
+              print(f"#{mid} {w}x{h} bg={tuple(round(c) for c in bg)} marble bbox x[{min(xs)},{max(xs)}] y[{min(ys)},{max(ys)}] size={bw}x{bh} diameter/width={bw/w:.3f} {bh/h:.3f} centre=({cx/w:.3f},{cy/h:.3f})")
+              # Row profile through the centre: where does the sphere edge sit (ignoring a soft shadow)?
+              row = [px[x, int(cy)] for x in range(w)]
+              edges = [x for x in range(w) if far(row[x])]
+              print(f"    centre-row extent x[{edges[0]},{edges[-1]}] -> {(edges[-1]-edges[0])/w:.3f} of width")
+              col = [px[int(cx), y] for y in range(h)]
+              e2 = [y for y in range(h) if far(col[y])]
+              print(f"    centre-col extent y[{e2[0]},{e2[-1]}] -> {(e2[-1]-e2[0])/h:.3f} of height")
           EOF
       - uses: actions/upload-artifact@v4
         with:
