@@ -1169,8 +1169,22 @@ const woodPaintTexture = generateWoodTexture({
   seed: 91,
 });
 
-// Per-material clones with random UV offset/repeat, so adjacent blocks don't look identical
+// Per-material texture variants with random UV offset/repeat, so adjacent blocks
+// don't look identical. Variants come from a small POOL per (texture, repeat):
+// every Texture object — even a clone sharing the same canvas — is its own GPU
+// upload, and materials never dispose their maps, so cloning one per block
+// meant ~300 textures per course that were never freed. A course's worth of
+// blocks drawing from 4–8 shared variants looks the same and stays flat.
+const _texPool = new Map();
+const _texPoolSize = _lowQ ? 4 : 8;
 function texturedClone(baseTex, repeatX, repeatY) {
+  const key = baseTex.uuid + '|' + repeatX.toFixed(3) + '|' + repeatY.toFixed(3);
+  let pool = _texPool.get(key);
+  if (!pool) {
+    pool = [];
+    _texPool.set(key, pool);
+  }
+  if (pool.length >= _texPoolSize) return pool[Math.floor(Math.random() * pool.length)];
   const t = baseTex.clone();
   t.needsUpdate = true;
   t.wrapS = THREE.RepeatWrapping;
@@ -1183,6 +1197,7 @@ function texturedClone(baseTex, repeatX, repeatY) {
   // grain pattern is showing.
   t.rotation = 0;
   t.center.set(0.5, 0.5);
+  pool.push(t);
   return t;
 }
 // =========================================================
@@ -2149,6 +2164,7 @@ function clearWorld() {
   // Any in-flight construct-up intro dies with its meshes.
   _introObjs.length = 0;
   _introActive = false;
+  _unbakeWorld(true);
   for (const obj of worldObjects) {
     scene.remove(obj);
     obj.traverse(child => {
@@ -2160,6 +2176,176 @@ function clearWorld() {
     });
   }
   worldObjects.length = 0;
+}
+
+// ---- static-world bake (low-quality tier) ---------------------------------------
+// A course is ~2,300 individual meshes (every block, wall segment and stripe
+// its own draw call) — 2,500+ draw calls a frame, which is what makes phones
+// crawl. Once the construct-up intro has finished, the low tier merges every
+// static, opaque, single-material mesh into one mesh per material signature
+// (texture + surface params), baking each piece's tint into vertex colours and
+// its transform into the vertices. Draw calls drop by an order of magnitude.
+//
+// The originals stay in the scene, invisible: the physics never reads meshes,
+// but marble-blast's raycasts and the print export walk them, and nothing
+// about the course data changes. Animated pieces (gate, fans, flags, marbles,
+// anything transparent or multi-material) are left alone. The bake is undone
+// before a collapse (pieces must tumble individually), when the world is
+// cleared, or if the quality tier is switched back up.
+let _worldBaked = false;
+const _bakedMeshes = [];
+const _bakedHidden = [];
+function _bakeExcluded() {
+  const ex = new Set();
+  if (startGateMesh) startGateMesh.traverse((n) => ex.add(n));
+  for (const f of allFlags) if (f.mesh) ex.add(f.mesh);
+  for (const c of pathCells) if (c._fan && c._fan.group) c._fan.group.traverse((n) => ex.add(n));
+  return ex;
+}
+function _bakeKey(mat) {
+  return [
+    mat.type,
+    mat.map ? mat.map.uuid : '-',
+    mat.roughness != null ? mat.roughness.toFixed(3) : '-',
+    mat.metalness != null ? mat.metalness.toFixed(3) : '-',
+    mat.emissive ? mat.emissive.getHex() : '-',
+    mat.emissiveIntensity != null ? mat.emissiveIntensity.toFixed(3) : '-',
+    mat.side,
+    mat.flatShading ? 1 : 0,
+    mat.normalMap ? mat.normalMap.uuid : '-',
+    mat.alphaTest || 0,
+  ].join('|');
+}
+function _bakeWorld() {
+  if (_worldBaked || window.__headlessNoGL) return;
+  const excluded = _bakeExcluded();
+  const groups = new Map(); // key -> { mat, parts: [{ n, mat, start, count }], verts, idx }
+  const seen = new Set(); // worldObjects nest (a group AND its children are listed) — visit each mesh once
+  const bakeable = (m) =>
+    m && !m.transparent && !(m.opacity != null && m.opacity < 1) && !m.wireframe && !m.vertexColors &&
+    (m.isMeshStandardMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial);
+  const hidden = []; // meshes whose every part got merged
+  for (const obj of worldObjects) {
+    obj.updateMatrixWorld(true);
+    obj.traverse((n) => {
+      if (!n.isMesh || !n.geometry || !n.material || seen.has(n)) return;
+      seen.add(n);
+      if (excluded.has(n) || (n.userData && (n.userData.isMarble || n.userData.noBake))) return;
+      if (!n.visible) return;
+      const geo = n.geometry;
+      const pos = geo.attributes.position;
+      if (!pos || pos.count > 20000) return; // leave huge one-offs (table top etc.) as they are
+      const vc = pos.count;
+      const total = geo.index ? geo.index.count : vc;
+      // Multi-material meshes (the letter blocks: one material per face) merge
+      // per face group; single-material meshes as one part.
+      const parts = Array.isArray(n.material)
+        ? (geo.groups || []).map((gr) => ({ mat: n.material[gr.materialIndex], start: gr.start, count: gr.count === Infinity ? total - gr.start : gr.count }))
+        : [{ mat: n.material, start: 0, count: total }];
+      if (!parts.length || !parts.every((p) => bakeable(p.mat))) return;
+      for (const p of parts) {
+        const key = _bakeKey(p.mat);
+        let g = groups.get(key);
+        if (!g) {
+          g = { mat: p.mat, parts: [], verts: 0, idx: 0 };
+          groups.set(key, g);
+        }
+        g.parts.push({ n, mat: p.mat, start: p.start, count: p.count });
+        g.verts += vc;
+        g.idx += p.count;
+      }
+      hidden.push(n);
+    });
+  }
+  if (hidden.length < 50) return; // nothing worth merging
+  const nm = new THREE.Matrix3();
+  const v = new THREE.Vector3();
+  for (const g of groups.values()) {
+    const P = new Float32Array(g.verts * 3);
+    const N = new Float32Array(g.verts * 3);
+    const U = new Float32Array(g.verts * 2);
+    const C = new Float32Array(g.verts * 3);
+    const I = g.verts > 65535 ? new Uint32Array(g.idx) : new Uint16Array(g.idx);
+    let vo = 0, io = 0;
+    for (const part of g.parts) {
+      const n = part.n;
+      const geo = n.geometry;
+      const pos = geo.attributes.position, nor = geo.attributes.normal, uv = geo.attributes.uv;
+      const mw = n.matrixWorld;
+      nm.getNormalMatrix(mw);
+      const col = part.mat.color || { r: 1, g: 1, b: 1 };
+      const cnt = pos.count;
+      for (let i = 0; i < cnt; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(mw);
+        P[(vo + i) * 3] = v.x; P[(vo + i) * 3 + 1] = v.y; P[(vo + i) * 3 + 2] = v.z;
+        if (nor) v.fromBufferAttribute(nor, i).applyMatrix3(nm).normalize();
+        else v.set(0, 1, 0);
+        N[(vo + i) * 3] = v.x; N[(vo + i) * 3 + 1] = v.y; N[(vo + i) * 3 + 2] = v.z;
+        if (uv) { U[(vo + i) * 2] = uv.getX(i); U[(vo + i) * 2 + 1] = uv.getY(i); }
+        C[(vo + i) * 3] = col.r; C[(vo + i) * 3 + 1] = col.g; C[(vo + i) * 3 + 2] = col.b;
+      }
+      if (geo.index) {
+        const idx = geo.index;
+        for (let i = 0; i < part.count; i++) I[io + i] = idx.getX(part.start + i) + vo;
+      } else {
+        for (let i = 0; i < part.count; i++) I[io + i] = vo + part.start + i;
+      }
+      io += part.count;
+      vo += cnt;
+    }
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(P, 3));
+    merged.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+    merged.setAttribute('uv', new THREE.BufferAttribute(U, 2));
+    merged.setAttribute('color', new THREE.BufferAttribute(C, 3));
+    merged.setIndex(new THREE.BufferAttribute(I, 1));
+    merged.computeBoundingSphere();
+    const mat = g.mat.clone();
+    mat.color.set(0xffffff);
+    mat.vertexColors = true;
+    mat.needsUpdate = true;
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    mesh.frustumCulled = true;
+    mesh.userData.isBaked = true;
+    scene.add(mesh);
+    _bakedMeshes.push(mesh);
+  }
+  for (const n of hidden) {
+    n.visible = false;
+    _bakedHidden.push(n);
+    // Free the originals' GPU buffers — the CPU-side geometry stays for
+    // raycasts and re-uploads by itself if the piece is ever shown again.
+    n.geometry.dispose();
+  }
+  _worldBaked = _bakedMeshes.length > 0;
+  if (_worldBaked) {
+    _ghostCandidatesDirty = true;
+    console.log(`[marble] low tier: merged ${_bakedHidden.length} pieces into ${_bakedMeshes.length} draw calls`);
+  }
+}
+function _unbakeWorld(disposing) {
+  if (!_worldBaked && !_bakedMeshes.length) return;
+  for (const mesh of _bakedMeshes) {
+    scene.remove(mesh);
+    mesh.geometry.dispose();
+    mesh.material.dispose();
+  }
+  _bakedMeshes.length = 0;
+  if (!disposing) for (const n of _bakedHidden) n.visible = true;
+  _bakedHidden.length = 0;
+  _worldBaked = false;
+  _ghostCandidatesDirty = true;
+}
+// Per frame: bake once the build + intro are done (low tier only), unbake if
+// the tier is switched back up.
+function maybeBakeWorld() {
+  if (_lowQ) {
+    if (!_worldBaked && !_constructing && !_introActive && !_collapseActive && worldObjects.length) _bakeWorld();
+  } else if (_worldBaked) {
+    _unbakeWorld(false);
+  }
 }
 
 function setTrackFromPoints(trackPoints) {
@@ -2289,7 +2475,10 @@ function makeTexturedFloorMaterial(colorHex, opts={}) {
 // match the surrounding wooden support column.
 const _alphabetTextureCache = new Map();
 function getAlphabetFaceTexture(letter, colorHex, woodTintHex) {
-  const key = `${letter}_${colorHex.toString(16)}_${woodTintHex.toString(16)}`;
+  // The frame and letter are always the same dark ink (colorHex is unused for
+  // the artwork), so the paint colour must NOT be part of the key — it only
+  // multiplied the number of unique textures (and GPU memory) by five.
+  const key = `${letter}_${woodTintHex.toString(16)}`;
   let tex = _alphabetTextureCache.get(key);
   if (tex) return tex;
 
@@ -2298,7 +2487,7 @@ function getAlphabetFaceTexture(letter, colorHex, woodTintHex) {
   // medium beech, or dark walnut, same set the regular cubes use). The routered/
   // recessed inner area is rendered as the SAME tinted wood, just lightened to
   // imply where the surface finish was removed.
-  const size = 256;
+  const size = _lowQ ? 128 : 256; // a letter face is a few dozen px on a phone
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
@@ -4113,7 +4302,9 @@ function _brightenSkinMaterial(mat) {
     mat.needsUpdate = true;
     return;
   }
-  const env = _skinEnvMap();
+  // Low tier: no baked environment (skips the PMREM render targets and the
+  // cube-UV sampling in the glass shader entirely); the glass is plain alpha.
+  const env = _lowQ ? null : _skinEnvMap();
   if (env && 'envMap' in mat) {
     mat.envMap = env;
     mat.envMapIntensity = glass ? 1.1 : 0.55;
@@ -4133,7 +4324,8 @@ function _brightenSkinMaterial(mat) {
     }
     if (mat.color) mat.color.lerp(new THREE.Color(0xffffff), 0.6); // tinted shells stay bright
     if (mat.emissive) { mat.emissive.set(0xffffff); mat.emissiveMap = null; mat.emissiveIntensity = 0.05; }
-    if ('clearcoat' in mat) { mat.clearcoat = 1; mat.clearcoatRoughness = 0.05; }
+    if ('clearcoat' in mat && !_lowQ) { mat.clearcoat = 1; mat.clearcoatRoughness = 0.05; }
+    if (_lowQ && mat.emissive) mat.emissiveIntensity = 0.12; // stands in for the missing reflections
     mat.depthWrite = false;
     mat.side = THREE.FrontSide;
   } else {
@@ -4362,7 +4554,35 @@ function _evictGlbExcept(keep) {
 // otherwise — by redrawing oversized images onto a canvas once, at parse
 // time, before anything is uploaded; the full-size decode is closed.
 const _skinTexCap = _coarsePointer || _lowQ ? 256 : 1024;
+// Phone budget for the layered models: the exporter nests fourteen
+// translucent shells; on a phone each is another full sphere of draw calls,
+// blending and texture memory, and the inner ones are barely visible through
+// the outer layers anyway. Keep only the outermost few (plus anything that
+// isn't a shell — the glass and the ink core) on touch / low-quality devices.
+const _skinMaxShells = _coarsePointer || _lowQ ? 4 : Infinity;
+function _trimSkinShells(template) {
+  if (!isFinite(_skinMaxShells)) return;
+  const shells = [];
+  template.updateMatrixWorld(true);
+  const ws = new THREE.Vector3();
+  template.traverse((n) => {
+    if (n.isMesh && /shell/i.test(n.name || (n.parent && n.parent.name) || '')) shells.push({ n, s: n.getWorldScale(ws).length() });
+  });
+  if (shells.length <= _skinMaxShells) return;
+  shells.sort((a, b) => b.s - a.s); // largest first
+  for (const { n } of shells.slice(_skinMaxShells)) {
+    if (n.parent) n.parent.remove(n);
+    if (n.geometry) n.geometry.dispose();
+    const mats = Array.isArray(n.material) ? n.material : [n.material];
+    for (const mm of mats) {
+      if (!mm) continue;
+      if (mm.map) { if (mm.map.image && typeof mm.map.image.close === 'function') mm.map.image.close(); mm.map.dispose(); }
+      mm.dispose();
+    }
+  }
+}
 function _prepareSkinTemplate(template) {
+  _trimSkinShells(template);
   const seen = new Set();
   template.traverse((n) => {
     if (!n.isMesh || !n.material) return;
@@ -8056,6 +8276,7 @@ let _collapseActive = false;
 function triggerCollapse() {
   if (_collapseActive) return;
   _collapseActive = true;
+  _unbakeWorld(false); // pieces tumble individually — restore them first
   // Pre-compute course center so we can give each piece a push AWAY from center
   // (so the collapse "explodes" outward rather than piling straight down).
   let cx = 0, cz = 0, n = 0;
@@ -8784,6 +9005,9 @@ function collectGhostCandidates() {
 let _ghostSkip = false;
 let _ghostDtAcc = 0;
 function updateGhosting(dt) {
+  // A merged (baked) world has no per-piece materials to fade — skip the
+  // occlusion bubble entirely on that tier.
+  if (_worldBaked) return;
   // Low tier: run the occlusion-bubble scan every other frame with the summed
   // dt, halving its per-frame projection cost. The opacity smoothing is
   // time-based, so the look is identical — just updated at 30Hz instead of 60.
@@ -9061,6 +9285,10 @@ function applyTrailMode() {
     if (o.userData && o.userData.isMarble) continue; // the balls stay — they draw
     o.visible = !on;
   }
+  // Baked (merged) world: the merged meshes follow the toggle; the originals
+  // they replaced stay hidden either way.
+  for (const mesh of _bakedMeshes) mesh.visible = !on;
+  if (_worldBaked) for (const n of _bakedHidden) n.visible = false;
   for (const m of marbles) if (m.shadowBlob) m.shadowBlob.visible = !on;
   if (podiumGroup) podiumGroup.visible = on ? false : podiumGroup.visible;
   if (_glassGroup) _glassGroup.visible = on ? false : _glassGroup.visible;
@@ -9131,6 +9359,7 @@ function animate() {
 
   updateMarbleVisuals(frameTime);
   updateConstructIntro();
+  maybeBakeWorld();
   updateFollowMarker();
   updateLaneMarkers();
   updateRollSounds(frameTime);

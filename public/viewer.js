@@ -1547,8 +1547,11 @@ function preloadRaceSkins() {
   const cur = model.currentKey && model.racesByKey.get(model.currentKey);
   const upcoming = orderedRaces().filter((r) => !r.result && r.roster);
   const races = cur && !cur.result && cur.roster ? [cur, ...upcoming.filter((r) => r !== cur)] : upcoming;
+  // Phones hold one race of models at a time (memory); desktops warm the
+  // race after next as well.
+  const ahead = window.matchMedia && window.matchMedia('(pointer: coarse)').matches ? 1 : 2;
   const urls = [];
-  for (const r of races.slice(0, 2)) {
+  for (const r of races.slice(0, ahead)) {
     for (const s of r.roster) {
       const sk = marbleManifest[s.marbleId] || marbleManifest[String(s.marbleId)];
       if (sk && sk.glb && !urls.includes(sk.glb)) urls.push(sk.glb);

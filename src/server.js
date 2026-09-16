@@ -14,6 +14,7 @@ const ssr = require('./ssr');
 const { toMasterBuf, makeCommitment, randomMasterSeed } = require('./seeds');
 const { RateLimiter, clientIp } = require('./ratelimit');
 const { createSkinRegistry } = require('./skins');
+const { createThumbnailer, browserRenderer } = require('./thumbs');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -363,12 +364,26 @@ async function main() {
     refreshMs: cfg.skinsRefreshMs,
     log: (msg) => console.log('[' + msg.replace(/^skins: /, 'skins] ')),
   }).start();
-  function readManifest() {
+  // Small square WebP thumbnails of the 2D artwork, rendered once in the
+  // headless browser (wired up after the simulator is ready) and cached on
+  // disk. The manifest points `img` at them so phones don't download and
+  // decode a hundred 1200² JPEGs; the original stays available as `imgFull`.
+  let thumbRender = null;
+  const thumbs = createThumbnailer({
+    dir: path.join(path.dirname(cfg.dbPath), 'thumbs'),
+    size: 512,
+    render: (url, size) => (thumbRender ? thumbRender(url, size) : Promise.reject(new Error('browser not ready'))),
+    log: (msg) => console.log('[' + msg.replace(/^thumbs: /, 'thumbs] ')),
+  });
+  function rawManifest() {
     try {
       return skins.manifest();
     } catch {
       return {};
     }
+  }
+  function readManifest() {
+    return thumbs.apply(rawManifest());
   }
   function renderPage(file) {
     try {
@@ -521,6 +536,35 @@ async function main() {
     if (url.pathname.startsWith('/api/')) {
       return sendJSON(res, 404, { ok: false, error: 'unknown endpoint' });
     }
+    // Marble avatar thumbnails (see src/thumbs.js). Until one is rendered,
+    // send the client to the original artwork instead of failing.
+    const thumbMatch = req.method === 'GET' && /^\/marbles\/thumb\/(\d{1,3})\.webp$/.exec(url.pathname);
+    if (thumbMatch) {
+      const id = String(parseInt(thumbMatch[1], 10));
+      const entry = rawManifest()[id];
+      const src = entry && entry.img;
+      if (src && thumbs.has(id, src)) {
+        return fs.readFile(thumbs.file(id), (err, buf) => {
+          if (err || !buf) {
+            res.writeHead(302, { Location: src, 'Cache-Control': 'no-cache' });
+            return res.end();
+          }
+          res.writeHead(200, {
+            'Content-Type': 'image/webp',
+            'Content-Length': buf.length,
+            'Cache-Control': 'public, max-age=86400',
+            'Access-Control-Allow-Origin': '*',
+          });
+          res.end(buf);
+        });
+      }
+      if (src) {
+        res.writeHead(302, { Location: src, 'Cache-Control': 'no-cache' });
+        return res.end();
+      }
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      return res.end('Not found');
+    }
     // The skin manifest is assembled at runtime (discovered artwork + the
     // static file's overrides), so it's answered here, not from disk.
     if (url.pathname === '/marbles/manifest.json' && req.method === 'GET') {
@@ -594,6 +638,20 @@ async function main() {
       headless: cfg.headless,
     });
     console.log('[server] simulator ready (course built)');
+
+    // Thumbnails ride on the simulator's browser. Render whatever the skin
+    // discovery has found so far (it may still be listing the folders — keep
+    // checking for a while), then re-check with each artwork refresh.
+    thumbRender = browserRenderer(() => simulator.openPage());
+    let thumbTries = 0;
+    const thumbPass = () => {
+      const m = rawManifest();
+      if (!Object.keys(m).length && thumbTries++ < 30) return setTimeout(thumbPass, 10000);
+      thumbs.ensureAll(m).catch((e) => console.error('[thumbs] pass failed:', e && e.message));
+    };
+    setTimeout(thumbPass, 3000);
+    const thumbTimer = setInterval(thumbPass, Math.max(60000, cfg.skinsRefreshMs));
+    if (thumbTimer.unref) thumbTimer.unref();
 
     // Endless mode: run a tournament to its champion, hold on the podium for
     // the intermission, then start the next one with a fresh seed — forever.

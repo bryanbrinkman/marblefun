@@ -122,6 +122,12 @@ async function createSimulator({ url, trackSeed, headless = true, readyTimeoutMs
       };
     },
 
+    // A fresh page in the same browser for side jobs (e.g. rendering marble
+    // thumbnails). Unlike the sim page it has ordinary canvas/WebGL access.
+    async openPage() {
+      return browser.newPage();
+    },
+
     async close() {
       await browser.close();
     },
