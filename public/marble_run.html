@@ -6540,6 +6540,7 @@ let targetCamYaw = null;
 // toward this position for a few seconds, used to bring the camera back to the
 // start area after a re-race kicks off. Cleared once close enough.
 let _panToStartTarget = null;
+let _podiumCamT = 0; // seconds the finish camera has been on the podium (drives the slow push-in)
 let _panToStartZoom = 1.0;
 
 function updateCamera(dt) {
@@ -6888,13 +6889,22 @@ function updateCamera(dt) {
   // If podium is showing, gently shift the view AND zoom in so the podium fills the frame.
   if (STATE.podiumShown && podiumGroup && podiumGroup.visible) {
     podiumGroup.updateMatrixWorld(true);
-    const podiumCenter = new THREE.Vector3(0, 1, 0).applyMatrix4(podiumGroup.matrixWorld);
+    _podiumCamT += dt;
+    // Aim a touch above the steps so the three balls sit centred once we're tight.
+    const podiumCenter = new THREE.Vector3(0, 1.25, 0).applyMatrix4(podiumGroup.matrixWorld);
     // Slow, smooth pan: ~2-second time-constant
     cameraTarget.lerp(podiumCenter, 1 - Math.pow(0.55, dt));
-    // Tight zoom so the podium fills the frame at the finish — closer than the
-    // overview default. Smaller zoomFactor = smaller frustum = closer in.
-    const targetZoom = 0.18;
+    // Two beats: settle on the podium at a framing that shows all three steps,
+    // then keep pushing in slowly over the next several seconds until the
+    // winner's ball fills the shot and its artwork reads. Smaller zoomFactor =
+    // smaller frustum = closer in.
+    const push = Math.max(0, Math.min(1, (_podiumCamT - 1.5) / 6.5)); // 0 → 1 over 1.5 s … 8 s
+    const eased = push * push * (3 - 2 * push);
+    const targetZoom = 0.18 + (0.075 - 0.18) * eased;
     zoomFactor += (targetZoom - zoomFactor) * (1 - Math.pow(0.55, dt));
+    // A slow drift around the podium while we're in close — the balls turn in
+    // the light instead of sitting as a still frame.
+    if (push > 0) camYaw += 3.5 * dt * eased;
     // Pan camYaw toward the front-of-podium angle. We take the shortest-arc lerp so
     // the camera doesn't sweep the long way around when the wrap-around boundary is
     // straddled (e.g. yaw=170° → -170° should be a 20° turn, not a 340° turn).
@@ -6905,6 +6915,7 @@ function updateCamera(dt) {
     }
     updateOrthoCamera();
   } else if (_panToStartTarget) {
+    _podiumCamT = 0;
     // Re-race kicked off — pan back to the start area. Same lerp shape as the
     // podium pan so the motion feels familiar. Cleared once we're close enough,
     // so subsequent drag/scroll input feels responsive again.
@@ -7186,6 +7197,7 @@ function updateLeaderboard() {
 // Make the (empty) podium visible. Called once when the first marble crosses.
 function revealPodium() {
   STATE.podiumShown = true;
+  _podiumCamT = 0;
   podiumGroup.visible = true;
   podiumGroup.updateMatrixWorld(true);
 }
