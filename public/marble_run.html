@@ -2264,9 +2264,13 @@ function _bakeWorld() {
     const P = new Float32Array(g.verts * 3);
     const N = new Float32Array(g.verts * 3);
     const U = new Float32Array(g.verts * 2);
-    const C = new Float32Array(g.verts * 3);
+    // RGBA: the alpha channel lets the occlusion x-ray cut a single piece out
+    // of the merged mesh (alpha 0 + alphaTest) while its original is shown
+    // with the fade material — see applyGhostOpacity.
+    const C = new Float32Array(g.verts * 4);
     const I = g.verts > 65535 ? new Uint32Array(g.idx) : new Uint16Array(g.idx);
     let vo = 0, io = 0;
+    const ranges = [];
     for (const part of g.parts) {
       const n = part.n;
       const geo = n.geometry;
@@ -2282,8 +2286,9 @@ function _bakeWorld() {
         else v.set(0, 1, 0);
         N[(vo + i) * 3] = v.x; N[(vo + i) * 3 + 1] = v.y; N[(vo + i) * 3 + 2] = v.z;
         if (uv) { U[(vo + i) * 2] = uv.getX(i); U[(vo + i) * 2 + 1] = uv.getY(i); }
-        C[(vo + i) * 3] = col.r; C[(vo + i) * 3 + 1] = col.g; C[(vo + i) * 3 + 2] = col.b;
+        C[(vo + i) * 4] = col.r; C[(vo + i) * 4 + 1] = col.g; C[(vo + i) * 4 + 2] = col.b; C[(vo + i) * 4 + 3] = 1;
       }
+      ranges.push({ n, vStart: vo, vCount: cnt });
       if (geo.index) {
         const idx = geo.index;
         for (let i = 0; i < part.count; i++) I[io + i] = idx.getX(part.start + i) + vo;
@@ -2297,20 +2302,25 @@ function _bakeWorld() {
     merged.setAttribute('position', new THREE.BufferAttribute(P, 3));
     merged.setAttribute('normal', new THREE.BufferAttribute(N, 3));
     merged.setAttribute('uv', new THREE.BufferAttribute(U, 2));
-    merged.setAttribute('color', new THREE.BufferAttribute(C, 3));
+    const colorAttr = new THREE.BufferAttribute(C, 4);
+    colorAttr.setUsage(THREE.DynamicDrawUsage);
+    merged.setAttribute('color', colorAttr);
     merged.setIndex(new THREE.BufferAttribute(I, 1));
     merged.computeBoundingSphere();
     const mat = g.mat.clone();
     mat.color.set(0xffffff);
     mat.vertexColors = true;
+    mat.alphaTest = 0.5; // alpha 0 = piece cut out (ghosted via its original), still an opaque draw
     mat.needsUpdate = true;
     const mesh = new THREE.Mesh(merged, mat);
     mesh.castShadow = false;
     mesh.receiveShadow = false;
     mesh.frustumCulled = true;
     mesh.userData.isBaked = true;
+    mesh.userData._alphaDirty = null; // [minVertex, maxVertex] touched this frame
     scene.add(mesh);
     _bakedMeshes.push(mesh);
+    for (const r of ranges) r.n.userData._bake = { mesh, vStart: r.vStart, vCount: r.vCount };
   }
   for (const n of hidden) {
     n.visible = false;
@@ -2333,10 +2343,39 @@ function _unbakeWorld(disposing) {
     mesh.material.dispose();
   }
   _bakedMeshes.length = 0;
-  if (!disposing) for (const n of _bakedHidden) n.visible = true;
+  for (const n of _bakedHidden) {
+    if (!disposing) n.visible = true;
+    delete n.userData._bake;
+  }
   _bakedHidden.length = 0;
   _worldBaked = false;
   _ghostCandidatesDirty = true;
+}
+// Occlusion x-ray on a merged world: a piece that needs fading is cut out of
+// its merged mesh (vertex alpha 0 → alphaTest discards it) and its original
+// mesh is shown again wearing the fade material; when it's back to opaque the
+// cut is healed and the original hidden. Only the touched span of the colour
+// buffer is re-uploaded, once per frame.
+function _bakeSetAlpha(n, alpha) {
+  const b = n.userData && n.userData._bake;
+  if (!b || !b.mesh.geometry) return;
+  const attr = b.mesh.geometry.attributes.color;
+  const arr = attr.array;
+  for (let i = 0; i < b.vCount; i++) arr[(b.vStart + i) * 4 + 3] = alpha;
+  const d = b.mesh.userData._alphaDirty;
+  const lo = b.vStart, hi = b.vStart + b.vCount;
+  b.mesh.userData._alphaDirty = d ? [Math.min(d[0], lo), Math.max(d[1], hi)] : [lo, hi];
+}
+function _flushBakeAlpha() {
+  for (const mesh of _bakedMeshes) {
+    const d = mesh.userData._alphaDirty;
+    if (!d) continue;
+    mesh.userData._alphaDirty = null;
+    const attr = mesh.geometry.attributes.color;
+    attr.updateRange.offset = d[0] * 4;
+    attr.updateRange.count = (d[1] - d[0]) * 4;
+    attr.needsUpdate = true;
+  }
 }
 // Per frame: bake once the build + intro are done (low tier only), unbake if
 // the tier is switched back up.
@@ -6636,6 +6675,10 @@ function updateCamera(dt) {
         cameraTarget.y + y,
         cameraTarget.z + z
       );
+      // The top cam leaves camera.up pointing along -Z; this block runs (and
+      // returns) before the generic reset below it, so coming straight from
+      // top → chase kept that up-vector and the whole view rolled sideways.
+      camera.up.set(0, 1, 0);
       camera.lookAt(cameraTarget);
       return;
     }
@@ -8016,6 +8059,9 @@ function setCamMode(mode) {
   STATE.tracksideCam = (mode === 'trackside');
   STATE.closeCam = (mode === 'close');
   if (mode === 'close') { chaseFwdX = chaseFwdZ = undefined; }
+  // Every mode but top uses world-up; the top cam's -Z up must never leak
+  // into the next mode's first frame.
+  if (mode !== 'top') camera.up.set(0, 1, 0);
   if (mode === 'reverse') _revInit = false;   // hard cut into the fresh angle
   if (mode === 'trackside') _tsPinT = null;   // pick a fresh pin ahead
   // Button visual feedback — "active" class when any follow mode is engaged.
@@ -8925,10 +8971,21 @@ function applyGhostOpacity(mesh, targetOpacity, dt, kAttack, kDecay) {
         mesh.castShadow = mesh.userData._origCastShadow;
       }
       _ghostedMeshes.delete(mesh);
+      // Merged world: heal the cut-out and tuck the original away again.
+      if (mesh.userData._bake && _worldBaked) {
+        _bakeSetAlpha(mesh, 1);
+        mesh.visible = false;
+      }
     }
   } else if (!isAtOpaque) {
     const ghostMat = getGhostMaterial(mesh);
     if (!ghostMat) return;
+    // Merged world: cut this piece out of the merged mesh and show the
+    // original so it can fade on its own.
+    if (mesh.userData._bake && _worldBaked) {
+      _bakeSetAlpha(mesh, 0);
+      mesh.visible = true;
+    }
     // Reset opacity to 1.0 (whether single or array) so the lerp starts from opaque.
     if (Array.isArray(ghostMat)) {
       for (const m of ghostMat) m.opacity = 1.0;
@@ -9002,9 +9059,6 @@ function collectGhostCandidates() {
 let _ghostSkip = false;
 let _ghostDtAcc = 0;
 function updateGhosting(dt) {
-  // A merged (baked) world has no per-piece materials to fade — skip the
-  // occlusion bubble entirely on that tier.
-  if (_worldBaked) return;
   // Low tier: run the occlusion-bubble scan every other frame with the summed
   // dt, halving its per-frame projection cost. The opacity smoothing is
   // time-based, so the look is identical — just updated at 30Hz instead of 60.
@@ -9368,6 +9422,7 @@ function animate() {
   updateCamera(frameTime);
   updateLeaderboard();
   updateGhosting(frameTime);
+  _flushBakeAlpha();
   updateGlassCase(frameTime);
   updateCollapse(frameTime);
   updateTrails(frameTime);
