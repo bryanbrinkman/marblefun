@@ -6124,8 +6124,10 @@ function stepPhysics(dt) {
           if (lbl) lbl.textContent = 'RE-RACE';
         }
       } else {
-        // Losers vanish right as they cross.
+        // Losers vanish right as they cross — along with the ground shadow
+        // that used to stay parked under the finish flag.
         m.mesh.visible = false;
+        if (m.shadowBlob) m.shadowBlob.visible = false;
       }
     }
   }
@@ -6191,6 +6193,52 @@ let _autoFitZoom = 1.0;
 let _autoFitTarget = new THREE.Vector3();
 let podiumGroup = null;
 
+// Podium proportions. Everything is sized to the marble (radius 0.22) rather
+// than to the course blocks: the old 2.2-wide steps made the balls read as
+// specks even at the tightest close-up. Steps are ~2.4 ball diameters wide.
+const PODIUM = {
+  stepW: 1.05, heights: [1.0, 0.68, 0.46], xs: [0, -1.2, 1.2],
+  bandH: 0.07,          // lane-colour band under the cap the medal hangs from
+  capH: 0.07, seatR: 0.3, seatH: 0.03, ringR: 0.185, ringTube: 0.028,
+  baseW: 4.0, baseD: 1.75, baseH: 0.2,
+  dist: 3.0,            // units past the finish line
+  aimY: 0.6,            // camera aim point (podium-local) — the middle of the balls
+};
+// Per-rank dressing that changes with the marble that lands there.
+let _podiumRibbonMats = [];   // [rank-1] → band + hanger material, tinted to the marble's lane colour
+let _podiumShadows = [];      // [rank-1] → contact-shadow disc, shown once a marble has landed
+let _podiumShadowTex = null;
+
+function _podiumShadowTexture() {
+  if (_podiumShadowTex) return _podiumShadowTex;
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+  grad.addColorStop(0.55, 'rgba(0,0,0,0.25)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  _podiumShadowTex = new THREE.CanvasTexture(c);
+  return _podiumShadowTex;
+}
+
+// Gold / silver / bronze. With the studio environment map the caps read as
+// real polished metal; without one (low-quality tier, headless) a metallic
+// material only goes dark, so those tiers get a brighter, mostly-dielectric
+// paint in the same hue instead.
+function _podiumMetal(rank) {
+  const env = _lowQ ? null : _skinEnvMap();
+  const hue = [0xe6b53a, 0xd3d9df, 0xc57c46][rank - 1];
+  const mat = new THREE.MeshStandardMaterial({
+    color: hue,
+    metalness: env ? 0.85 : 0.12,
+    roughness: env ? 0.26 : 0.42,
+  });
+  if (env) { mat.envMap = env; mat.envMapIntensity = 1.25; }
+  return mat;
+}
+
 function buildPodium() {
   // Anchor the podium just past the finish line, at the same elevation, facing back
   // toward the track so the #1 step is the one marbles arrive at first.
@@ -6200,8 +6248,7 @@ function buildPodium() {
   const dirVec = DIRS[finishCell.outDir];
   const horizTangent = new THREE.Vector3(dirVec.dx, 0, dirVec.dz).normalize();
 
-  // Position: 4 units past the finish line in the outDir direction, at the same height.
-  PODIUM_POS = finishExit.clone().addScaledVector(horizTangent, 4.0);
+  PODIUM_POS = finishExit.clone().addScaledVector(horizTangent, PODIUM.dist);
 
   podiumGroup = new THREE.Group();
   podiumGroup.position.copy(PODIUM_POS);
@@ -6214,78 +6261,133 @@ function buildPodium() {
   // So we pick d = outDir - 1 (mod 4) so that local +Z → outDir.
   podiumGroup.rotation.y = dirAngle((finishCell.outDir + 3) % 4);
 
-  // Three painted wooden block steps
-  const stepData = [
-    { rank: 1, x:  0,   h: 2.0, paint: 0xf0ad4e, label: '1' },
-    { rank: 2, x: -2.5, h: 1.3, paint: 0xb8b8b8, label: '2' },
-    { rank: 3, x:  2.5, h: 0.8, paint: 0xa9714b, label: '3' },
-  ];
+  _podiumRibbonMats = [];
+  _podiumShadows = [];
+  const P = PODIUM;
+  const ink = new THREE.MeshStandardMaterial({ color: WOOD_COLORS.trim, roughness: 0.7 });
+  const velvet = new THREE.MeshStandardMaterial({ color: 0x7a1a2b, roughness: 0.95 });
+  const ringGeo = new THREE.TorusGeometry(P.ringR, P.ringTube, 10, 40);
+  ringGeo.rotateX(Math.PI / 2);
+  const seatGeo = new THREE.CylinderGeometry(P.seatR, P.seatR + 0.02, P.seatH, 32);
+  // Medal sized to its step so the shortest one still fits under its band.
+  const medalRadius = (h) => Math.min(0.25, (h - P.bandH - 0.12) / 2);
+  const shadowGeo = new THREE.PlaneGeometry(0.62, 0.62);
+  shadowGeo.rotateX(-Math.PI / 2);
+  const shadowTex = _podiumShadowTexture();
 
-  for (const s of stepData) {
-    // Wooden block base
-    const stepGeo = new THREE.BoxGeometry(2.2, s.h, 2.2);
-    const stepMat = makeWoodMaterial(WOOD_COLORS.medium);
-    const step = new THREE.Mesh(stepGeo, stepMat);
-    step.position.set(s.x, s.h / 2, 0);
-    step.castShadow = true;
-    step.receiveShadow = true;
+  for (let rank = 1; rank <= 3; rank++) {
+    const h = P.heights[rank - 1];
+    const x = P.xs[rank - 1];
+    const metal = _podiumMetal(rank);
+
+    // Wooden block step — pale maple with the course's wood grain.
+    const step = new THREE.Mesh(new THREE.BoxGeometry(P.stepW, h, P.stepW), makeTexturedBlockMaterial(WOOD_COLORS.light));
+    step.position.set(x, h / 2, 0);
+    step.castShadow = true; step.receiveShadow = true;
     podiumGroup.add(step);
 
-    // Painted top trim
-    const topGeo = new THREE.BoxGeometry(2.25, 0.1, 2.25);
-    const topMat = new THREE.MeshStandardMaterial({ color: s.paint, roughness: 0.5 });
-    const top = new THREE.Mesh(topGeo, topMat);
-    top.position.set(s.x, s.h + 0.05, 0);
-    top.receiveShadow = true;
-    podiumGroup.add(top);
+    // Metal cap with a slightly wider lip so the edge catches the light.
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(P.stepW + 0.06, P.capH, P.stepW + 0.06), metal);
+    cap.position.set(x, h + P.capH / 2, 0);
+    cap.castShadow = true; cap.receiveShadow = true;
+    podiumGroup.add(cap);
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(P.stepW + 0.12, P.capH * 0.45, P.stepW + 0.12), metal);
+    lip.position.set(x, h + P.capH * 0.225, 0);
+    lip.receiveShadow = true;
+    podiumGroup.add(lip);
 
-    // Rank number
+    // Velvet seat + metal cradle ring the marble nestles into.
+    const capTop = h + P.capH;
+    const seat = new THREE.Mesh(seatGeo, velvet);
+    seat.position.set(x, capTop + P.seatH / 2, 0);
+    seat.receiveShadow = true;
+    podiumGroup.add(seat);
+    const ring = new THREE.Mesh(ringGeo, metal);
+    ring.position.set(x, capTop + P.seatH + P.ringTube * 0.6, 0);
+    ring.castShadow = true;
+    ring.userData.noPrint = true;
+    podiumGroup.add(ring);
+
+    // Soft contact shadow under the ball — shadow maps are off on phones and
+    // the ball otherwise looks glued to the seat. Shown once a marble lands.
+    const shadow = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, toneMapped: false }));
+    shadow.position.set(x, capTop + P.seatH + 0.004, 0);
+    shadow.renderOrder = 2;
+    shadow.visible = false;
+    shadow.userData.noPrint = true;
+    podiumGroup.add(shadow);
+    _podiumShadows[rank - 1] = shadow;
+
+    // Front face: a band in the finisher's lane colour runs under the cap and
+    // the medal hangs from it — metal disc on a dark rim, rank numeral in ink.
+    // Recoloured when the marble lands, so the podium doubles as a colour key.
+    const frontZ = P.stepW / 2;
+    const medalR = medalRadius(h);
+    const bandY = h - P.bandH / 2 - 0.03;
+    const medalY = bandY - P.bandH / 2 - 0.03 - medalR;
+    const bandMat = new THREE.MeshStandardMaterial({ color: 0x8b2431, roughness: 0.8 });
+    _podiumRibbonMats[rank - 1] = bandMat;
+    const band = new THREE.Mesh(new THREE.BoxGeometry(P.stepW + 0.02, P.bandH, P.stepW + 0.02), bandMat);
+    band.position.set(x, bandY, 0);
+    band.userData.noPrint = true;
+    podiumGroup.add(band);
+    const hanger = new THREE.Mesh(new THREE.BoxGeometry(0.1, P.bandH / 2 + 0.06, 0.016), bandMat);
+    hanger.position.set(x, bandY - P.bandH / 2 - 0.01, frontZ + 0.012);
+    hanger.userData.noPrint = true;
+    podiumGroup.add(hanger);
+
+    const rimGeo = new THREE.CylinderGeometry(medalR + 0.02, medalR + 0.02, 0.02, 40);
+    rimGeo.rotateX(Math.PI / 2);
+    const rim = new THREE.Mesh(rimGeo, ink);
+    rim.position.set(x, medalY, frontZ + 0.01);
+    podiumGroup.add(rim);
+    const medalGeo = new THREE.CylinderGeometry(medalR, medalR, 0.035, 40);
+    medalGeo.rotateX(Math.PI / 2);
+    const medal = new THREE.Mesh(medalGeo, metal);
+    medal.position.set(x, medalY, frontZ + 0.03);
+    medal.castShadow = true;
+    podiumGroup.add(medal);
+
     const canvas = document.createElement('canvas');
     canvas.width = 256; canvas.height = 256;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = 'rgba(0,0,0,0)';
-    ctx.fillRect(0, 0, 256, 256);
+    ctx.clearRect(0, 0, 256, 256);
+    ctx.strokeStyle = 'rgba(58,40,23,0.55)';
+    ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.arc(128, 128, 104, 0, Math.PI * 2); ctx.stroke();
     ctx.fillStyle = '#3a2817';
-    ctx.font = 'bold 200px Georgia, serif';
+    ctx.font = 'bold 168px Georgia, serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(s.label, 128, 138);
+    ctx.fillText(String(rank), 128, 138);
     const tex = new THREE.CanvasTexture(canvas);
-    const labelMat = new THREE.MeshBasicMaterial({
-      map: tex, transparent: true
-    });
-    const labelGeo = new THREE.PlaneGeometry(1.2, 1.2);
-    const label = new THREE.Mesh(labelGeo, labelMat);
-    label.position.set(s.x, s.h / 2, 1.12);
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(medalR * 2, medalR * 2), new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false }));
+    label.position.set(x, medalY, frontZ + 0.05);
     podiumGroup.add(label);
   }
 
-  // Base platform — a wooden tray
-  const baseGeo = new THREE.BoxGeometry(9, 0.3, 3);
-  const baseMat = makeWoodMaterial(WOOD_COLORS.dark);
-  const base = new THREE.Mesh(baseGeo, baseMat);
-  base.position.y = -0.15;
+  // Base platform — a walnut tray with a thin ink border.
+  const base = new THREE.Mesh(new THREE.BoxGeometry(P.baseW, P.baseH, P.baseD), makeTexturedBlockMaterial(WOOD_COLORS.dark));
+  base.position.y = -P.baseH / 2;
   base.receiveShadow = true;
   podiumGroup.add(base);
+  const border = new THREE.Mesh(new THREE.BoxGeometry(P.baseW + 0.08, P.baseH * 0.35, P.baseD + 0.08), ink);
+  border.position.y = -P.baseH + P.baseH * 0.175;
+  podiumGroup.add(border);
 
   // ---- Cylinder support legs from the podium base down to the table ----
   // The podium floats high in the air at the finish elevation; without legs it looks
   // unsupported. We drop 4 walnut cylinder legs from the corners of the base down
   // to the world-Y of the table (`_courseBaseY`).
   const legBottomYLocal = _courseBaseY - PODIUM_POS.y;   // local Y of table top
-  const legTopYLocal    = -0.3;                          // bottom of base tray (local)
+  const legTopYLocal    = -P.baseH;                      // bottom of base tray (local)
   const legHeight = legTopYLocal - legBottomYLocal;
   if (legHeight > 0.2) {  // skip if podium happens to sit right on the table
-    const legGeo = new THREE.CylinderGeometry(0.18, 0.20, legHeight, 12);
+    const legGeo = new THREE.CylinderGeometry(0.09, 0.105, legHeight, 12);
     const legMat = makeWoodMaterial(WOOD_COLORS.veryDark, { roughness: 0.6 });
-    // 4 corners of the base tray (the tray is 9 wide × 3 deep). Legs are inset
-    // more on the front (-Z, where marbles arrive) than the back so the visible
-    // silhouette from the marble's approach reads as a stable platform — the
-    // front legs were previously poking visibly off the edge at sideways angles.
-    const legInsetSide  = 0.8;   // X (sides) — bumped from 0.4
-    const legInsetFront = 1.0;   // Z (front/back) — bumped from 0.4
-    const legX = 9/2 - legInsetSide;
-    const legZ = 3/2 - legInsetFront;
+    const legX = P.baseW / 2 - 0.4;
+    const legZ = P.baseD / 2 - 0.45;
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
         const leg = new THREE.Mesh(legGeo, legMat);
@@ -6297,6 +6399,9 @@ function buildPodium() {
     }
   }
 
+  // The podium only appears after the first finisher; keep it out of the
+  // static-world bake (which would merge its pieces in as always-visible).
+  podiumGroup.traverse((n) => { if (n.isMesh) n.userData.noBake = true; });
   addToWorld(podiumGroup);
 }
 
@@ -6899,12 +7004,12 @@ function updateCamera(dt) {
     const push = Math.max(0, Math.min(1, (_podiumCamT - 1.5) / 6.5)); // 0 → 1 over 1.5 s … 8 s
     const eased = push * push * (3 - 2 * push);
     const portrait = window.innerWidth < window.innerHeight;
-    const podiumCenter = new THREE.Vector3(0, 1.25, 0).applyMatrix4(podiumGroup.matrixWorld);
+    const podiumCenter = new THREE.Vector3(0, PODIUM.aimY, 0).applyMatrix4(podiumGroup.matrixWorld);
     const winner = typeof finishOrder !== 'undefined' && finishOrder[0] && finishOrder[0].mesh ? finishOrder[0].mesh.position : null;
     const aim = portrait && winner ? podiumCenter.lerp(winner, eased) : podiumCenter;
     // Slow, smooth pan: ~2-second time-constant
     cameraTarget.lerp(aim, 1 - Math.pow(0.55, dt));
-    const targetZoom = 0.18 + ((portrait ? 0.07 : 0.05) - 0.18) * eased;
+    const targetZoom = 0.11 + ((portrait ? 0.036 : 0.024) - 0.11) * eased;
     zoomFactor += (targetZoom - zoomFactor) * (1 - Math.pow(0.55, dt));
     // A slow drift around the podium while we're in close — the balls turn in
     // the light instead of sitting as a still frame.
@@ -7202,6 +7307,8 @@ function updateLeaderboard() {
 function revealPodium() {
   STATE.podiumShown = true;
   _podiumCamT = 0;
+  for (const sh of _podiumShadows) if (sh) sh.visible = false;
+  for (const rm of _podiumRibbonMats) if (rm) rm.color.set(0x8b2431);
   podiumGroup.visible = true;
   podiumGroup.updateMatrixWorld(true);
 }
@@ -7209,13 +7316,20 @@ function revealPodium() {
 // Animate a top-3 marble onto its podium step with a popping arc.
 function placeOnPodium(m, rank) {
   if (rank < 1 || rank > 3) return;
-  const stepHeights = [2.0, 1.3, 0.8];
-  const stepX = [0, -2.5, 2.5];
+  const P = PODIUM;
+  // Rest the ball in the cradle ring: seat top plus radius, sunk a hair so the
+  // ring visibly holds it.
   const localPos = new THREE.Vector3(
-    stepX[rank - 1],
-    stepHeights[rank - 1] + CONFIG.marbleRadius + 0.15,
+    P.xs[rank - 1],
+    P.heights[rank - 1] + P.capH + P.seatH + CONFIG.marbleRadius - 0.03,
     0
   );
+  // Dress the step for this finisher: ribbon in its lane colour, shadow on.
+  if (_podiumRibbonMats[rank - 1] && m.color) _podiumRibbonMats[rank - 1].color.set(m.color);
+  if (_podiumShadows[rank - 1]) _podiumShadows[rank - 1].visible = true;
+  // The podium seat carries its own contact shadow; the rolling blob would
+  // otherwise stay parked back at the finish line.
+  if (m.shadowBlob) m.shadowBlob.visible = false;
   podiumGroup.updateMatrixWorld(true);
   const targetPos = localPos.clone().applyMatrix4(podiumGroup.matrixWorld);
 
@@ -7329,7 +7443,7 @@ function resetRace() {
   if (curve) {
     _panToStartTarget = curve.getPointAt(GATE_T).clone();
     // Reset zoom to overview default (1.0) so we see the wider start area, not
-    // a podium-tight 0.18 close-up.
+    // a podium-tight close-up.
     _panToStartZoom = 1.0;
   }
   // Hide the RACE button — race is already in progress. Also strip .rerace so
