@@ -6890,17 +6890,21 @@ function updateCamera(dt) {
   if (STATE.podiumShown && podiumGroup && podiumGroup.visible) {
     podiumGroup.updateMatrixWorld(true);
     _podiumCamT += dt;
-    // Aim a touch above the steps so the three balls sit centred once we're tight.
-    const podiumCenter = new THREE.Vector3(0, 1.25, 0).applyMatrix4(podiumGroup.matrixWorld);
-    // Slow, smooth pan: ~2-second time-constant
-    cameraTarget.lerp(podiumCenter, 1 - Math.pow(0.55, dt));
     // Two beats: settle on the podium at a framing that shows all three steps,
     // then keep pushing in slowly over the next several seconds until the
-    // winner's ball fills the shot and its artwork reads. Smaller zoomFactor =
-    // smaller frustum = closer in.
+    // balls are big enough for their artwork to read. Smaller zoomFactor =
+    // smaller frustum = closer in. Landscape frames the whole podium tight;
+    // a portrait phone can't fit all three steps that close, so it drifts onto
+    // the winner instead.
     const push = Math.max(0, Math.min(1, (_podiumCamT - 1.5) / 6.5)); // 0 → 1 over 1.5 s … 8 s
     const eased = push * push * (3 - 2 * push);
-    const targetZoom = 0.18 + (0.075 - 0.18) * eased;
+    const portrait = window.innerWidth < window.innerHeight;
+    const podiumCenter = new THREE.Vector3(0, 1.25, 0).applyMatrix4(podiumGroup.matrixWorld);
+    const winner = typeof finishOrder !== 'undefined' && finishOrder[0] && finishOrder[0].mesh ? finishOrder[0].mesh.position : null;
+    const aim = portrait && winner ? podiumCenter.lerp(winner, eased) : podiumCenter;
+    // Slow, smooth pan: ~2-second time-constant
+    cameraTarget.lerp(aim, 1 - Math.pow(0.55, dt));
+    const targetZoom = 0.18 + ((portrait ? 0.07 : 0.05) - 0.18) * eased;
     zoomFactor += (targetZoom - zoomFactor) * (1 - Math.pow(0.55, dt));
     // A slow drift around the podium while we're in close — the balls turn in
     // the light instead of sitting as a still frame.
