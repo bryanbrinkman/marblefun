@@ -473,7 +473,7 @@ function renderRaceHud(race, prog) {
   }
   hud.classList.toggle('mine', !!mine);
   if (slot) {
-    paintSwatch(el('rhSwatch'), slot.marbleId, slot.color);
+    paintSwatch(el('rhSwatch'), null, slot.color); // lane colour, like the board and the cone
     el('rhSwatch').hidden = false;
     el('rhNum').textContent = '#' + numOf(slot.marbleId);
     el('rhName').textContent = slot.marbleName;
@@ -507,7 +507,9 @@ function renderRaceBoard(race, prog) {
       const pct = p.finished ? '✓' : ''; // rank order says it all — no percentages
       return (
         `<div class="rb-row${mine ? ' mine' : ''}${p.finished ? ' done' : ''}${i === 0 ? ' lead' : ''}">` +
-        `<span class="rb-pos">${i + 1}</span>${swatchHtml(s.marbleId, s.color, 'rb-sw')}` +
+        // Lane colour, not artwork: during a race the marble is identified by
+        // the cone over it and the dot in the top tracker — the board matches.
+        `<span class="rb-pos">${i + 1}</span><span class="rb-sw" style="background:${s.color}"></span>` +
         `<span class="rb-num">${numOf(s.marbleId)}</span><span class="rb-name">${s.marbleName}</span>` +
         `<span class="rb-pct">${pct}</span></div>`
       );
