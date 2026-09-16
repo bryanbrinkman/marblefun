@@ -665,19 +665,13 @@ body.stats-hidden .stats-toggle { color: var(--accent); border-color: rgba(255,2
 }
 .prm-change:hover { color: var(--text); border-color: var(--line); }
 
-/* "How it works" — reopens the full explainer from the compact card. */
-.pr-how {
-  margin-top: 10px; cursor: pointer; font: 700 11px/1 inherit; color: var(--muted);
-  background: none; border: 0; text-decoration: underline; text-underline-offset: 3px;
-  padding: 6px 8px;
-}
-.pr-how:hover { color: var(--accent); }
-.pr-how[hidden] { display: none; }
-
-/* Compact between-races card: countdown + label + actions only. */
+/* Compact between-races card (after the first race has been seen): a little
+   tighter, but the journey strip (100 → 20 → 5 → 1) always stays. */
 .pr-card.compact { padding: 11px 16px 10px; width: min(330px, 90vw); }
-/* Compact keeps the starters — calling the winner is the between-races game. */
-.pr-card.compact .pr-journey { display: none; }
+/* Compact card: the 100 › 20 › 5 › 1 strip must stay on one row. */
+.pr-card.compact .pr-journey { gap: 3px; flex-wrap: nowrap; margin-top: 9px; }
+.pr-card.compact .j-stage { min-width: 0; padding: 4px 6px; }
+.pr-card.compact .j-arrow { font-size: 11px; }
 
 /* ---------- replay chip ---------- */
 .replay-chip {
@@ -1232,7 +1226,8 @@ body.tv-on #controlsBtn::after { content: ''; width: 7px; height: 7px; border-ra
   .cp-kbd summary { padding: 12px 2px; }
 }
 @media (pointer: coarse) {
-  .prm-change, .pr-how { min-height: 36px; padding-top: 10px; padding-bottom: 10px; }
+  .prm-change { min-height: 36px; padding-top: 10px; padding-bottom: 10px; }
+  .pr-print { min-height: 40px; }
 }
 /* Phone: the your-marble card stacks its actions under the text instead of
    squeezing name + status into a sliver beside two buttons. */
@@ -1251,18 +1246,16 @@ body.tv-on #controlsBtn::after { content: ''; width: 7px; height: 7px; border-ra
 .watching .w-count #watchingN { color: var(--text); font-weight: 800; font-variant-numeric: tabular-nums; }
 @media (max-width: 470px) { .watching { display: none !important; } }
 
-/* ---------- post-race: print this race ---------- */
+/* ---------- post-race: 3D print this track ---------- */
+/* One slim row — the between-races card is short on purpose. */
 .pr-print {
-  display: flex; flex-direction: column; align-items: center; gap: 3px; margin-top: 10px; padding: 10px 12px; border-radius: 12px;
-  text-decoration: none; color: var(--text); background: rgba(91, 192, 222, 0.08); border: 1px solid rgba(91, 192, 222, 0.35);
+  display: flex; align-items: center; justify-content: center; margin-top: 8px; min-height: 34px; padding: 8px 14px; border-radius: 10px;
+  text-decoration: none; font: 900 12px/1 inherit; letter-spacing: 0.08em; color: #cfeefa;
+  background: rgba(91, 192, 222, 0.14); border: 1px solid rgba(91, 192, 222, 0.45);
   transition: border-color 0.2s, background 0.2s;
 }
-.pr-print:hover { border-color: #5bc0de; background: rgba(91, 192, 222, 0.14); }
+.pr-print:hover { border-color: #5bc0de; background: rgba(91, 192, 222, 0.22); }
 .pr-print[hidden] { display: none; }
-.pr-print .pp-k { font-size: 10.5px; font-weight: 900; letter-spacing: 0.2em; color: #5bc0de; }
-.pr-print .pp-s { font-size: 11px; color: var(--muted); }
-.pr-print .pp-b { margin-top: 5px; font: 900 12px/1 inherit; letter-spacing: 0.1em; padding: 9px 14px; border-radius: 9px; background: rgba(91, 192, 222, 0.18); border: 1px solid rgba(91, 192, 222, 0.5); color: #cfeefa; }
-.pr-card.compact .pr-print .pp-s { display: none; }
 
 /* ---------- back to TV mode ---------- */
 .tv-return {

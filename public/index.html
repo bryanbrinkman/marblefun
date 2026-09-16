@@ -232,18 +232,13 @@
         </div>
         <div class="pr-guess" id="prGuessLabel" hidden>🎯 Pick who you think will win</div>
         <div class="pr-starters" id="prStarters"></div>
-        <!-- Your marble: status card once chosen. -->
-        <div class="pr-marble" id="prMarble"></div>
         <div class="pr-actions">
           <button class="pr-btn" id="watchLatestBtn" hidden>▶ Watch latest replay</button>
         </div>
+        <!-- Your marble: status card once chosen. -->
+        <div class="pr-marble" id="prMarble"></div>
         <!-- Post-race: the course you just watched is 3D-printable, exactly as raced. -->
-        <a class="pr-print" id="prPrint" hidden href="/print">
-          <span class="pp-k">LIKED THIS TRACK? MAKE IT REAL.</span>
-          <span class="pp-s">Download the exact course from this race for your 3D printer.</span>
-          <span class="pp-b">🖨 PRINT THIS RACE</span>
-        </a>
-        <button class="pr-how" id="prHow" hidden>How it works</button>
+        <a class="pr-print" id="prPrint" hidden href="/print" title="Download the exact course from this race for your 3D printer">🖨 3D Print This Track</a>
       </div>
       <!-- Minimized state: a one-line chip that keeps the countdown readable and
            restores the card on tap, so the track stays in view between races. -->

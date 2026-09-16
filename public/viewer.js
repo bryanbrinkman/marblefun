@@ -129,7 +129,6 @@ async function startReplay(race) {
   // The visitor has now seen a race start — future between-races cards are
   // compact for the rest of this browser session.
   markOnboarded();
-  showFullOnce = false;
   preRaceMin = false; // a minimized card unfolds again for the next gap
   if (race.key === model.currentKey) renderCurrent(race);
   renderRaceHud(race, null);
@@ -1136,7 +1135,6 @@ function stopReplay(restoreStage) {
 // visitor has watched a race start this browser session; after that a compact
 // card keeps the 3D stage visible. "How it works" reopens the full version.
 const ONBOARD_KEY = 'mrOnboarded'; // sessionStorage: '1' once a race has started
-let showFullOnce = false; // "How it works" re-expands until the next race
 function isOnboarded() {
   try { return sessionStorage.getItem(ONBOARD_KEY) === '1'; } catch { return false; }
 }
@@ -1426,9 +1424,8 @@ function renderPreRace() {
   mini.hidden = !preRaceMin;
 
   // Compact after onboarding (this session), except for the champion moment.
-  const compact = isOnboarded() && !showFullOnce && !model.champion;
+  const compact = isOnboarded() && !model.champion;
   el('prCard').classList.toggle('compact', compact);
-  el('prHow').hidden = !compact;
 
   const state = el('prState');
   const title = el('prTitle');
@@ -2793,11 +2790,6 @@ if (el('watchLatestBtn')) el('watchLatestBtn').addEventListener('click', startLa
 if (el('replayExit')) el('replayExit').addEventListener('click', () => stopReplay(true));
 if (el('prClose')) el('prClose').addEventListener('click', () => setPreRaceMin(true));
 if (el('prMini')) el('prMini').addEventListener('click', () => setPreRaceMin(false));
-if (el('prHow'))
-  el('prHow').addEventListener('click', () => {
-    showFullOnce = true; // re-expand until the next race starts
-    renderPreRace();
-  });
 // Call-the-winner: tapping a starter backs it (follow + recorded guess).
 if (el('prStarters'))
   el('prStarters').addEventListener('click', (e) => {
