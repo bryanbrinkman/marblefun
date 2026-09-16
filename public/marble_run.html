@@ -4296,9 +4296,6 @@ function _brightenSkinMaterial(mat) {
     mat.envMap = null;
     mat.toneMapped = false;
     if (glass) { mat.transparent = true; mat.depthWrite = false; }
-    // Phones: fourteen double-sided translucent layers per marble is a lot of
-    // overdraw for a tiled GPU — front faces only on the low tier.
-    if (_lowQ && mat.side === THREE.DoubleSide) mat.side = THREE.FrontSide;
     mat.needsUpdate = true;
     return;
   }
@@ -4554,12 +4551,12 @@ function _evictGlbExcept(keep) {
 // otherwise — by redrawing oversized images onto a canvas once, at parse
 // time, before anything is uploaded; the full-size decode is closed.
 const _skinTexCap = _coarsePointer || _lowQ ? 256 : 1024;
-// Phone budget for the layered models: the exporter nests fourteen
-// translucent shells; on a phone each is another full sphere of draw calls,
-// blending and texture memory, and the inner ones are barely visible through
-// the outer layers anyway. Keep only the outermost few (plus anything that
-// isn't a shell — the glass and the ink core) on touch / low-quality devices.
-const _skinMaxShells = _coarsePointer || _lowQ ? 4 : Infinity;
+// The exporter nests fourteen translucent ink shells. They ALL matter: each is
+// mostly transparent strokes, and the body of the marble only reads once the
+// layers stack up — trimming to the outer few left a hollow, "floating" ball.
+// With the static world merged on the low tier there is budget for all of
+// them everywhere (15 small draws per marble; textures are capped separately).
+const _skinMaxShells = Infinity;
 function _trimSkinShells(template) {
   if (!isFinite(_skinMaxShells)) return;
   const shells = [];
