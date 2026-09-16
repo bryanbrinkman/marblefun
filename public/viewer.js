@@ -2635,6 +2635,12 @@ function setStatsOpen(open) {
     el('mpReplay').addEventListener('click', () => { setOpen(false); startLatestReplay(); });
     el('mpSound').addEventListener('click', () => { const a = api(); if (a && a.pressControl) a.pressControl('soundBtn'); setTimeout(syncSettings, 50); });
     el('mpLowQ').addEventListener('click', () => { const a = api(); if (a && a.pressControl) a.pressControl('lqBtn'); setTimeout(syncSettings, 50); });
+    if (el('mpBlur'))
+      el('mpBlur').addEventListener('click', () => {
+        const a = api();
+        if (a && a.setTiltShift && a.getSettings) a.setTiltShift(!a.getSettings().tiltShift);
+        setTimeout(syncSettings, 50);
+      });
     el('mpFullscreen').addEventListener('click', () => {
       setOpen(false);
       const d = document;
@@ -2660,6 +2666,7 @@ function syncSettings() {
   };
   setTog('mpSound', s && s.sound);
   setTog('mpLowQ', s && s.lowQ);
+  setTog('mpBlur', s ? s.tiltShift : true);
 }
 
 // Collapsible stat windows (closed by default; click a header to expand).

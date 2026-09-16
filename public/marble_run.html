@@ -7433,7 +7433,12 @@ window.marbleAPI = {
     if (b && !/^(startBtn|restart)$/.test(id)) b.click();
   },
   getSettings() {
-    return { sound: !!_soundEnabled, lowQ: !!_lowQ };
+    return { sound: !!_soundEnabled, lowQ: !!_lowQ, tiltShift: !!_tiltShiftOn };
+  },
+  // Lens blur (tilt-shift) on/off — the viewer's settings menu drives this.
+  setTiltShift(on) {
+    setTiltShift(on);
+    return _tiltShiftOn;
   },
   // ---- 3D-print export (used by /print) ----------------------------------
   // Returns the built course as world-space triangle soup, grouped into
@@ -7606,6 +7611,20 @@ const _camBack = new THREE.Vector3();  // scratch: sight-line ray for the pull-b
 const CAM_PULLBACK = 120;              // render camera distance along the ray (near 0.1, far 500)
 
 // =========================================================
+// LENS BLUR (tilt-shift) — on by default for the diorama look; B key or the
+// viewer's settings menu toggles it, and the choice is remembered.
+// =========================================================
+let _tiltShiftOn = true;
+try { if (localStorage.getItem('marbleTilt') === '0') _tiltShiftOn = false; } catch (e) {}
+function setTiltShift(on) {
+  _tiltShiftOn = !!on;
+  const ts = document.getElementById('tiltShift');
+  if (ts) ts.classList.toggle('off', !_tiltShiftOn);
+  try { localStorage.setItem('marbleTilt', _tiltShiftOn ? '1' : '0'); } catch (e) {}
+}
+setTiltShift(_tiltShiftOn);
+
+// =========================================================
 // SOUND — Web Audio API synth for marble clack effects
 // =========================================================
 // Toggled with the S key. Defaults to off so users aren't blasted with noise
@@ -7716,6 +7735,43 @@ const SURFACES = {
             t60: 0.16, tap: 0.4,  tapLp: 2200, body: 0.6,  bodyHz: 70,  drop: 1.22 },
 };
 
+// ---------- Musical blocks ----------
+// Every course cell carries its own note, so the run of hits as the marbles
+// tumble down plays a tune written by the physics. Notes come from a two-octave
+// major pentatonic (any order of which sounds musical), laid along the path as
+// a gentle random walk seeded from the track seed — deterministic, so everyone
+// watching hears the same song for the same course. Audio only; the physics
+// never reads any of this.
+const PENTA_SEMIS = [0, 2, 4, 7, 9, 12, 14, 16];
+let _cellNoteCache = { track: null, len: 0, notes: null };
+function _cellNotes() {
+  if (_cellNoteCache.notes && _cellNoteCache.track === SEEDS.track && _cellNoteCache.len === pathCells.length) return _cellNoteCache.notes;
+  // A private RNG stream — never the track/race streams the sim depends on.
+  const rng = makeRng(((SEEDS.track >>> 0) ^ 0x5eed5eed) >>> 0);
+  const notes = new Array(pathCells.length);
+  let deg = 3;
+  for (let i = 0; i < notes.length; i++) {
+    const r = rng();
+    let step = r < 0.16 ? -2 : r < 0.4 ? -1 : r < 0.56 ? 0 : r < 0.82 ? 1 : 2;
+    // Turn around near the edges so the tune uses the whole scale instead of
+    // parking at the top or bottom.
+    if (deg >= PENTA_SEMIS.length - 2 && step > 0) step = -step;
+    if (deg <= 1 && step < 0) step = -step;
+    deg = Math.max(0, Math.min(PENTA_SEMIS.length - 1, deg + step));
+    notes[i] = PENTA_SEMIS[deg];
+  }
+  _cellNoteCache = { track: SEEDS.track, len: notes.length, notes };
+  return notes;
+}
+// Semitone offset for the block under a position, or null off the path.
+function _noteAt(pos) {
+  if (!pathCells.length) return null;
+  const c = cellByXZAt(pos.x, pos.y, pos.z);
+  if (!c || c.index == null) return null;
+  const n = _cellNotes()[c.index];
+  return n == null ? null : n;
+}
+
 // Play a short percussive impact hit. Synthesized on the fly — no asset files.
 // Modal synthesis: a struck solid rings at a handful of exponentially-decaying
 // partials whose frequencies are fixed by its geometry and material. We model
@@ -7728,7 +7784,7 @@ const SURFACES = {
 // Harder hits are louder AND brighter: upper partials + tap scale faster than
 // the fundamental, the way real impacts excite more high modes with energy.
 // `surf` selects the material profile.
-function playClack(intensity, surf, pan) {
+function playClack(intensity, surf, pan, semis) {
   if (!_soundEnabled || _silentSim) return;
   const ctx = _ensureAudio();
   if (!ctx) return;
@@ -7743,9 +7799,14 @@ function playClack(intensity, surf, pan) {
   // upper partials and tick get through.
   const bright = Math.pow(vol, 0.8);
 
-  // Fundamental drawn from the surface band. Per-hit random keeps hits from
-  // reading as copies; the band itself is what makes it a "block" vs "dowel".
-  const f0 = s.f0Lo + Math.random() * (s.f0Hi - s.f0Lo);
+  // Fundamental: on a course block it's that block's NOTE (the surface's low
+  // band edge is the root, pentatonic semitones above it — see _cellNotes), so
+  // wood, floor and pegs each sing the tune in their own register. Off the
+  // path (marble-on-marble, the gate) it's drawn from the surface band as
+  // before. The inharmonic partials keep every note sounding like struck wood.
+  const f0 = semis != null
+    ? s.f0Lo * Math.pow(2, semis / 12)
+    : s.f0Lo + Math.random() * (s.f0Hi - s.f0Lo);
   // Slight per-hit smear of the mode ratios — no two real blocks are identical.
   const smear = 0.97 + Math.random() * 0.06;
 
@@ -7831,7 +7892,9 @@ function maybeClack(marble, intensity, surf) {
   const now = ctx.currentTime;
   if (now - last < 0.06) return;
   _clackLastTime.set(marble, now);
-  playClack(intensity, surf, _panForPos(marble.pos));
+  // Course surfaces play the block's note; marble-on-marble stays a plain clack.
+  const semis = surf === SURFACES.marble ? null : _noteAt(marble.pos);
+  playClack(intensity, surf, _panForPos(marble.pos), semis);
 }
 
 // ---------- Rolling — continuous velocity-driven wood rumble ----------
@@ -8588,10 +8651,8 @@ window.addEventListener('keydown', (e) => {
     STATE.splitScreen = !STATE.splitScreen;
     document.getElementById('splitLabels').style.display = STATE.splitScreen ? 'block' : 'none';
   } else if (e.key === 'b' || e.key === 'B') {
-    // Toggle tilt-shift blur — on by default; B turns it off (or back on).
-    const ts = document.getElementById('tiltShift');
-    if (ts.classList.contains('off')) ts.classList.remove('off');
-    else ts.classList.add('off');
+    // Toggle the tilt-shift lens blur (also in the viewer's settings menu).
+    setTiltShift(!_tiltShiftOn);
   } else if (e.key === 's' || e.key === 'S') {
     toggleSound();
   } else if (e.key === 'q' || e.key === 'Q') {
