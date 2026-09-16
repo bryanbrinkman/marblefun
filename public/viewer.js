@@ -1922,6 +1922,54 @@ function aliveCount() {
 }
 // Called when a race's result lands (server reveal or local finish). Decides
 // whether the viewer's marble just survived, fell, or is waiting on a wildcard.
+// ---- result reveal, in step with the local replay ---------------------------
+function applyRaceResult(race, msg) {
+  if (race) race.result = msg.result;
+  model.standings = msg.standings;
+  justRevealed = msg.raceKey;
+  renderAll();
+  justRevealed = null;
+  if (race && race.result && race.result[0]) announce(`${race.result[0].marbleName} wins ${raceLabel(race)}.`);
+  checkGuess(race);
+  onRaceResult(race);
+}
+// True while this race is playing on the stage here and a marble the server
+// saw finish hasn't crossed the line locally yet (DNFs are never waited for).
+function localReplayStillRunning(race, result) {
+  if (!race || replaying || race.key !== model.currentKey || !startedRaces.has(race.key)) return false;
+  const a = api();
+  if (!a || !a.getProgress || !race.roster) return false;
+  let prog;
+  try {
+    prog = a.getProgress();
+  } catch {
+    return false;
+  }
+  if (!prog || !prog.length) return false;
+  const finishedLanes = new Set(prog.filter((p) => p.finished).map((p) => p.lane));
+  for (const r of result || []) {
+    if (r.timeSec == null) continue; // did not finish on the server either
+    const slot = race.roster.find((s) => s.slot === r.slot);
+    if (slot && !finishedLanes.has(slot.lane)) return true;
+  }
+  return false;
+}
+let _pendingResult = null;
+function deferRaceResult(race, msg) {
+  if (_pendingResult) clearInterval(_pendingResult.timer);
+  const deadline = Date.now() + 20000; // never hold the tournament hostage to one stuck client
+  const timer = setInterval(() => {
+    const p = _pendingResult;
+    if (!p || p.race !== race) return clearInterval(timer);
+    const stillRunning = localReplayStillRunning(race, msg.result);
+    if (stillRunning && Date.now() < deadline && race.key === model.currentKey) return;
+    clearInterval(timer);
+    _pendingResult = null;
+    applyRaceResult(race, msg);
+  }, 200);
+  _pendingResult = { race, msg, timer };
+}
+
 function onRaceResult(race) {
   if (!race || !race.result) return;
   if (race.key === model.currentKey || (_replayRace && _replayRace.key === race.key)) resultAtMs = Date.now();
@@ -2113,15 +2161,16 @@ function onMessage(msg) {
     }
     case 'race_result': {
       const race = model.racesByKey.get(msg.raceKey);
-      if (race) race.result = msg.result;
-      model.standings = msg.standings;
-      justRevealed = msg.raceKey;
-      renderAll();
-      justRevealed = null;
-      if (race && race.result && race.result[0])
-        announce(`${race.result[0].marbleName} wins ${raceLabel(race)}.`);
-      checkGuess(race);
-      onRaceResult(race);
+      // The server reveals when the marbles WOULD have finished at real time.
+      // A phone that can't hold the frame rate replays a beat behind, so the
+      // result (and the between-races card) would land while its marbles are
+      // still rolling. Hold the reveal until the local replay has crossed the
+      // line — or a safety deadline passes.
+      if (race && localReplayStillRunning(race, msg.result)) {
+        deferRaceResult(race, msg);
+        break;
+      }
+      applyRaceResult(race, msg);
       break;
     }
     case 'paused':
