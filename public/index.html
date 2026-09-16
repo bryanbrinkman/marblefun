@@ -195,7 +195,7 @@
     <!-- Pick confirmation: a two-second beat that makes the choice feel real. -->
     <div class="pick-confirm" id="pickConfirm" hidden aria-live="polite">
       <div class="pc-ball" id="pcBall"><span class="co-shine"></span></div>
-      <div class="pc-kicker">YOU'RE BACKING</div>
+      <div class="pc-kicker">YOU'RE ROOTING FOR</div>
       <div class="pc-name" id="pcName"></div>
       <div class="pc-sub" id="pcSub"></div>
     </div>
@@ -218,7 +218,7 @@
     <section class="prerace" id="preRace" hidden>
       <div class="pr-card" id="prCard">
         <button class="pr-close" id="prClose" aria-label="Minimize race info to see the track" title="Minimize">✕</button>
-        <div class="pr-context"><span class="pr-state" id="prState">Between races</span><span class="pr-flavor" id="prFlavor"></span></div>
+        <div class="pr-context"><span class="pr-state" id="prState">Generating the next race…</span><span class="pr-flavor" id="prFlavor"></span></div>
         <div class="pr-title" id="prTitle"></div>
         <div class="pr-journey" id="journey" role="img" aria-label="Tournament progress: 100 started, 20 advance, 5 finalists, 1 champion">
           <span class="j-stage" data-stage="heats"><b>100</b><i>started</i></span>
@@ -234,7 +234,7 @@
         <!-- Your marble: status card once chosen. -->
         <div class="pr-marble" id="prMarble"></div>
         <div class="pr-actions">
-          <button class="pr-btn" id="watchLatestBtn" hidden>▶ Watch latest race</button>
+          <button class="pr-btn" id="watchLatestBtn" hidden>▶ Watch latest replay</button>
         </div>
         <!-- Post-race: the course you just watched is 3D-printable, exactly as raced. -->
         <a class="pr-print" id="prPrint" hidden href="/print">

@@ -1202,56 +1202,53 @@ function renderPrMarble() {
     ? `background-image:url('${skin.img}');background-size:${SKIN_BG_SIZE};background-position:center`
     : `background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.92), rgba(255,255,255,0) 34%),` +
       `radial-gradient(circle at 50% 45%, ${marbleColor(followId)} 0%, #131a2a 135%)`;
-  const rows = []; // [label, value, cls]
+  // One tag under the ball (ALIVE / OUT / CHAMP) and ONE supporting line: the
+  // single most useful fact right now. Between races a spectator needs no more.
+  let tag = ['ALIVE', 'alive'];
+  let line = '';
   let mainAction = '';
   const road = roadFor(followId);
   const cur = model.currentKey && model.racesByKey.get(model.currentKey);
   const nxt = nextUpcomingRace();
   if (!st) {
-    rows.push(['Status', 'Temporarily unavailable', '']);
+    tag = ['', ''];
+    line = 'Temporarily unavailable';
   } else if (st.status === 'champion') {
-    rows.push(['Status', '🏆 CHAMPION', 'gold']);
+    tag = ['CHAMP', 'gold'];
+    line = '🏆 Tournament champion';
     mainAction = `<button class="prm-follow" id="prWatchFinishBtn">🏆 Watch the moment</button>`;
   } else if (st.status === 'eliminated') {
     const e = eliminationInfo(followId);
-    rows.push(['Status', 'ELIMINATED', 'out']);
-    if (e) rows.push(['Last', `${ordinal(e.rank || 0)} in ${raceLabel(e.race)}`, '']);
+    tag = ['OUT', 'out'];
+    line = e ? `${ordinal(e.rank || 0)} in ${raceLabel(e.race)}` : 'Eliminated';
     mainAction = `<button class="prm-follow" id="prSurvivorBtn">🔁 Follow a survivor</button>`;
   } else {
-    rows.push(['Status', 'ALIVE', 'alive']);
     const racingNow = cur && !cur.result && startedRaces.has(cur.key) && cur.roster.some((s) => s.marbleId === followId);
-    if (racingNow) rows.push(['Racing', raceLabel(cur), 'gold']);
-    else if (nxt && nxt.roster && nxt.roster.some((s) => s.marbleId === followId)) rows.push(['Next', raceLabel(nxt), 'gold']);
+    if (racingNow) line = `Racing now · ${raceLabel(cur)}`;
+    else if (nxt && nxt.roster && nxt.roster.some((s) => s.marbleId === followId)) line = `Races next · ${raceLabel(nxt)}`;
     else {
       const inRound = (key) => model.rounds.some((r) => r.key === key && r.races.some((x) => x.roster && x.roster.some((s) => s.marbleId === followId)));
-      if (inRound('final')) rows.push(['Next', 'The Final', 'gold']);
-      else if (inRound('semis')) rows.push(['Next', 'Semifinals', '']);
-      else if (road.length === 0) rows.push(['Next', 'Qualifying — awaiting its heat', '']);
-      else rows.push(['Next', 'Waiting for the draw', '']);
+      if (inRound('final')) line = 'Through to the Final';
+      else if (inRound('semis')) line = 'Through to the semifinals';
+      else if (road.length === 0) line = 'Awaiting its qualifying heat';
+      else {
+        const last = road[road.length - 1];
+        line = last && last.rank === 1 ? `Won ${raceLabel(last.race)} · waiting for the draw` : 'Waiting for the draw';
+      }
     }
     mainAction = `<button class="prm-follow" id="prFollowBtn">📍 Follow</button>`;
   }
-  // Best result so far this tournament (rank only — courses differ per race).
-  if (road.length) {
-    const best = road.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99) || b.race.roundIdx - a.race.roundIdx)[0];
-    if (best && best.rank) rows.push(['Best', `${ordinal(best.rank)} · ${raceLabelShort(best.race)}`, '']);
-  }
   wrap.innerHTML =
     `<div class="prm${st && st.status === 'eliminated' ? ' out' : ''}">` +
-    `<span class="prm-ball" style="${ballStyle}" aria-hidden="true"></span>` +
+    `<span class="prm-ballwrap"><span class="prm-ball" style="${ballStyle}" aria-hidden="true"></span>` +
+    (tag[0] ? `<i class="prm-tag ${tag[1]}">${tag[0]}</i>` : '') +
+    `</span>` +
     `<span class="prm-info"><i class="prm-k">Your marble</i>` +
     `<b>#${num} — ${st ? st.name : 'Marble ' + num}</b>` +
-    `<span class="prm-rows">${rows.map(([k, v, c]) => `<span class="prm-row"><i>${k}</i><b class="${c}">${v}</b></span>`).join('')}</span>` +
-    `<span class="prm-career" id="prCareer"></span></span>` +
+    `<span class="prm-line">${line}</span></span>` +
     `<span class="prm-actions">${mainAction}` +
     `<button class="prm-change" id="prChangeBtn">Change</button></span>` +
     `</div>`;
-  const cl = el('prCareer');
-  if (cl) {
-    const line = careerLine(followId);
-    cl.textContent = line;
-    cl.hidden = !line;
-  }
 }
 
 // ---- shared event-state model ----------------------------------------------
@@ -1289,10 +1286,12 @@ function stateView() {
   switch (st) {
     case 'LOADING':
       return { st, eyebrow: 'Warming up', primary, secondary: 'Setting up the tournament', cd: '…' };
+    // Announced: the course is built and parked at the gate — say so, rather
+    // than "generating" for the whole countdown.
     case 'COUNTDOWN':
-      return { st, eyebrow: 'Between races', primary, secondary: nxt ? raceLabel(nxt) : 'Warming up the track…', cd: null };
+      return { st, eyebrow: 'Track ready', primary, secondary: nxt ? raceLabel(nxt) : '', cd: null };
     case 'STARTING':
-      return { st, eyebrow: 'Between races', primary, secondary: nxt ? raceLabel(nxt) : '', cd: null };
+      return { st, eyebrow: 'Track ready', primary, secondary: nxt ? raceLabel(nxt) : '', cd: null };
     case 'LIVE':
       return { st, eyebrow: '', primary, secondary: '', cd: null }; // card hidden; ring says LIVE
     case 'DELAYED':
@@ -1310,7 +1309,9 @@ function stateView() {
         cd: '🏁',
       };
     default:
-      return { st: 'BETWEEN_RACES', eyebrow: 'Between races', primary, secondary: 'Warming up the track…', cd: '…' };
+      // Result in, next race not yet announced: the server really is drawing
+      // and probing the next course right now.
+      return { st: 'BETWEEN_RACES', eyebrow: 'Generating the next race…', primary, secondary: '', cd: '…' };
   }
 }
 
