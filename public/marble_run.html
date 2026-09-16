@@ -4300,7 +4300,7 @@ function _brightenSkinMaterial(mat) {
   const env = _lowQ ? null : _skinEnvMap();
   if (env && 'envMap' in mat) {
     mat.envMap = env;
-    mat.envMapIntensity = glass ? 1.1 : 0.55;
+    mat.envMapIntensity = glass ? 1.5 : 0.55;
   }
   if (glass) {
     if (transmission > 0) {
@@ -4313,7 +4313,7 @@ function _brightenSkinMaterial(mat) {
     mat.opacity = Math.max(transmission > 0 ? 0.28 : 0.24, Math.min(opacity, 0.85));
     if (pbr) {
       mat.metalness = 0;
-      mat.roughness = Math.min(mat.roughness != null ? mat.roughness : 0.1, 0.12);
+      mat.roughness = Math.min(mat.roughness != null ? mat.roughness : 0.1, 0.06); // mirror-sharp glass
     }
     if (mat.color) mat.color.lerp(new THREE.Color(0xffffff), 0.6); // tinted shells stay bright
     if (mat.emissive) { mat.emissive.set(0xffffff); mat.emissiveMap = null; mat.emissiveIntensity = 0.05; }
@@ -4670,6 +4670,80 @@ function updateLaneMarkers() {
   }
 }
 
+// ---- gloss highlight ------------------------------------------------------------
+// A glass marble reads as glass because of the soft window-shaped highlight
+// on its upper shoulder. The layered art has no reflective surface and phones
+// run without an environment map, so every marble gets an explicit sheen: a
+// small additive sprite (soft ellipse + a brighter core) parked on the
+// camera-facing upper-left of the sphere each frame. Camera-relative, so it
+// never rolls with the marble. Five sprites — free.
+let _glossTexture = null;
+function _glossTex() {
+  if (_glossTexture) return _glossTexture;
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const g = c.getContext('2d');
+  // Broad soft sheen.
+  let grad = g.createRadialGradient(64, 64, 4, 64, 64, 60);
+  grad.addColorStop(0, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.22)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  // The bright "window" core, offset up-left within the sheen.
+  grad = g.createRadialGradient(50, 48, 2, 50, 48, 26);
+  grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  _glossTexture = new THREE.CanvasTexture(c);
+  return _glossTexture;
+}
+function _ensureGloss(m) {
+  if (!m || !m.mesh || m.gloss || window.__headlessNoGL) return;
+  const mat = new THREE.SpriteMaterial({
+    map: _glossTex(), transparent: true, depthWrite: false, depthTest: true,
+    blending: THREE.AdditiveBlending, opacity: 0.9, toneMapped: false,
+  });
+  const s = new THREE.Sprite(mat);
+  const d = CONFIG.marbleRadius * 2;
+  s.scale.set(d * 0.85, d * 0.66, 1);
+  s.renderOrder = 40;
+  s.visible = false;
+  scene.add(s);
+  m.gloss = s;
+}
+function _removeGloss(m) {
+  if (!m || !m.gloss) return;
+  scene.remove(m.gloss);
+  m.gloss.material.dispose();
+  m.gloss = null;
+}
+const _gRight = new THREE.Vector3(), _gUp = new THREE.Vector3(), _gFwd = new THREE.Vector3();
+function updateGloss() {
+  if (typeof marbles === 'undefined' || !marbles.length) return;
+  // Camera basis: right, up, and toward-the-camera (ortho: constant per frame).
+  _gRight.setFromMatrixColumn(camera.matrixWorld, 0);
+  _gUp.setFromMatrixColumn(camera.matrixWorld, 1);
+  _gFwd.setFromMatrixColumn(camera.matrixWorld, 2);
+  const r = CONFIG.marbleRadius;
+  for (const m of marbles) {
+    const s = m.gloss;
+    if (!s) continue;
+    if (!m.mesh || !m.mesh.visible) { s.visible = false; continue; }
+    s.visible = true;
+    const p = m.mesh.position;
+    // Upper-left shoulder of the sphere as seen from the camera, just outside
+    // the surface so it isn't swallowed by the shells.
+    s.position.set(
+      p.x + _gUp.x * r * 0.42 - _gRight.x * r * 0.30 + _gFwd.x * r * 0.86,
+      p.y + _gUp.y * r * 0.42 - _gRight.y * r * 0.30 + _gFwd.y * r * 0.86,
+      p.z + _gUp.z * r * 0.42 - _gRight.z * r * 0.30 + _gFwd.z * r * 0.86
+    );
+  }
+}
+
 // Remove any skin from a marble, restoring its default colored sphere.
 function _clearSkin(m) {
   if (!m || !m.mesh) return;
@@ -4824,6 +4898,7 @@ function createMarbles() {
     if (m.mesh && m.mesh.parent) m.mesh.parent.remove(m.mesh);
     if (m.shadowBlob && m.shadowBlob.parent) m.shadowBlob.parent.remove(m.shadowBlob);
     _removeLaneMarker(m);
+    _removeGloss(m);
   }
   marbles.length = 0;
   _ensureShadowAssets();
@@ -4913,6 +4988,7 @@ function createMarbles() {
     });
     const _m = marbles[marbles.length - 1];
     applyMarbleSkin(_m);
+    _ensureGloss(_m); // the glass sheen every marble wears
     // Soft contact shadow, added straight to the scene (not worldObjects) and
     // cleaned up with the marbles above.
     const blob = new THREE.Mesh(_shadowGeo, _shadowMat);
@@ -9400,6 +9476,7 @@ function animate() {
   maybeBakeWorld();
   updateFollowMarker();
   updateLaneMarkers();
+  updateGloss();
   updateRollSounds(frameTime);
   updateGateAnimation(frameTime);
   updateFans(frameTime);
