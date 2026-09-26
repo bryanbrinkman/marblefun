@@ -41,7 +41,7 @@ const DEFAULTS = {
   watchOverrideMs: null, // if set, ignore real race duration (tests/demo only)
   maxSimSeconds: 300,
   verbose: true, // per-race console logging
-  trackAttempts: 5, // candidate track seeds to try before accepting a poor-start race
+  trackAttempts: 14, // candidate track seeds to try before accepting a poor course (a tunnelled finish is rejected cheaply, so this is mostly builds, not races)
   intermissionMs: 30000, // pause on the champion before onTournamentComplete fires
   onTournamentComplete: null, // hook: start the next tournament (endless mode)
   // Public randomness: beacon source ('drand' | 'nist' | 'none') and how hard
@@ -257,8 +257,19 @@ class Scheduler {
     try {
       for (let attempt = 0; ; attempt++) {
         const candidate = attempt === 0 ? race.trackSeed : this.t.trackSeedCandidate(race, attempt);
+        const last = attempt >= this.cfg.trackAttempts - 1;
+        // Cheap first: a course whose finish line / podium would sit inside a
+        // block column is a dud before any marble rolls (a build, no physics).
+        if (!last && this.sim.courseInfo) {
+          const info = await this.sim.courseInfo(candidate);
+          if (info && info.finishClear === false) {
+            console.warn(`[race] ${race.key} track ${candidate} is a dud (finish line inside a block) — trying next candidate`);
+            continue;
+          }
+        }
         const sim = await this.sim.simulate(probe, { forTrackSeed: candidate });
-        if (sim.order.length >= minFinishers || attempt >= this.cfg.trackAttempts - 1) {
+        const finishClear = sim.finishClear !== false;
+        if ((sim.order.length >= minFinishers && finishClear) || last) {
           if (candidate !== race.trackSeed) {
             race.trackSeed = candidate;
             if (race.dbId != null) this.db.updateRaceTrackSeed(race.dbId, candidate, attempt);
@@ -267,7 +278,7 @@ class Scheduler {
           return true;
         }
         console.warn(
-          `[race] ${race.key} track ${candidate} is a dud (${sim.order.length}/${race.roster.length} finishers in the probe) — trying next candidate`
+          `[race] ${race.key} track ${candidate} is a dud (${!finishClear ? 'finish line inside a block' : `${sim.order.length}/${race.roster.length} finishers in the probe`}) — trying next candidate`
         );
       }
     } catch (err) {

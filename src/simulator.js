@@ -101,6 +101,17 @@ async function createSimulator({ url, trackSeed, headless = true, readyTimeoutMs
       await page.evaluate((tt) => window.marbleAPI.newCourse(tt), currentTrack);
     },
 
+    // Facts about a candidate course without racing it — cheap (a course
+    // build, no physics). `finishClear` is false when the finish line / podium
+    // would sit inside a block column; hosts skip such seeds.
+    async courseInfo(forTrackSeed) {
+      if (forTrackSeed !== undefined && (forTrackSeed >>> 0) !== currentTrack) {
+        await this.setCourse(forTrackSeed);
+      }
+      const info = await page.evaluate(() => (window.marbleAPI.courseInfo ? window.marbleAPI.courseInfo() : null));
+      return { trackSeed: currentTrack, finishClear: !(info && info.finishClear === false) };
+    },
+
     // Run one race headlessly. Returns:
     //   { trackSeed, raceSeed, complete, order: [{ lane, color, timeSec }, ...] }
     // where `order` is rank 1..5 and `lane` is the color-lane name
@@ -114,6 +125,8 @@ async function createSimulator({ url, trackSeed, headless = true, readyTimeoutMs
         trackSeed: res.trackSeed >>> 0,
         raceSeed: res.raceSeed >>> 0,
         complete: res.complete,
+        // Older game builds don't report it — treat as clear.
+        finishClear: res.finishClear !== false,
         order: res.results.map((x) => ({
           lane: x.name, // RED/BLUE/GREEN/YELLOW/CREAM
           color: x.color,

@@ -1867,7 +1867,10 @@ async function computeResult(race) {
   const a = await whenApiReady();
   let sim = null;
   try { sim = a.simulateRace(race.raceSeed); } catch (e) { console.error('simulateRace failed', e); }
-  return _mapOrder(race, sim && sim.results);
+  const order = _mapOrder(race, sim && sim.results);
+  // False when the finish line / podium would sit inside a block column.
+  order.finishClear = !(sim && sim.finishClear === false);
+  return order;
 }
 
 async function waitForVisualFinish(race, order, aborted) {
@@ -1893,12 +1896,23 @@ async function runLocalRace(T, race, aborted) {
   runCountdown(race);
   await ensureCourse(race.trackSeed);
   let order = await computeResult(race);
+  // A course is a dud when fewer than a majority of the field finishes
+  // (ceil(roster/2), i.e. 3 of 5) OR its finish line / podium would sit
+  // inside a block column — the same rules as the server (scheduler._pickTrack),
+  // so both modes agree on every race's course.
   const minFinishers = Math.max(1, Math.ceil(race.roster.length / 2));
   const finisherCount = (o) => o.filter((x) => x.timeSec != null).length;
-  for (let attempt = 1; attempt <= 4 && finisherCount(order) < minFinishers; attempt++) {
+  const isDud = (o) => finisherCount(o) < minFinishers || o.finishClear === false;
+  const LOCAL_TRACK_ATTEMPTS = 14; // same budget as the server (scheduler cfg.trackAttempts)
+  for (let attempt = 1; attempt < LOCAL_TRACK_ATTEMPTS && isDud(order); attempt++) {
     race.trackSeed = window.TournamentCore.deriveSeed(T.masterSeed, 0x7a2c, race.roundIdx + 1, race.indexInRound + 1, attempt);
     console.warn('[viewer] dud track for ' + race.key + ' — retrying with candidate ' + attempt);
-    await ensureCourse(race.trackSeed);
+    const b = await ensureCourse(race.trackSeed);
+    // Cheap first, like the server: a tunnelled finish needs no physics probe.
+    if (attempt < LOCAL_TRACK_ATTEMPTS - 1 && b.courseInfo && b.courseInfo().finishClear === false) {
+      order = Object.assign([], { finishClear: false });
+      continue;
+    }
     order = await computeResult(race);
   }
   const a = await whenApiReady();

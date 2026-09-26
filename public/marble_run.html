@@ -1271,6 +1271,10 @@ function wallBoundsAt(shape, localX) {
   }
 }
 
+// Set by generatePath(): false when the finish had to be placed without clear
+// table ahead of it (see the finish-piece comment there).
+let _courseFinishClear = true;
+
 function generatePath() {
   const cells = [];
   // 3D-aware occupancy: a track tile occupies (gx, gz) plus a vertical span around its Y.
@@ -1623,7 +1627,27 @@ function generatePath() {
     curY = cornerYs.exitY;
   }
 
-  // Final piece: flat 'finish' straight
+  // Final piece: flat 'finish' straight. Record whether the walk actually
+  // reached clear table: the finish cell and the four cells beyond it (the
+  // gate, the podium landing and camera room) must carry no other track at
+  // any height, or the finish line and podium end up inside a block column.
+  // Generation is NOT changed by this — the flag lets the host treat such a
+  // course as a dud and roll the next candidate seed, exactly as it does for
+  // courses where the field jams.
+  // Height-aware: a cell at the finish's XZ, or at the podium's cell (and the
+  // one past it, which the podium base overhangs), whose reserved Y-span is not
+  // entirely below the finish means its block column (or the tile itself)
+  // runs through the gate or the podium. Track well below is fine — the
+  // podium's legs simply drop past it.
+  _courseFinishClear = (() => {
+    const finishY = curY;
+    for (let k = 0; k <= 2; k++) {
+      const list = visited.get(xzKey(gx + DIRS[dir].dx * k, gz + DIRS[dir].dz * k));
+      if (!list) continue;
+      for (const sp of list) if (sp.maxY >= finishY - 0.5) return false;
+    }
+    return true;
+  })();
   cells.push({
     gx, gz,
     type: 'finish',
@@ -7794,8 +7818,15 @@ window.marbleAPI = {
       trackSeed: SEEDS.track,
       raceSeed: SEEDS.race,
       complete: finishOrder.length === marbles.length,
+      // False when the finish line / podium would sit inside a block column —
+      // hosts re-roll such a course like any other dud.
+      finishClear: _courseFinishClear,
       results: this.getResults(),
     };
+  },
+  // Facts about the course on screen (for hosts and diagnostics).
+  courseInfo() {
+    return { trackSeed: SEEDS.track, cells: pathCells.length, finishClear: _courseFinishClear };
   },
 };
 
