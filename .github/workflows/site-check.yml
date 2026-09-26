@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: DNS (A / AAAA / CNAME) for both hosts
         run: |
-          # run: 2
+          # run: 3
           for h in marblerun.fun www.marblerun.fun marblefun.fly.dev; do
             echo "=== $h"
             for t in A AAAA CNAME; do echo "-- $t"; dig +short "$t" "$h" @1.1.1.1 || true; done
@@ -28,6 +28,16 @@ jobs:
             curl -4 -sS -o /dev/null -D - --max-time 20 "https://$h/" || echo "curl failed: $?"
             echo "--- /api/version"; curl -4 -sS --max-time 20 "https://$h/api/version" || echo "curl failed: $?"; echo
             echo "--- http:// (expect redirect)"; curl -4 -sS -o /dev/null -D - --max-time 20 "http://$h/" | head -5 || true
+          done
+      - name: Served page markers (what the public page actually ships)
+        run: |
+          for h in marblefun.fly.dev marblerun.fun; do
+            echo "=== $h"
+            echo "--- index.html markers"; curl -4 -sS --max-time 20 "https://$h/" | grep -o 'class="ss-loading"\|class="ss-logo"\|id="ssStatus"\|id="ssBar"\|id="ssWhy"\|class="mm-change"\|id="ssOpenTournament"' | sort | uniq -c
+            echo "--- viewer.js markers"; curl -4 -sS --max-time 20 "https://$h/viewer.js" | grep -c '__boot\|SS_WHY_DRAWER\|raceHeader' || true
+            echo "--- viewer.css markers"; curl -4 -sS --max-time 20 "https://$h/viewer.css" | grep -c 'ss-failed.compact\|\.mm-acts\|max-width: 360px' || true
+            echo "--- marble_run.html markers"; curl -4 -sS --max-time 20 "https://$h/marble_run.html" | grep -c 'html.embed #loadingOverlay\|window.__boot' || true
+            echo "--- cache headers"; curl -4 -sS -o /dev/null -D - --max-time 20 "https://$h/viewer.js" | grep -i 'cache-control\|last-modified\|etag' || true
           done
       - name: HTTP over IPv6 (if the runner has it)
         continue-on-error: true
