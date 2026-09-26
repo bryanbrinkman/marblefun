@@ -20,6 +20,7 @@
     'STARTING',
     'LIVE',
     'DELAYED',
+    'STALE',
     'RECONNECTING',
     'OFFLINE',
     'TOURNAMENT_COMPLETE',
@@ -48,6 +49,10 @@
         return 'Live race unavailable';
       case 'DELAYED':
         return 'Race delayed';
+      // Connected, but the server has gone quiet for far longer than any
+      // normal gap — say so instead of promising a start that isn't coming.
+      case 'STALE':
+        return 'Waiting for the live feed…';
       case 'LIVE':
         return 'Race in progress';
       case 'STARTING':

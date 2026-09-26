@@ -28,7 +28,8 @@ the exact same finish the server independently recorded.
 | **WebSocket** | `src/ws.js` | Dependency-free RFC 6455 server; broadcasts announcements & results |
 | **Persistence** | `src/db.js` | SQLite (`node:sqlite`) record of tournaments, races, rosters, results |
 | **HTTP + wiring** | `src/server.js` | Serves the viewer, exposes `/api/state`, boots everything |
-| **Viewer** | `public/index.html`, `public/viewer.js` | Bracket UI + embeds the game in an `<iframe>` and drives the local replay from broadcast seeds |
+| **Viewer** | `public/index.html`, `public/viewer.js` | Embeds the game in an `<iframe>` and drives the local replay from broadcast seeds. The spectator UI is built around two things — watch the live race, and pick a marble to cheer for (one persistent "Your marble" card) — with a single Tournament drawer (this race · bracket · history) and one menu (settings, 3D-print, technical details) |
+| **UI rules** | `public/ui-model.js`, `public/event-state.js` | Pure, unit-tested display rules: the your-marble status (racing / up next / waiting / advanced / out / champion), picker filtering, the stage strip, the 3D-renderer state machine, and the countdown / feed-state strings |
 
 ### The broadcast → replay contract
 
@@ -129,7 +130,7 @@ viewer's own marble gets a shot) can be tuned without touching the viewer.
 ## Test
 
 ```bash
-npm test          # fast, browser-free: bracket funnel, seeds, scheduler, DB, WS framing, SSR, TV director
+npm test          # fast, browser-free: bracket funnel, seeds, scheduler, DB, WS framing, SSR, TV director, UI rules
 npm run test:replay                            # REAL sim in headless Chromium: recorded races must reproduce identically (CI)
 npm run record:replay -- http://localhost:8080 # re-record test/fixtures/races.json after an intentional physics change
 node headless_test.js [trackSeed] [raceSeed]   # runs the REAL sim headlessly, proves determinism

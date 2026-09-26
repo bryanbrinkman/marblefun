@@ -53,6 +53,11 @@ check('delayed state → "Race delayed"', () => {
   assert.strictEqual(disp('DELAYED', NOW + 42_000), 'Race delayed');
 });
 
+check('stale feed → "Waiting for the live feed…" (never a countdown)', () => {
+  assert.strictEqual(disp('STALE', NOW + 42_000), 'Waiting for the live feed…');
+  assert.strictEqual(disp('STALE', null), 'Waiting for the live feed…');
+});
+
 check('reconnecting state → "Reconnecting…"', () => {
   assert.strictEqual(disp('RECONNECTING', null), 'Reconnecting…');
 });
@@ -66,7 +71,7 @@ check('tournament complete → "Tournament complete"', () => {
 });
 
 check('never an em dash, empty string, or negative value', () => {
-  const states = ['LOADING', 'BETWEEN_RACES', 'COUNTDOWN', 'STARTING', 'LIVE', 'DELAYED', 'RECONNECTING', 'OFFLINE', 'TOURNAMENT_COMPLETE', 'BOGUS'];
+  const states = ['LOADING', 'BETWEEN_RACES', 'COUNTDOWN', 'STARTING', 'LIVE', 'DELAYED', 'STALE', 'RECONNECTING', 'OFFLINE', 'TOURNAMENT_COMPLETE', 'BOGUS'];
   const stamps = [null, undefined, NaN, 'junk', NOW - 99_000, NOW + 1, NOW + 5_000, NOW + 61_000, NOW + 4_000_000];
   for (const st of states)
     for (const at of stamps) {

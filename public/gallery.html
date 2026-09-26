@@ -28,7 +28,7 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text);
-    font: 14px/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    font: 0.875rem/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
   a { color: var(--accent); }
 
   .top {
@@ -72,15 +72,17 @@
     background-size: calc(100% * var(--skin-zoom, 1)); background-position: center;
     box-shadow: inset -6px -8px 14px rgba(0,0,0,.45), 0 4px 10px rgba(0,0,0,.4);
   }
-  .m-num { font-size: 10.5px; color: var(--muted); letter-spacing: 1px; font-weight: 700; }
-  .m-name { font-weight: 800; font-size: 13.5px; margin: 1px 0 5px; }
-  .m-stats { font-size: 11px; color: var(--muted); }
+  .m-num { font-size: 11px; color: var(--muted); font-weight: 700; }
+  .m-name { font-weight: 800; font-size: 14px; margin: 1px 0 5px; }
+  .m-stats { font-size: 11.5px; color: var(--muted); }
   .m-stats b { color: var(--text); }
-  .m-owner { font-size: 10.5px; color: var(--muted); margin-top: 5px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .m-owner.claimed { color: var(--live); }
-  .m-titles { display: inline-block; margin-top: 5px; font-size: 10.5px; font-weight: 800;
+  .m-titles { display: inline-block; margin-top: 5px; font-size: 11px; font-weight: 800;
     color: #1c1607; background: var(--accent); border-radius: 999px; padding: 2px 8px; }
+  .m-stats .sk { display: inline-block; width: 5.5em; height: 0.8em; border-radius: 4px; background: rgba(120,140,175,.25); vertical-align: middle; animation: shimmer 1.4s ease-in-out infinite; }
+  @keyframes shimmer { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+  .notice { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+  .notice[hidden] { display: none; }
+  @media (prefers-reduced-motion: reduce) { .m-stats .sk { animation: none; } .card { transition: none; } }
 
   .empty { text-align: center; color: var(--muted); padding: 50px 0; }
 
@@ -149,6 +151,7 @@
 </header>
 
 <main class="wrap">
+  <p class="notice" id="notice" hidden></p>
   <div class="grid" id="grid" role="list"><!--SSR:GRID--></div>
   <div class="empty" id="empty" hidden>No marbles match that search.</div>
 </main>
@@ -204,6 +207,7 @@
 
   // ---- data ----------------------------------------------------------------
   let careers = new Map();   // id -> {races, wins, podiums, titles}
+  let careersState = 'loading'; // loading | ok | error — a card never says "no races" before the data is in
   let manifest = {};         // id -> {img?, glb?, owner?, ownerLink?}
   const skinOf = (id) => manifest[id] || manifest[String(id)] || null;
   const carOf = (id) => careers.get(id) || { races: 0, wins: 0, podiums: 0, titles: 0 };
@@ -243,17 +247,21 @@
       card.setAttribute('role', 'listitem');
       card.tabIndex = 0;
       card.dataset.id = id;
+      if (owner) card.classList.add('claimed');
+      // Card = thumbnail, number, name, one-line career. Owner + full stats
+      // live in the detail view. While careers load, a placeholder — never
+      // "No races yet" for a marble whose record simply hasn't arrived.
+      const stats = careersState === 'loading'
+        ? '<span class="sk" aria-label="Loading career"></span>'
+        : careersState === 'error'
+          ? 'Career unavailable'
+          : c.races ? `<b>${c.wins}</b> ${c.wins === 1 ? 'win' : 'wins'} · ${c.races} ${c.races === 1 ? 'race' : 'races'}` : 'No races yet';
       card.innerHTML =
         `<div class="ball" style="${ballStyle(id, skinOf(id))}"></div>` +
         `<div class="m-num">#${pad(id)}</div>` +
         `<div class="m-name">${nameFor(id)}</div>` +
-        `<div class="m-stats">${
-          c.races
-            ? `<b>${c.wins}</b> wins · <b>${c.podiums}</b> podiums · ${c.races} races`
-            : 'No races yet'
-        }</div>` +
-        (c.titles ? `<span class="m-titles">🏆 ${c.titles === 1 ? 'Champion' : c.titles + '× Champion'}</span>` : '') +
-        `<div class="m-owner${owner ? ' claimed' : ''}">${owner ? '👤 ' + esc(owner.name) : 'Unclaimed'}</div>`;
+        `<div class="m-stats">${stats}</div>` +
+        (careersState === 'ok' && c.titles ? `<span class="m-titles">🏆 ${c.titles} ${c.titles === 1 ? 'title' : 'titles'}</span>` : '');
       frag.appendChild(card);
     }
     grid.replaceChildren(frag);
@@ -284,14 +292,19 @@
           : `<b>${esc(owner.name)}</b>`))
       : 'Unclaimed — this marble is looking for an owner';
     const winPct = c.races ? Math.round((c.wins / c.races) * 100) : 0;
+    const v = (n) => (careersState === 'ok' ? n : '…');
     document.getElementById('dStats').innerHTML =
-      `<div class="stat"><b>${c.races}</b><i>Races</i></div>` +
-      `<div class="stat"><b>${c.wins}</b><i>Wins</i></div>` +
-      `<div class="stat"><b>${c.podiums}</b><i>Podiums</i></div>` +
-      `<div class="stat"><b>${c.titles}</b><i>Titles</i></div>`;
-    document.getElementById('dLine').textContent = c.races
-      ? `Wins ${winPct}% of the races it enters.`
-      : 'This marble hasn’t raced yet — its story starts soon.';
+      `<div class="stat"><b>${v(c.races)}</b><i>Races</i></div>` +
+      `<div class="stat"><b>${v(c.wins)}</b><i>Wins</i></div>` +
+      `<div class="stat"><b>${v(c.podiums)}</b><i>Podiums</i></div>` +
+      `<div class="stat"><b>${v(c.titles)}</b><i>Titles</i></div>`;
+    document.getElementById('dLine').textContent = careersState === 'loading'
+      ? 'Loading its career record…'
+      : careersState === 'error'
+        ? 'Career statistics are unavailable right now.'
+        : c.races
+          ? `Wins ${winPct}% of the races it enters.`
+          : 'This marble hasn’t raced yet — its story starts soon.';
     const cheer = document.getElementById('dCheer');
     cheer.onclick = () => {
       try { localStorage.setItem('marbleFollow', String(id)); } catch {}
@@ -347,7 +360,11 @@
   sortSel.addEventListener('change', render);
 
   // ---- load ----------------------------------------------------------------
-  render(); // instant paint with names + colors; stats fill in when fetches land
+  // The server may have rendered the grid with real careers already (SSR);
+  // keep it rather than flashing placeholders. A static host has no SSR, so
+  // paint names + placeholders now.
+  const ssrCards = grid.querySelectorAll('.card').length === TOTAL;
+  if (!ssrCards) render();
   openFromHash(); // deep link: /gallery#42
 
   // A deep-linked modal may have opened before the fetches landed — refresh it.
@@ -356,7 +373,8 @@
   fetch('/api/careers', { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
-      if (!d || !Array.isArray(d.careers)) return;
+      if (!d || !Array.isArray(d.careers)) throw new Error('bad careers payload');
+      careersState = 'ok';
       careers = new Map(d.careers.map((c) => [Number(c.id), c]));
       let races = 0, titles = 0;
       for (const c of d.careers) { races += c.races || 0; titles += c.titles || 0; }
@@ -368,7 +386,14 @@
       render();
       refreshOpenDetail();
     })
-    .catch(() => {});
+    .catch(() => {
+      careersState = 'error';
+      const n = document.getElementById('notice');
+      // With SSR the cards already carry real records; only say so when the
+      // grid would otherwise be placeholders.
+      if (!ssrCards) { n.textContent = 'Career records couldn’t be loaded right now — names and artwork are still here.'; n.hidden = false; render(); }
+      refreshOpenDetail();
+    });
 
   fetch('/marbles/manifest.json', { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))

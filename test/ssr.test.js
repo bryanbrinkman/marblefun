@@ -25,11 +25,11 @@ check('gallery: 100 marble cards with names + careers in the initial HTML', () =
     careers: [{ id: 42, races: 30, wins: 9, podiums: 15, titles: 2 }],
     manifest: { 7: { owner: 'Bryan' } },
   });
-  assert.strictEqual((html.match(/class="card" role="listitem"/g) || []).length, 100);
+  assert.strictEqual((html.match(/class="card( claimed)?" role="listitem"/g) || []).length, 100);
   assert.ok(html.includes('Royal Flush')); // #42's permanent name
-  assert.ok(html.includes('<b>9</b> wins · <b>15</b> podiums · 30 races'));
-  assert.ok(html.includes('2× Champion'));
-  assert.ok(html.includes('👤 Bryan'));
+  assert.ok(html.includes('<b>9</b> wins · 30 races')); // concise career line on the card
+  assert.ok(html.includes('🏆 2 titles')); // one trophy + a count, never a string of trophies
+  assert.ok(!html.includes('👤 Bryan') && !html.includes('class="m-owner'), 'ownership lives in the detail view, not on cards');
   assert.ok(html.includes('id="count">100 marbles<'));
   assert.ok(!html.includes('<!--SSR:'), 'no anchors left behind');
 });
@@ -55,11 +55,13 @@ check('champions: history renders holder, tiles, title table and timeline', () =
   }];
   const hof = { tournamentsCompleted: 1, racesRun: 25, distinctChampions: 1, currentChampion: { id: 73, name: 'Molder', tournamentId: 3 }, mostTitles: [{ id: 73, name: 'Molder', titles: 1, lastTournamentId: 3 }], repeatChampions: [], longestStreak: null };
   const html = renderChampions(read('champions.html'), { history, hof });
-  assert.ok(html.includes('REIGNING CHAMPION'));
+  assert.ok(html.includes('Reigning champion'));
   assert.ok(html.includes('href="/gallery#73"'));
   assert.ok(html.includes('WILDCARD RUN'));
   assert.ok(html.includes('HEAT 6') && html.includes('SEMI 2') && html.includes('FINAL'));
   assert.ok(html.includes('1 title'));
+  assert.ok(!html.includes('🏆🏆'), 'title counts use one trophy plus a number');
+  assert.ok(html.includes('<summary>Road to the title</summary>'), 'race paths and seeds are collapsed until requested');
   assert.ok(!html.includes('30.6s'), 'no finish times in results views');
   assert.ok(!html.includes('<!--SSR:'), 'no anchors left behind');
 });

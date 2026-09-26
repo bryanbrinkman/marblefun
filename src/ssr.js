@@ -73,14 +73,15 @@ function renderGallery(html, { careers = [], manifest = {} } = {}) {
     const c = car.get(id) || { races: 0, wins: 0, podiums: 0, titles: 0 };
     const sk = manifest[id] || manifest[String(id)] || null;
     const owner = sk && sk.owner ? String(sk.owner) : null;
+    // Card = thumbnail, number, name, one-line career. Owner and the fuller
+    // statistics live in the detail view (client-side).
     cards.push(
-      `<div class="card" role="listitem" tabindex="0" data-id="${id}">` +
+      `<div class="card${owner ? ' claimed' : ''}" role="listitem" tabindex="0" data-id="${id}">` +
         `<div class="ball" style="${galleryBall(id, sk)}"></div>` +
         `<div class="m-num">#${pad(id)}</div>` +
         `<div class="m-name">${esc(nameFor(id))}</div>` +
-        `<div class="m-stats">${c.races ? `<b>${c.wins}</b> wins · <b>${c.podiums}</b> podiums · ${c.races} races` : 'No races yet'}</div>` +
-        (c.titles ? `<span class="m-titles">🏆 ${c.titles === 1 ? 'Champion' : c.titles + '× Champion'}</span>` : '') +
-        `<div class="m-owner${owner ? ' claimed' : ''}">${owner ? '👤 ' + esc(owner) : 'Unclaimed'}</div>` +
+        `<div class="m-stats">${c.races ? `<b>${c.wins}</b> ${c.wins === 1 ? 'win' : 'wins'} · ${c.races} ${c.races === 1 ? 'race' : 'races'}` : 'No races yet'}</div>` +
+        (c.titles ? `<span class="m-titles">🏆 ${c.titles} ${c.titles === 1 ? 'title' : 'titles'}</span>` : '') +
         `</div>`
     );
   }
@@ -109,7 +110,7 @@ function renderChampions(html, { history = [], hof = null, manifest = {} } = {})
     const titles = ((hof.mostTitles || []).find((m) => m.id === cur.id) || {}).titles || 1;
     holder =
       `<span class="ball" style="${champBall(cur.id, color, manifest)}"></span>` +
-      `<span><span class="hk">🏆 REIGNING CHAMPION</span>` +
+      `<span><span class="hk">🏆 Reigning champion</span>` +
       `<div class="hn"><small>#${pad(cur.id)}</small>${esc(cur.name)}</div>` +
       `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''}${titles > 1 ? ` · ${titles}× champion` : ''}</div></span>`;
     html = html.replace('<a class="holder none" id="holder" href="/champions"><!--SSR:HOLDER-->Loading the record books…<!--/SSR:HOLDER--></a>',
@@ -141,7 +142,7 @@ function renderChampions(html, { history = [], hof = null, manifest = {} } = {})
               `<a class="trow" href="/gallery#${m.id}"><span class="rk">${i + 1}</span>` +
               `<span class="ball" style="${champBall(m.id, null, manifest)}"></span>` +
               `<span class="nm"><small>#${pad(m.id)}</small>${esc(m.name)}</span>` +
-              `<span class="tt"><span class="cups" aria-hidden="true">${'🏆'.repeat(Math.min(m.titles, 5))}</span>${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
+              `<span class="tt"><span class="cups" aria-hidden="true">🏆</span>${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
           )
           .join('')
       : '<div class="empty">The title table fills in as tournaments finish.</div>'
@@ -177,9 +178,11 @@ function renderChampions(html, { history = [], hof = null, manifest = {} } = {})
       (n > 1 ? `<span class="badge">${ordinal(n).toUpperCase()} TITLE</span>` : '') +
       (isWild ? `<span class="badge">WILDCARD RUN</span>` : '') +
       `<span class="when">${fmtDate(t.completedAt)}</span></div>` +
+      `<details class="more"><summary>Road to the title</summary>` +
       `<div class="road">${road || '<span class="step"><i>ROAD</i><b>—</b></span>'}</div>` +
       (finalRows ? `<div class="final"><div class="fh">THE FINAL</div>${finalRows}</div>` : '') +
       `<div class="seed">master seed ${t.masterSeed} · ${t.racesRun} races</div>` +
+      `</details>` +
       `</div></article>`
     );
   });
@@ -196,15 +199,14 @@ function renderHome(html, { snapshot = null, hof = null } = {}) {
   const cur = snapshot.current && races.find((r) => r.key === snapshot.current.raceKey);
   const race = (cur && !cur.result ? cur : races.find((r) => !r.result)) || null;
   const label = (r) =>
-    !r ? '' : r.roundKey === 'final' ? 'Championship Race' : r.roundKey === 'semis' ? `Semifinal ${r.indexInRound + 1} of 4` : `Qualifying · Race ${r.indexInRound + 1} of 20`;
+    !r ? '' : r.roundKey === 'final' ? 'The Final' : r.roundKey === 'semis' ? `Semifinal ${r.indexInRound + 1} of 4` : `Qualifying · Race ${r.indexInRound + 1} of 20`;
   const champ = snapshot.tournament && snapshot.tournament.champion;
-  const title = champ ? 'Tournament Complete' : race ? label(race) : 'Tournament starting';
+  const title = champ ? 'Tournament complete' : race ? label(race) : 'Tournament starting';
   const shown = champ ? 25 : Math.min(25, done + (race ? 1 : 0));
   const alive = (snapshot.standings || []).filter((m) => m.status === 'alive').length;
 
-  html = html.replace('<div class="race-title" id="raceTitle">Warming up the track…</div>', `<div class="race-title" id="raceTitle">${esc(title)}</div>`);
+  html = html.replace('<div class="race-title" id="raceTitle">Loading the tournament…</div>', `<div class="race-title" id="raceTitle">${esc(title)}</div>`);
   html = html.replace('<span class="rc-count" id="progressCount"></span>', `<span class="rc-count" id="progressCount">${shown > 0 ? `Race ${shown} of 25` : ''}</span>`);
-  if (champ) html = html.replace('<div class="champ-name" id="championName"></div>', `<div class="champ-name" id="championName">${esc(champ.name)}</div>`);
 
   const lines = [];
   lines.push(`<li>Tournament ${snapshot.tournament ? snapshot.tournament.id : ''}: ${esc(title)}${champ ? ` — champion #${pad(champ.id)} ${esc(champ.name)}` : ''}.</li>`);

@@ -27,7 +27,7 @@
     --accent: #ffcf5c; --accent2: #ff9d3c; --live: #35d07f;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 0.875rem/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
   body {
     background:
       radial-gradient(70% 40% at 50% 0%, rgba(255, 207, 92, 0.12), transparent 60%),
@@ -43,8 +43,8 @@
 
   /* ---- masthead: the current holder, big ---- */
   .mast { text-align: center; padding: 10px 0 6px; }
-  .mast .eyebrow { font-size: 11px; font-weight: 900; letter-spacing: 0.36em; color: var(--muted); }
-  .mast h1 { margin: 6px 0 0; font-size: clamp(30px, 6vw, 54px); font-weight: 900; letter-spacing: 0.04em; line-height: 1; }
+  .mast .eyebrow { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; color: var(--muted); }
+  .mast h1 { margin: 6px 0 0; font-size: clamp(28px, 5vw, 44px); font-weight: 900; letter-spacing: 0; line-height: 1.05; }
   .mast h1 span { background: linear-gradient(180deg, #fff, #ffe39a 55%, var(--accent2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
   .holder {
     margin: 22px auto 0; max-width: 620px; display: flex; align-items: center; gap: 18px; text-align: left;
@@ -55,7 +55,7 @@
   }
   .holder:hover { border-color: var(--accent); }
   .holder .ball { width: 84px; height: 84px; flex: none; }
-  .holder .hk { font-size: 10px; font-weight: 900; letter-spacing: 0.3em; color: var(--accent); }
+  .holder .hk { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; color: var(--accent); }
   .holder .hn { font-size: clamp(22px, 4.5vw, 34px); font-weight: 900; line-height: 1.1; letter-spacing: 0.01em; }
   .holder .hn small { color: var(--accent); font-size: 0.72em; margin-right: 8px; }
   .holder .hs { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
@@ -76,11 +76,11 @@
   .tile { padding: 14px 14px 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); text-align: center; }
   .tile b { display: block; font-size: 26px; font-weight: 900; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; }
   .tile b.gold { color: var(--accent); }
-  .tile i { display: block; font-style: normal; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); margin-top: 6px; font-weight: 800; }
+  .tile i { display: block; font-style: normal; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin-top: 6px; font-weight: 800; }
   .tile small { display: block; margin-top: 4px; color: var(--muted); font-size: 11.5px; }
 
   /* ---- sections ---- */
-  h2 { font-size: 12px; font-weight: 900; letter-spacing: 0.3em; text-transform: uppercase; color: var(--muted); margin: 34px 0 12px; display: flex; align-items: center; gap: 12px; }
+  h2 { font-size: 13px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 34px 0 12px; display: flex; align-items: center; gap: 12px; }
   h2::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 
   /* title table */
@@ -107,24 +107,24 @@
   .champ:first-child { border-color: rgba(255, 207, 92, 0.45); background: linear-gradient(165deg, rgba(58, 48, 18, 0.45), var(--panel)); }
   .champ .left { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
   .champ .ball { width: 72px; height: 72px; }
-  .champ .tid { font-size: 10px; font-weight: 900; letter-spacing: 0.2em; color: var(--muted); }
+  .champ .tid { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; color: var(--muted); }
   .champ .tid b { display: block; font-size: 18px; color: #fff; letter-spacing: 0; }
   .champ .head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
   .champ .name { font-size: clamp(20px, 3.6vw, 28px); font-weight: 900; text-decoration: none; letter-spacing: 0.01em; }
   .champ .name:hover { color: var(--accent); }
   .champ .name small { color: var(--accent); margin-right: 8px; }
   .champ .when { color: var(--muted); font-size: 12px; font-weight: 700; }
-  .champ .badge { font-size: 10px; font-weight: 900; letter-spacing: 0.16em; padding: 3px 8px; border-radius: 999px; background: rgba(255, 207, 92, 0.14); border: 1px solid rgba(255, 207, 92, 0.4); color: var(--accent); }
+  .champ .badge { font-size: 11px; font-weight: 800; letter-spacing: 0.02em; padding: 3px 8px; border-radius: 999px; background: rgba(255, 207, 92, 0.14); border: 1px solid rgba(255, 207, 92, 0.4); color: var(--accent); }
   .road { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .step { display: flex; flex-direction: column; min-width: 86px; padding: 7px 10px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); }
-  .step i { font-style: normal; font-size: 9px; letter-spacing: 0.2em; color: var(--muted); font-weight: 800; }
+  .step i { font-style: normal; font-size: 10px; letter-spacing: 0.04em; color: var(--muted); font-weight: 800; }
   .step b { font-size: 15px; font-weight: 900; color: var(--accent); line-height: 1.25; }
   .step small { font-size: 10.5px; color: var(--muted); }
   .step small:empty { display: none; }
   .step.wild b { color: var(--live); }
   .arrow { color: var(--line2); font-weight: 900; font-size: 18px; }
   .final { margin-top: 12px; }
-  .final .fh { font-size: 9.5px; font-weight: 900; letter-spacing: 0.24em; color: var(--muted); margin-bottom: 6px; }
+  .final .fh { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 6px; }
   .frow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 3px 0; }
   .frow .pos { width: 14px; color: var(--muted); font-weight: 800; font-variant-numeric: tabular-nums; }
   .frow .sw { width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(255,255,255,.35); flex: none; }
@@ -132,7 +132,12 @@
   .frow a:hover { color: var(--accent); }
   .frow .t { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
   .frow.win a { color: var(--accent); font-weight: 900; }
-  .seed { margin-top: 10px; font: 10.5px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); word-break: break-all; }
+  .seed { margin-top: 10px; font: 11px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); word-break: break-all; }
+  /* The road, the final and the seed stay folded until asked for. */
+  .more { margin-top: 8px; }
+  .more summary { cursor: pointer; font-size: 12px; font-weight: 800; color: var(--muted); padding: 8px 0; min-height: 36px; display: flex; align-items: center; }
+  .more summary:hover, .more[open] summary { color: var(--accent); }
+  .empty.err { color: #ff8a7a; }
   .empty { text-align: center; color: var(--muted); padding: 40px 10px; font-weight: 700; }
   .empty a { color: var(--accent); }
   .foot { margin-top: 40px; text-align: center; color: var(--muted); font-size: 12px; }
@@ -159,8 +164,8 @@
   </nav>
 
   <header class="mast">
-    <div class="eyebrow">MARBLE RUN · HALL OF CHAMPIONS</div>
-    <h1><span>EVERY CHAMPION. EVERY ROAD.</span></h1>
+    <div class="eyebrow">Marble Run · Hall of Champions</div>
+    <h1><span>Every champion, every road</span></h1>
     <a class="holder none" id="holder" href="/champions"><!--SSR:HOLDER-->Loading the record books…<!--/SSR:HOLDER--></a>
   </header>
 
@@ -219,7 +224,7 @@
     h.href = '/gallery#' + cur.id;
     h.innerHTML =
       `<span class="ball" style="${ballStyle(cur.id, color)}"></span>` +
-      `<span><span class="hk">🏆 REIGNING CHAMPION</span>` +
+      `<span><span class="hk">🏆 Reigning champion</span>` +
       `<div class="hn"><small>#${pad(cur.id)}</small>${esc(cur.name)}</div>` +
       `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''}${titles > 1 ? ` · ${titles}× champion` : ''}</div></span>`;
   }
@@ -246,7 +251,7 @@
         `<a class="trow" href="/gallery#${m.id}"><span class="rk">${i + 1}</span>` +
         `<span class="ball" style="${ballStyle(m.id)}"></span>` +
         `<span class="nm"><small>#${pad(m.id)}</small>${esc(m.name)}</span>` +
-        `<span class="tt"><span class="cups" aria-hidden="true">${'🏆'.repeat(Math.min(m.titles, 5))}</span>${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
+        `<span class="tt"><span class="cups" aria-hidden="true">🏆</span>${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
       )
       .join('');
   }
@@ -282,9 +287,11 @@
           (t._nth > 1 ? `<span class="badge">${ordinal(t._nth).toUpperCase()} TITLE</span>` : '') +
           (isWild ? `<span class="badge">WILDCARD RUN</span>` : '') +
           `<span class="when">${fmtDate(t.completedAt)}</span></div>` +
+          `<details class="more"><summary>Road to the title</summary>` +
           `<div class="road">${road || '<span class="step"><i>ROAD</i><b>—</b></span>'}</div>` +
           (finalRows ? `<div class="final"><div class="fh">THE FINAL</div>${finalRows}</div>` : '') +
           `<div class="seed">master seed ${t.masterSeed} · ${t.racesRun} races</div>` +
+          `</details>` +
           `</div></article>`
         );
       })
@@ -298,15 +305,27 @@
       fetch('/marbles/manifest.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
     manifest = m && typeof m === 'object' ? m : null;
+    // Nothing loaded: keep whatever the server rendered (SSR) and, if the page
+    // is still on its placeholder, say the history is unavailable — never
+    // "no champions yet" for data that simply didn't arrive.
+    if (!c && !h) {
+      const holder = $('holder');
+      if (holder && /Loading the record\s+books/.test(holder.textContent)) {
+        holder.className = 'holder none';
+        holder.textContent = 'The champions archive couldn’t be loaded right now.';
+        holder.href = '/';
+        $('titles').innerHTML = '<div class="empty err">Title table unavailable right now.</div>';
+        $('timeline').innerHTML = '<div class="empty err">Tournament history unavailable right now. <a href="/">Back to the races →</a></div>';
+      }
+      return;
+    }
     const history = (c && c.history) || [];
     // Older servers only send the flat rows — build minimal history from them.
     if (!history.length && c && c.champions && c.champions.length) {
       for (const r of c.champions) history.push({ tournamentId: r.tournament_id, masterSeed: r.master_seed, completedAt: r.completed_at || r.created_at, champion: { id: r.champion_marble_id, name: r.champion_name || nameFor(r.champion_marble_id) }, path: [], final: [], racesRun: 25 });
     }
-    renderHolder(h, history);
-    renderTiles(h);
-    renderTitles(h);
-    renderTimeline(history, h);
+    if (h) { renderHolder(h, history); renderTiles(h); renderTitles(h); }
+    if (c) renderTimeline(history, h);
   }
   load();
 })();
