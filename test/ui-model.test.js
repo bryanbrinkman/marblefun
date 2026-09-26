@@ -36,18 +36,20 @@ check('remaining line separates the live count from the fixed sizes', () => {
 });
 
 // ---- your marble ------------------------------------------------------------
-const base = { standing: 'alive', racingNow: false, placement: null, finished: false, upNext: false, nextLabel: '', lastResult: null, drawnIn: {}, finalDrawn: false };
+const base = { standing: 'alive', racingNow: false, placement: null, finished: false, upNext: false, nextLabel: '', scheduled: null, current: null, lastResult: null, drawnIn: {}, finalDrawn: false };
 const st = (over) => M.yourMarbleStatus(Object.assign({}, base, over));
+const Q = (n) => ({ short: `Qualifier ${n}`, roundKey: 'heats', number: n });
+const SF = (n) => ({ short: `Semifinal ${n}`, roundKey: 'semis', number: n });
 
 check('your marble: champion / out', () => {
   assert.deepStrictEqual(st({ standing: 'champion' }), { key: 'champion', tag: 'Champion', line: 'Tournament champion' });
-  const out = st({ standing: 'eliminated', lastResult: { roundKey: 'heats', rank: 4, label: 'Qualifying · Race 3 of 20', dnf: false } });
+  const out = st({ standing: 'eliminated', lastResult: { roundKey: 'heats', rank: 4, label: 'Qualifier 3', dnf: false } });
   assert.strictEqual(out.key, 'out');
   assert.strictEqual(out.tag, 'Out this tournament');
-  assert.ok(out.line.startsWith('4th in Qualifying · Race 3 of 20'));
+  assert.ok(out.line.startsWith('4th in Qualifier 3'));
   assert.ok(out.line.includes('back next tournament'));
-  const dnf = st({ standing: 'eliminated', lastResult: { roundKey: 'semis', rank: 5, label: 'Semifinal 1 of 4', dnf: true } });
-  assert.ok(dnf.line.startsWith('Did not finish in Semifinal 1 of 4'));
+  const dnf = st({ standing: 'eliminated', lastResult: { roundKey: 'semis', rank: 5, label: 'Semifinal 1', dnf: true } });
+  assert.ok(dnf.line.startsWith('Did not finish in Semifinal 1'));
 });
 
 check('your marble: racing now, with and without a live placement', () => {
@@ -57,28 +59,37 @@ check('your marble: racing now, with and without a live placement', () => {
 });
 
 check('your marble: up next beats waiting', () => {
-  const s = st({ upNext: true, nextLabel: 'Semifinal 2 of 4' });
+  const s = st({ upNext: true, nextLabel: 'Semifinal 2 of 4', scheduled: SF(2), current: SF(2) });
   assert.strictEqual(s.key, 'next');
   assert.strictEqual(s.line, 'Up next · Semifinal 2 of 4');
 });
 
-check('your marble: advanced after a win, waiting once drawn', () => {
-  const a = st({ lastResult: { roundKey: 'heats', rank: 1, label: 'Qualifying · Race 7 of 20' } });
+check('your marble: waiting shows the scheduled race and the current race', () => {
+  assert.strictEqual(st({ scheduled: Q(15), current: Q(6) }).line, 'Races in Qualifier 15 · Current race: 6');
+  assert.strictEqual(st({ scheduled: Q(15) }).line, 'Races in Qualifier 15'); // nothing running yet — no invented timing
+  assert.strictEqual(st({}).line, 'Waiting for its qualifying race'); // schedule unknown
+});
+
+check('your marble: advanced → drawn into a semifinal → finalist', () => {
+  const a = st({ lastResult: { roundKey: 'heats', rank: 1, label: 'Qualifier 7' }, current: Q(12) });
   assert.strictEqual(a.key, 'advanced');
-  assert.strictEqual(a.line, 'Won Qualifying · Race 7 of 20 · through to the semifinals');
-  const b = st({ lastResult: { roundKey: 'semis', rank: 1, label: 'Semifinal 3 of 4' } });
-  assert.strictEqual(b.line, 'Won Semifinal 3 of 4 · through to the final');
-  assert.strictEqual(st({}).line, 'Waiting for its qualifying race');
-  assert.strictEqual(st({ drawnIn: { semis: true } }).line, 'Waiting for its semifinal');
-  assert.strictEqual(st({ drawnIn: { final: true } }).line, 'Waiting for the final');
+  assert.strictEqual(a.line, 'Won Qualifier 7 · semifinal draw after all qualifiers · Current race: Qualifier 12');
+  const b = st({ lastResult: { roundKey: 'heats', rank: 1, label: 'Qualifier 7' }, drawnIn: { semis: true }, scheduled: SF(2), current: SF(1) });
+  assert.strictEqual(b.key, 'advanced');
+  assert.strictEqual(b.line, 'Races in Semifinal 2 · Current race: 1');
+  const c = st({ lastResult: { roundKey: 'semis', rank: 1, label: 'Semifinal 3' }, drawnIn: { semis: true, final: true }, scheduled: { short: 'The Final', roundKey: 'final', number: 1 } });
+  assert.strictEqual(c.key, 'finalist');
+  assert.strictEqual(c.tag, 'Finalist');
+  assert.strictEqual(c.line, 'Races in the Final');
+  const d = st({ lastResult: { roundKey: 'semis', rank: 1, label: 'Semifinal 3' }, drawnIn: { semis: true }, finalDrawn: false });
+  assert.strictEqual(d.line, 'Won Semifinal 3 · through to the final');
 });
 
 check('your marble: semifinal runner-up waits on the wildcard until the final is drawn', () => {
-  const w = st({ lastResult: { roundKey: 'semis', rank: 2, label: 'Semifinal 1 of 4' }, finalDrawn: false });
+  const w = st({ lastResult: { roundKey: 'semis', rank: 2, label: 'Semifinal 1' }, drawnIn: { semis: true }, finalDrawn: false });
   assert.strictEqual(w.key, 'waiting');
   assert.ok(w.line.includes('wildcard'));
-  // Final drawn without it → the standings say eliminated; the status follows.
-  const o = st({ standing: 'eliminated', lastResult: { roundKey: 'semis', rank: 2, label: 'Semifinal 1 of 4' }, finalDrawn: true });
+  const o = st({ standing: 'eliminated', lastResult: { roundKey: 'semis', rank: 2, label: 'Semifinal 1' }, finalDrawn: true });
   assert.strictEqual(o.key, 'out');
 });
 

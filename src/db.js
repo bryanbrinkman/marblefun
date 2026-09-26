@@ -3,6 +3,15 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
 const fs = require('node:fs');
+const { Tournament } = require('./tournament');
+
+// Display names are resolved through ONE canonical lookup (marble id → its
+// permanent name). Rows written under an earlier naming scheme keep that
+// text in the database; the API reports it separately as `nameAtTheTime`
+// so history is preserved without two names for one marble showing up in
+// the same view.
+const nameFor = (id) => Tournament.marbleNameFor(Number(id));
+const nameThen = (id, stored) => (stored && stored !== nameFor(id) ? stored : null);
 
 // =========================================================
 // SQLite persistence (node:sqlite, built into Node >= 22.5)
@@ -278,7 +287,12 @@ class DB {
          WHERE t.status='complete' AND t.champion_marble_id IS NOT NULL
          ORDER BY t.id`
       )
-      .all();
+      .all()
+      .map((r) => ({
+        ...r,
+        champion_name: nameFor(r.champion_marble_id),
+        champion_name_at_the_time: nameThen(r.champion_marble_id, r.champion_name),
+      }));
   }
 
   // Rich champion history for the /champions page: every completed tournament
@@ -334,12 +348,13 @@ class DB {
         createdAt: t.created_at,
         // Older rows predate completed_at — the final's reveal is the crowning.
         completedAt: t.completed_at || (finalRow && finalRow.revealedAt) || null,
-        champion: { id: t.champion_marble_id, name: t.champion_name },
+        champion: { id: t.champion_marble_id, name: nameFor(t.champion_marble_id), nameAtTheTime: nameThen(t.champion_marble_id, t.champion_name) },
         path,
         final: finalStmt.all(t.id).map((x) => ({
           rank: x.rank,
           marbleId: x.marble_id,
-          marbleName: x.marble_name,
+          marbleName: nameFor(x.marble_id),
+          marbleNameAtTheTime: nameThen(x.marble_id, x.marble_name),
           lane: x.lane,
           color: x.color,
           timeSec: x.time_sec,
@@ -365,9 +380,9 @@ class DB {
     let streak = null; // longest run of consecutive tournaments by one marble
     let run = null;
     for (const c of champs) {
+      c.name = nameFor(c.id_m); // one canonical name per id, whatever the row said then
       const e = titles.get(c.id_m) || { id: c.id_m, name: c.name, titles: 0, lastTournamentId: null };
       e.titles++;
-      e.name = c.name; // most recent name
       e.lastTournamentId = c.id;
       titles.set(c.id_m, e);
       if (run && run.id === c.id_m) run.len++;
@@ -398,14 +413,15 @@ class DB {
          JOIN races r ON r.id = res.race_id
          ORDER BY r.tournament_id, r.round_idx, r.index_in_round, res.rank`
       )
-      .all();
+      .all()
+      .map((r) => ({ ...r, marble_name: nameFor(r.marble_id), marble_name_at_the_time: nameThen(r.marble_id, r.marble_name) }));
   }
 
   // Aggregate per-marble leaderboard across all history.
   exportMarbleStats() {
     return this.db
       .prepare(
-        `SELECT res.marble_id, res.marble_name,
+        `SELECT res.marble_id,
                 COUNT(*) AS races,
                 SUM(CASE WHEN res.rank = 1 THEN 1 ELSE 0 END) AS heat_wins,
                 SUM(CASE WHEN res.rank <= 3 THEN 1 ELSE 0 END) AS podiums,
@@ -413,10 +429,11 @@ class DB {
                 (SELECT COUNT(*) FROM tournaments t
                    WHERE t.status='complete' AND t.champion_marble_id = res.marble_id) AS titles
          FROM results res
-         GROUP BY res.marble_id, res.marble_name
+         GROUP BY res.marble_id
          ORDER BY titles DESC, heat_wins DESC, podiums DESC, races DESC`
       )
-      .all();
+      .all()
+      .map((r) => ({ marble_id: r.marble_id, marble_name: nameFor(r.marble_id), ...r }));
   }
 
   // Wipe ALL history. Order respects the implicit result->race->tournament
@@ -478,7 +495,8 @@ class DB {
       results: resStmt.all(r.id).map((x) => ({
         rank: x.rank,
         marbleId: x.marble_id,
-        marbleName: x.marble_name,
+        marbleName: nameFor(x.marble_id),
+        marbleNameAtTheTime: nameThen(x.marble_id, x.marble_name),
         lane: x.lane,
         color: x.color,
         timeSec: x.time_sec,

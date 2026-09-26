@@ -397,6 +397,8 @@ body.hero-open .prerace { display: none; }
 .round-sel { display: flex; gap: 4px; margin-bottom: 10px; }
 .round-sel button { flex: 1; min-height: 36px; border-radius: var(--radius-s); border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font-weight: 700; font-size: 0.75rem; cursor: pointer; }
 .round-sel button[aria-pressed='true'] { color: var(--gold); border-color: var(--gold); }
+.round-sel button i { font-style: normal; font-size: 0.625rem; font-weight: 800; color: var(--live); margin-left: 5px; vertical-align: 1px; }
+.round-sel button i::before { content: '●'; margin-right: 3px; }
 .round-sel button:hover { background: var(--panel-3); }
 .dr-details summary { cursor: pointer; font-size: 0.8125rem; font-weight: 700; color: var(--muted); padding: 10px 4px; min-height: 40px; display: flex; align-items: center; }
 .dr-details summary:hover { color: var(--text); }
@@ -406,6 +408,25 @@ body.hero-open .prerace { display: none; }
 .rr.current { border-color: rgba(53, 208, 127, 0.5); }
 .rr.mine { border-color: rgba(255, 207, 92, 0.5); }
 .rr.tbd { opacity: 0.6; }
+.rr.champ { border-color: var(--gold); }
+/* Upcoming races expand to their five competitors. */
+.rr-x { border-radius: var(--radius-s); background: var(--panel-2); border: 1px solid transparent; }
+.rr-x.current { border-color: rgba(53, 208, 127, 0.5); }
+.rr-x.mine { border-color: rgba(255, 207, 92, 0.5); }
+.rr-x > summary.rr { cursor: pointer; list-style: none; border: 0; background: none; }
+.rr-x > summary.rr::-webkit-details-marker { display: none; }
+.rr-x > summary.rr .rr-l::before { content: '▸'; color: var(--muted); margin-right: 6px; display: inline-block; transition: transform 0.15s; }
+.rr-x[open] > summary.rr .rr-l::before { transform: rotate(90deg); }
+.rr-x > summary.rr:hover { background: var(--panel-3); border-radius: var(--radius-s); }
+.rr-body { display: flex; flex-wrap: wrap; gap: 5px; padding: 2px 8px 10px; }
+.mrow.compact { min-height: 40px; grid-template-columns: 0 auto minmax(0, 1fr) auto; gap: 0 8px; }
+.mrow.out .mrow-name { color: var(--muted); }
+.mrow-status.gold { color: var(--gold); }
+.dr-details.field > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dr-details.field > summary b { color: var(--text); }
+.dr-details.field .dr-link { color: var(--gold); font-weight: 700; font-size: 0.75rem; }
+.dr-details.field[open] .dr-link { display: none; }
+.dr-details.field .seg { margin: 4px 0 10px; }
 .rr-l { font-size: 0.6875rem; font-weight: 800; color: var(--muted); }
 .rr-w { display: flex; align-items: center; gap: 6px; min-width: 0; font-weight: 700; }
 .rr-w span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -442,11 +463,14 @@ body.hero-open .prerace { display: none; }
 .bd-champ.has { border-color: var(--gold); color: var(--gold); }
 .bd-champ:not(.has) { color: var(--muted); }
 
+/* No 3D: the stage's fallback list is the standings view — the board stays off. */
+body.no3d .race-board { display: none !important; }
+
 /* ---------- bottom bar: your marble + view controls ---------- */
 .bottom-bar { position: fixed; left: max(12px, var(--safe-l)); right: max(12px, var(--safe-r)); bottom: calc(12px + var(--safe-b)); z-index: 41; display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; pointer-events: none; }
 .bottom-bar > * { pointer-events: auto; }
 .my-marble { min-width: 0; }
-.mm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: 'ball info change' 'ball cam change'; align-items: center; column-gap: 10px; row-gap: 6px; width: min(400px, 100%); min-height: 60px; padding: 8px 10px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.mm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: 'ball info change' 'ball cam change'; align-items: center; column-gap: 10px; row-gap: 6px; width: min(440px, 100%); min-height: 60px; padding: 8px 10px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
 .mm.cta { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'info act'; }
 .mm-ballbtn { grid-area: ball; }
 .mm-info { grid-area: info; }
@@ -464,7 +488,9 @@ a.mrow:hover { background: var(--panel-3); }
 .mm-k { font-size: 0.6875rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .mm-name { font-size: 0.9375rem; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mm-name small { color: var(--muted); font-weight: 700; margin-right: 4px; }
-.mm-line { font-size: 0.75rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The status line may run to two lines ("Races in Qualifier 15 · Current
+   race: 6") rather than truncating the useful half. */
+.mm-line { font-size: 0.75rem; color: var(--text); line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .mm-line.muted { color: var(--muted); }
 .mm-cam { display: inline-flex; min-width: 0; overflow: hidden; text-overflow: ellipsis; align-items: center; gap: 6px; min-height: 32px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font-size: 0.6875rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .mm-cam[aria-pressed='true'] { color: var(--gold); border-color: var(--gold); }

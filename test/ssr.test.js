@@ -24,8 +24,11 @@ check('gallery: 100 marble cards with names + careers in the initial HTML', () =
   const html = renderGallery(read('gallery.html'), {
     careers: [{ id: 42, races: 30, wins: 9, podiums: 15, titles: 2 }],
     manifest: { 7: { owner: 'Bryan' } },
+    hof: { currentChampion: { id: 42, name: 'Royal Flush', tournamentId: 3 } },
   });
-  assert.strictEqual((html.match(/class="card( claimed)?" role="listitem"/g) || []).length, 100);
+  assert.strictEqual((html.match(/class="card( claimed)? reigning"/g) || []).length, 1, 'only the reigning champion gets the gold mark');
+  assert.ok(html.includes('Reigning champion'));
+  assert.strictEqual((html.match(/class="card( claimed)?( reigning)?" role="listitem"/g) || []).length, 100);
   assert.ok(html.includes('Royal Flush')); // #42's permanent name
   assert.ok(html.includes('<b>9</b> wins · 30 races')); // concise career line on the card
   assert.ok(html.includes('🏆 2 titles')); // one trophy + a count, never a string of trophies
@@ -44,7 +47,7 @@ check('champions: empty history renders honest empty states, not "Loading"', () 
 check('champions: history renders holder, tiles, title table and timeline', () => {
   const history = [{
     tournamentId: 3, masterSeed: 424242, createdAt: 1, completedAt: 1700000000000,
-    champion: { id: 73, name: 'Molder' },
+    champion: { id: 73, name: 'Molder', nameAtTheTime: 'Frosty Drifter' },
     path: [
       { raceKey: 'heats:5', roundKey: 'heats', indexInRound: 5, rank: 1, timeSec: 41.2 },
       { raceKey: 'semis:1', roundKey: 'semis', indexInRound: 1, rank: 2, timeSec: 37.5 },
@@ -62,6 +65,8 @@ check('champions: history renders holder, tiles, title table and timeline', () =
   assert.ok(html.includes('1 title'));
   assert.ok(!html.includes('🏆🏆'), 'title counts use one trophy plus a number');
   assert.ok(html.includes('<summary>Road to the title</summary>'), 'race paths and seeds are collapsed until requested');
+  assert.ok(html.includes('then “Frosty Drifter”'), 'a historical name is labelled as the name at the time');
+  assert.ok(!/Frosty Drifter<\/a>/.test(html), 'the current name is what links and headings show');
   assert.ok(!html.includes('30.6s'), 'no finish times in results views');
   assert.ok(!html.includes('<!--SSR:'), 'no anchors left behind');
 });

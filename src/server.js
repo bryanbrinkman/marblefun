@@ -389,7 +389,7 @@ async function main() {
     try {
       const html = fs.readFileSync(path.join(PUBLIC_DIR, file), 'utf8');
       if (file === 'gallery.html') {
-        return ssr.renderGallery(html, { careers: db ? db.marbleCareers() : [], manifest: readManifest() });
+        return ssr.renderGallery(html, { careers: db ? db.marbleCareers() : [], manifest: readManifest(), hof: db ? db.hallOfFame() : null });
       }
       if (file === 'champions.html') {
         return ssr.renderChampions(html, {

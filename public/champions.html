@@ -114,6 +114,7 @@
   .champ .name:hover { color: var(--accent); }
   .champ .name small { color: var(--accent); margin-right: 8px; }
   .champ .when { color: var(--muted); font-size: 12px; font-weight: 700; }
+  .champ .badge.then { color: var(--muted); background: var(--panel2); border-color: var(--line); text-transform: none; font-weight: 700; }
   .champ .badge { font-size: 11px; font-weight: 800; letter-spacing: 0.02em; padding: 3px 8px; border-radius: 999px; background: rgba(255, 207, 92, 0.14); border: 1px solid rgba(255, 207, 92, 0.4); color: var(--accent); }
   .road { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .step { display: flex; flex-direction: column; min-width: 86px; padding: 7px 10px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); }
@@ -225,7 +226,7 @@
     h.innerHTML =
       `<span class="ball" style="${ballStyle(cur.id, color)}"></span>` +
       `<span><span class="hk">🏆 Reigning champion</span>` +
-      `<div class="hn"><small>#${pad(cur.id)}</small>${esc(cur.name)}</div>` +
+      `<div class="hn"><small>#${pad(cur.id)}</small>${esc(nameFor(cur.id))}</div>` +
       `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''}${titles > 1 ? ` · ${titles}× champion` : ''}</div></span>`;
   }
 
@@ -236,8 +237,8 @@
     const tiles = [
       { b: hof.tournamentsCompleted, i: 'Tournaments', s: `${hof.racesRun} races run` },
       { b: hof.distinctChampions, i: 'Different champions', s: hof.repeatChampions.length ? `${hof.repeatChampions.length} repeat winner${hof.repeatChampions.length > 1 ? 's' : ''}` : 'no repeat winners yet' },
-      { b: top ? `${top.titles}×` : '—', i: 'Most titles', s: top ? `#${pad(top.id)} ${esc(top.name)}` : 'nobody yet', gold: true },
-      { b: hof.longestStreak ? `${hof.longestStreak.len}` : '1', i: 'Longest streak', s: hof.longestStreak ? `#${pad(hof.longestStreak.id)} ${esc(hof.longestStreak.name)} back-to-back` : 'no back-to-back champions yet' },
+      { b: top ? `${top.titles}×` : '—', i: 'Most titles', s: top ? `#${pad(top.id)} ${esc(nameFor(top.id))}` : 'nobody yet', gold: true },
+      { b: hof.longestStreak ? `${hof.longestStreak.len}` : '1', i: 'Longest streak', s: hof.longestStreak ? `#${pad(hof.longestStreak.id)} ${esc(nameFor(hof.longestStreak.id))} back-to-back` : 'no back-to-back champions yet' },
     ];
     t.innerHTML = tiles.map((x) => `<div class="tile"><b class="${x.gold ? 'gold' : ''}">${x.b}</b><i>${x.i}</i><small>${x.s}</small></div>`).join('');
   }
@@ -250,7 +251,7 @@
       .map((m, i) =>
         `<a class="trow" href="/gallery#${m.id}"><span class="rk">${i + 1}</span>` +
         `<span class="ball" style="${ballStyle(m.id)}"></span>` +
-        `<span class="nm"><small>#${pad(m.id)}</small>${esc(m.name)}</span>` +
+        `<span class="nm"><small>#${pad(m.id)}</small>${esc(nameFor(m.id))}</span>` +
         `<span class="tt"><span class="cups" aria-hidden="true">🏆</span>${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
       )
       .join('');
@@ -277,14 +278,15 @@
           .map((p) => `<span class="step${p.roundKey === 'semis' && p.rank === 2 ? ' wild' : ''}"><i>${roundLabel(p)}</i><b>${p.rank ? ordinal(p.rank) : '—'}</b><small>${p.timeSec == null ? 'DNF' : ''}</small></span>`)
           .join('<span class="arrow" aria-hidden="true">›</span>');
         const finalRows = (t.final || [])
-          .map((f) => `<div class="frow${f.rank === 1 ? ' win' : ''}"><span class="pos">${f.rank}</span><span class="sw" style="background:${esc(f.color)}"></span><a href="/gallery#${f.marbleId}">#${pad(f.marbleId)} ${esc(f.marbleName)}</a><span class="t">${f.timeSec == null ? 'DNF' : ''}</span></div>`)
+          .map((f) => `<div class="frow${f.rank === 1 ? ' win' : ''}"><span class="pos">${f.rank}</span><span class="sw" style="background:${esc(f.color)}"></span><a href="/gallery#${f.marbleId}">#${pad(f.marbleId)} ${esc(nameFor(f.marbleId))}</a><span class="t">${f.timeSec == null ? 'DNF' : ''}</span></div>`)
           .join('');
         return (
           `<article class="champ">` +
           `<div class="left"><span class="ball" style="${ballStyle(t.champion.id, color)}"></span><div class="tid">TOURNAMENT<b>${t.tournamentId}</b></div></div>` +
           `<div>` +
-          `<div class="head"><a class="name" href="/gallery#${t.champion.id}"><small>#${pad(t.champion.id)}</small>${esc(t.champion.name)}</a>` +
+          `<div class="head"><a class="name" href="/gallery#${t.champion.id}"><small>#${pad(t.champion.id)}</small>${esc(nameFor(t.champion.id))}</a>` +
           (t._nth > 1 ? `<span class="badge">${ordinal(t._nth).toUpperCase()} TITLE</span>` : '') +
+          (t.champion.nameAtTheTime ? `<span class="badge then" title="The name this marble raced under at the time">then “${esc(t.champion.nameAtTheTime)}”</span>` : '') +
           (isWild ? `<span class="badge">WILDCARD RUN</span>` : '') +
           `<span class="when">${fmtDate(t.completedAt)}</span></div>` +
           `<details class="more"><summary>Road to the title</summary>` +

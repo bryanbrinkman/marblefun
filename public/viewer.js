@@ -271,6 +271,13 @@ function nextRoundName(race) {
   if (race.roundKey === 'semis') return 'the final';
   return '';
 }
+// Compact labels for the card and schedule lines ("Qualifier 15").
+function raceShort(race) {
+  if (!race) return '';
+  if (race.roundKey === 'final') return 'The Final';
+  if (race.roundKey === 'semis') return `Semifinal ${race.indexInRound + 1}`;
+  return `Qualifier ${race.indexInRound + 1}`;
+}
 function roundTitle(key) {
   return key === 'heats' ? 'Qualifying' : key === 'semis' ? 'Semifinals' : key === 'final' ? 'Final' : 'Champion';
 }
@@ -386,7 +393,10 @@ function trackTick() {
       _lastProg = prog;
       updateMyLive(onStage, prog);
       watchLeadChanges(prog);
-      renderRaceBoard(onStage, prog);
+      // One standings view at a time: with no 3D the stage's own list shows
+      // the race, so the top-left board stays off until the renderer is back.
+      if (rendererState === 'failed') hideRaceBoard();
+      else renderRaceBoard(onStage, prog);
       renderDrawerLive(onStage, prog);
     }
   } else {
@@ -617,6 +627,10 @@ function myStatus() {
   const road = roadFor(id);
   const last = road[road.length - 1] || null;
   const inRound = (key) => model.rounds.some((r) => r.key === key && r.races.some((x) => x.roster && x.roster.some((s) => s.marbleId === id)));
+  // Its next race with no result yet (the draw is known for every race in a
+  // built round), and the race running / announced right now.
+  const sched = orderedRaces().find((r) => !r.result && r.roster && r.roster.some((s) => s.marbleId === id)) || null;
+  const curInfo = (r) => (r ? { short: raceShort(r), roundKey: r.roundKey, number: r.indexInRound + 1 } : null);
   return UI.yourMarbleStatus({
     standing: st ? st.status : null,
     racingNow,
@@ -624,6 +638,8 @@ function myStatus() {
     finished: racingNow && _myLive ? _myLive.finished : false,
     upNext,
     nextLabel: nxt ? raceLabel(nxt) : '',
+    scheduled: curInfo(sched),
+    current: curInfo(cur && !cur.result ? cur : null),
     lastResult: last ? { roundKey: last.race.roundKey, rank: last.rank, label: raceLabel(last.race), dnf: last.timeSec == null } : null,
     drawnIn: { semis: inRound('semis'), final: inRound('final') },
     finalDrawn: model.rounds.some((r) => r.key === 'final'),
@@ -644,12 +660,12 @@ function renderMyMarble() {
   }
   const st = followedStanding();
   const s = model.standings.length ? myStatus() : { key: 'waiting', tag: 'Loading', line: 'Loading its status…' };
-  const tagCls = s.key === 'racing' ? 'live' : s.key === 'out' ? 'out' : s.key === 'champion' || s.key === 'advanced' ? 'gold' : s.key === 'next' ? 'info' : '';
+  const tagCls = s.key === 'racing' ? 'live' : s.key === 'out' ? 'out' : s.key === 'champion' || s.key === 'advanced' || s.key === 'finalist' ? 'gold' : s.key === 'next' ? 'info' : '';
   const career = careerLine(followId);
   const no3d = rendererState === 'failed';
   // Only the words change while a race runs (placement, tag): patch them in
   // place so the card's buttons never vanish under a finger or a focus ring.
-  const key = [followId, s.key, no3d, st ? st.name : ''].join('|');
+  const key = [followId, s.key, no3d, st ? st.name : '', skinImgUrl(followId) || ''].join('|');
   if (wrap.dataset.key === key && wrap.querySelector('.mm-line')) {
     const line = wrap.querySelector('.mm-line');
     if (line.textContent !== s.line) { line.textContent = s.line; line.title = career; }
@@ -2041,7 +2057,7 @@ function openDrawer(tab) {
   const d = el('tourDrawer');
   if (!d) return;
   if (tab) drawerTab = tab;
-  if (!drawerOpen) _drawerOpener = document.activeElement;
+  if (!drawerOpen) { _drawerOpener = document.activeElement; _bracketFocused = false; }
   drawerOpen = true;
   d.hidden = false;
   document.body.classList.add('drawer-open');
@@ -2066,15 +2082,22 @@ function setDrawerTab(tab) {
 }
 function renderDrawer() {
   if (!drawerOpen) return;
+  const d = el('tourDrawer');
   el('drawerSub').textContent = (model.tournamentId != null && mode === 'server' ? `Tournament ${model.tournamentId} · ` : '') + topLabel();
   for (const b of document.querySelectorAll('.dr-tab')) {
     const on = b.dataset.tab === drawerTab;
     b.setAttribute('aria-selected', on ? 'true' : 'false');
     el('panel' + b.dataset.tab.charAt(0).toUpperCase() + b.dataset.tab.slice(1)).hidden = !on;
   }
+  // Live updates re-render the panel; the reader's scroll position and any
+  // open disclosures survive it.
+  const body = d && d.querySelector('.dr-body');
+  const keepTop = body ? body.scrollTop : 0;
   if (drawerTab === 'race') renderRacePanel();
   else if (drawerTab === 'bracket') renderBracketPanel();
   else renderHistoryPanel();
+  if (body) body.scrollTop = keepTop;
+  if (drawerTab === 'bracket') focusCurrentRaceOnce();
 }
 
 // A competitor row: position | avatar | number + name | status.
@@ -2144,22 +2167,35 @@ function renderRacePanel() {
     if (nxt)
       html += `<section class="dr-sec"><h3 class="dr-h"><b>After this</b><small>${esc(raceLabel(nxt))}</small></h3><div class="chips">${nxt.roster.map((s) => `<span class="chip${s.marbleId === followId ? ' mine' : ''}">${swatchHtml(s.marbleId, s.color)}#${numOf(s.marbleId)} ${esc(s.marbleName)}</span>`).join('')}</div></section>`;
   }
-  // Still competing, compactly; the whole field on demand.
+  // Still competing: a compact disclosure, collapsed by default — names and
+  // artwork when opened, with an "All competitors" filter for the ones out.
   if (model.standings.length) {
     const alive = model.standings.filter((m) => m.status === 'alive' || m.status === 'champion');
-    const line = UI.remainingLine({ standings: model.standings, champion: model.champion, activeRound: activeRound() });
-    const chips = alive.length <= 24
-      ? alive.map((m) => `<span class="chip${m.id === followId ? ' mine' : ''}">${swatchHtml(m.id, marbleColor(m.id))}#${numOf(m.id)} ${esc(m.name)}</span>`).join('')
-      : alive.map((m) => `<span class="chip${m.id === followId ? ' mine' : ''}" title="${esc(m.name)}">#${numOf(m.id)}</span>`).join('');
-    html += `<section class="dr-sec"><h3 class="dr-h"><b>Still competing</b><small>${esc(line)}</small></h3><div class="chips">${chips}</div>` +
-      `<details class="dr-details" id="fieldAll"${_fieldOpen ? ' open' : ''}><summary>View all competitors</summary><div class="field-grid">${model.standings
-        .map((m) => `<span class="fg ${m.status}${m.id === followId ? ' mine' : ''}" title="${esc(m.name)} — ${m.status === 'alive' ? 'still in' : m.status === 'champion' ? 'champion' : 'out'}">${numOf(m.id)} <span>${esc(m.name)}</span></span>`)
-        .join('')}</div><p class="dr-empty">Struck through = out this tournament. Everyone returns next tournament.</p></details></section>`;
+    const list = _fieldFilter === 'all' ? model.standings : alive;
+    const rows = list
+      .map((m) => {
+        const out = m.status === 'eliminated';
+        const status = out ? 'Out this tournament' : m.status === 'champion' ? 'Champion' : '';
+        return `<div class="mrow compact${m.id === followId ? ' mine' : ''}${out ? ' out' : ''}"><span></span>${swatchHtml(m.id, marbleColor(m.id), 'sw lg')}` +
+          `<span class="mrow-name"><small>#${numOf(m.id)}</small>${esc(m.name)}${m.id === followId ? '<span class="you">you</span>' : ''}</span>` +
+          `<span class="mrow-status${out ? ' out' : m.status === 'champion' ? ' gold' : ''}">${status}</span></div>`;
+      })
+      .join('');
+    const n = model.champion ? 1 : alive.length;
+    html += `<section class="dr-sec"><details class="dr-details field" id="fieldAll"${_fieldOpen ? ' open' : ''}>` +
+      `<summary><b>${n} still competing</b><span class="sr-only"> — </span><span class="dr-link">View competitors</span></summary>` +
+      `<div class="seg" role="group" aria-label="Show"><button class="seg-btn" data-field="alive" aria-pressed="${_fieldFilter === 'alive' ? 'true' : 'false'}">Still competing</button><button class="seg-btn" data-field="all" aria-pressed="${_fieldFilter === 'all' ? 'true' : 'false'}">All competitors</button></div>` +
+      `<div class="row-list">${rows || '<p class="dr-empty">Nobody is left in.</p>'}</div>` +
+      `<p class="dr-empty">Marbles marked out return next tournament.</p></details></section>`;
   }
   p.innerHTML = html;
   const fa = el('fieldAll');
-  if (fa) fa.addEventListener('toggle', () => { _fieldOpen = fa.open; });
+  if (fa) {
+    fa.addEventListener('toggle', () => { _fieldOpen = fa.open; });
+    fa.querySelectorAll('[data-field]').forEach((b) => b.addEventListener('click', () => { _fieldFilter = b.dataset.field; renderDrawer(); }));
+  }
 }
+let _fieldFilter = 'alive';
 function renderDrawerCountdown() {
   const c = el('drCountdown');
   if (c) c.textContent = stateView().primary;
@@ -2182,31 +2218,36 @@ function renderBracketPanel() {
   const active = activeRound();
   const sel = bracketRound || (active === 'champion' || active == null ? (active == null ? 'heats' : 'final') : active);
   const byKey = (k) => model.rounds.find((r) => r.key === k);
+  // Completed races stay compact (winner artwork + name); upcoming races
+  // expand to the five competitors with artwork; the live / next race is
+  // marked, and the favorite's race is highlighted.
   const row = (race, label) => {
-    if (!race) return `<div class="rr tbd"><span class="rr-l">${label}</span><span class="rr-w muted">To be decided</span></div>`;
+    if (!race) return `<div class="rr tbd"><span class="rr-l">${label}</span><span class="rr-w muted">To be decided</span><span></span></div>`;
     const cur = race.key === model.currentKey && !race.result;
     const w = race.result && race.result[0];
     const mine = followId != null && race.roster && race.roster.some((s) => s.marbleId === followId);
-    return (
-      `<div class="rr${cur ? ' current' : ''}${mine ? ' mine' : ''}">` +
-      `<span class="rr-l">${label}</span>` +
-      (w
-        ? `<span class="rr-w">${swatchHtml(w.marbleId, w.color)}<span>#${numOf(w.marbleId)} ${esc(w.marbleName)}</span><small>won</small></span>`
-        : `<span class="rr-w muted"><span>${cur ? (startedRaces.has(race.key) ? 'Live now' : 'Up next') : race.roster.map((s) => '#' + numOf(s.marbleId)).join(' · ')}</span></span>`) +
-      (mine ? '<span class="tag gold">you</span>' : '<span></span>') +
-      `</div>`
-    );
+    const you = mine ? '<span class="tag gold">you</span>' : '<span></span>';
+    if (w) {
+      return `<div class="rr done${mine ? ' mine' : ''}" data-race="${race.key}"><span class="rr-l">${label}</span>` +
+        `<span class="rr-w">${swatchHtml(w.marbleId, w.color)}<span>#${numOf(w.marbleId)} ${esc(w.marbleName)}</span><small>won</small></span>${you}</div>`;
+    }
+    const state = cur ? (startedRaces.has(race.key) ? '<span class="tag live">Live now</span>' : '<span class="tag info">Up next</span>') : '';
+    const open = _openRaces.has(race.key);
+    return `<details class="rr-x${cur ? ' current' : ''}${mine ? ' mine' : ''}" data-race="${race.key}"${open ? ' open' : ''}>` +
+      `<summary class="rr"><span class="rr-l">${label}</span><span class="rr-w muted"><span>${state || `${race.roster.length} marbles`}</span></span>${you}</summary>` +
+      `<div class="rr-body">${race.roster.map((s) => `<span class="chip${s.marbleId === followId ? ' mine' : ''}">${swatchHtml(s.marbleId, s.color)}#${numOf(s.marbleId)} ${esc(s.marbleName)}</span>`).join('')}</div></details>`;
   };
+  // One round navigator: the selected view (pressed) is distinct from the
+  // round being raced right now (the "now" mark).
   let html = `<div class="round-sel" role="group" aria-label="Round">` +
-    ['heats', 'semis', 'final'].map((k) => `<button data-round="${k}" aria-pressed="${sel === k ? 'true' : 'false'}">${roundTitle(k)}${k === sel && active === k ? ' · now' : ''}</button>`).join('') + `</div>`;
-  html += `<div class="stages" style="justify-content:flex-start;margin:0 0 12px">${stagesHtml(true)}</div>`;
+    ['heats', 'semis', 'final'].map((k) => `<button data-round="${k}" aria-pressed="${sel === k ? 'true' : 'false'}"${active === k ? ' class="now"' : ''}>${roundTitle(k)}${active === k ? '<i>now</i>' : ''}</button>`).join('') + `</div>`;
   if (sel === 'final') {
     html += `<div class="race-rows">` +
-      `<div class="rr${model.champion ? '' : ' tbd'}"><span class="rr-l">Champion</span><span class="rr-w">${model.champion ? `${swatchHtml(model.champion.id, marbleColor(model.champion.id))}<span>#${numOf(model.champion.id)} ${esc(model.champion.name)}</span>` : '<span class="muted">To be decided</span>'}</span><span></span></div>` +
+      `<div class="rr${model.champion ? ' champ' : ' tbd'}"><span class="rr-l">Champion</span><span class="rr-w">${model.champion ? `${swatchHtml(model.champion.id, marbleColor(model.champion.id))}<span>#${numOf(model.champion.id)} ${esc(model.champion.name)}</span>` : '<span class="muted">To be decided</span>'}</span><span>${model.champion ? '<span class="tag gold">🏆</span>' : ''}</span></div>` +
       row(byKey('final') ? byKey('final').races[0] : null, 'Final') + `</div>` +
-      `<p class="dr-empty">${esc(UI.STAGE_RULES.final)}</p>`;
+      `<p class="dr-empty">${esc(UI.STAGE_RULES.final)} The five finalists are the four semifinal winners plus the fastest runner-up across the four semifinals (the wildcard).</p>`;
     const fr = byKey('final');
-    if (fr && fr.wildcard != null) html += `<p class="dr-empty">Wildcard: #${numOf(fr.wildcard)} ${esc(marbleNameOf(fr.wildcard))} — the fastest runner-up across the four semifinals.</p>`;
+    if (fr && fr.wildcard != null) html += `<p class="dr-empty">Wildcard this tournament: #${numOf(fr.wildcard)} ${esc(marbleNameOf(fr.wildcard))}.</p>`;
   } else if (sel === 'semis') {
     const semis = byKey('semis');
     html += `<div class="race-rows">${[0, 1, 2, 3].map((i) => row(semis ? semis.races[i] : null, 'Semi ' + (i + 1))).join('')}</div>` +
@@ -2218,11 +2259,26 @@ function renderBracketPanel() {
   }
   html += `<details class="dr-details" id="fullBracket"><summary>Full bracket</summary><div id="bracketTree"></div></details>`;
   p.innerHTML = html;
+  p.querySelectorAll('.rr-x').forEach((d) => d.addEventListener('toggle', () => { if (d.open) _openRaces.add(d.dataset.race); else _openRaces.delete(d.dataset.race); }));
   const det = el('fullBracket');
   if (det) {
     det.addEventListener('toggle', () => { _fullBracketOpen = det.open; if (det.open) renderBracketTree(); });
     if (_fullBracketOpen) { det.open = true; renderBracketTree(); }
   }
+}
+const _openRaces = new Set();
+// Bring the current race into view the first time the bracket is shown for
+// this opening of the drawer — and never again while it stays open, so live
+// updates don't yank the reader's scroll position.
+let _bracketFocused = false;
+function focusCurrentRaceOnce() {
+  if (_bracketFocused) return;
+  const cur = currentRace();
+  if (!cur) return;
+  const rowEl = el('panelBracket') && el('panelBracket').querySelector(`[data-race="${cur.key}"]`);
+  if (!rowEl) return;
+  _bracketFocused = true;
+  try { rowEl.scrollIntoView({ block: 'center' }); } catch {}
 }
 let _fullBracketOpen = false;
 let _fieldOpen = false;
@@ -2307,7 +2363,7 @@ function renderHistoryPanel() {
     html += `<div class="row-list">` + c.rows.slice(0, 6).map((row) => {
       const when = row.completed_at || row.created_at ? new Date(row.completed_at || row.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
       return `<a class="mrow" href="/gallery#${row.champion_marble_id}"><span class="mrow-pos">🏆</span>${swatchHtml(row.champion_marble_id, marbleColor(row.champion_marble_id), 'sw lg')}` +
-        `<span class="mrow-name"><small>#${numOf(row.champion_marble_id)}</small>${esc(row.champion_name)}</span><span class="mrow-status">T${row.tournament_id}${when ? ' · ' + when : ''}</span></a>`;
+        `<span class="mrow-name"><small>#${numOf(row.champion_marble_id)}</small>${esc(marbleNameOf(row.champion_marble_id))}</span><span class="mrow-status">T${row.tournament_id}${when ? ' · ' + when : ''}</span></a>`;
     }).join('') + `</div>`;
     if (c.state === 'error') html += `<p class="dr-empty err">Couldn't refresh — showing the last list loaded.</p>`;
   }
@@ -2322,7 +2378,7 @@ let _historyAll = false;
       const tab = e.target.closest('.dr-tab');
       if (tab) { setDrawerTab(tab.dataset.tab); return; }
       const rb = e.target.closest('[data-round]');
-      if (rb) { bracketRound = rb.dataset.round; renderBracketPanel(); return; }
+      if (rb) { bracketRound = rb.dataset.round; _bracketFocused = true; renderDrawer(); return; }
       const rp = e.target.closest('[data-replay]');
       if (rp) { const r = model.racesByKey.get(rp.dataset.replay); if (r) startReplayOf(r); return; }
       if (e.target.closest('#histMore')) { _historyAll = !_historyAll; renderHistoryPanel(); return; }
@@ -2573,7 +2629,7 @@ function setRendererState(next) {
   el('ssLoading').hidden = next !== 'loading';
   el('ssFailed').hidden = next !== 'failed';
   document.body.classList.toggle('no3d', next === 'failed');
-  if (next === 'failed') announce('The 3D race could not load. Standings and results are still live.');
+  if (next === 'failed') { announce('The 3D race could not load. Standings and results are still live.'); hideRaceBoard(); }
   renderMyMarble();
   renderPreRace();
   renderStageFallback();

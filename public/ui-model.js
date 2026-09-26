@@ -62,7 +62,7 @@
 
   // ---- your marble ----------------------------------------------------------
   // One status for the persistent card, chosen from states the data can back:
-  //   champion | out | racing | next | advanced | waiting
+  //   champion | out | racing | next | finalist | advanced | waiting
   // Input (all plain values, computed by the viewer from its model):
   //   standing     'alive' | 'eliminated' | 'champion' | null (unknown)
   //   racingNow    the marble is in the race on the stage right now
@@ -70,10 +70,13 @@
   //   finished     it has crossed the line in that live race
   //   upNext       it is in the announced/next race (not started)
   //   nextLabel    label of that race ("Semifinal 2 of 4")
+  //   scheduled    { short, roundKey } — its next race with no result yet
+  //                (e.g. "Qualifier 15"), when the draw is known, else null
+  //   current      { short, roundKey, number } — the race running / announced
+  //                now, if any (e.g. "Qualifier 6"), else null
   //   lastResult   { roundKey, rank, label, dnf } of the last race it ran, or null
   //   drawnIn      { semis, final } — rounds it has already been drawn into
   //   finalDrawn   the final has been drawn (wildcard resolved)
-  //   remaining    marbles still in (number) or null
   function yourMarbleStatus(c) {
     const ord = ordinal;
     if (c.standing === 'champion') return { key: 'champion', tag: 'Champion', line: 'Tournament champion' };
@@ -89,18 +92,33 @@
       return { key: 'racing', tag: 'Racing now', line };
     }
     if (c.upNext) return { key: 'next', tag: 'Up next', line: c.nextLabel ? `Up next · ${c.nextLabel}` : 'In the next race' };
+    // "Current race: 6" when it's the same round as the scheduled race, else
+    // the other round's short label — never a countdown or an estimate.
+    const nowBit = (sched) => {
+      if (!c.current) return '';
+      const same = sched && c.current.roundKey === sched.roundKey && c.current.number != null;
+      return ` · Current race: ${same ? c.current.number : c.current.short}`;
+    };
     const lr = c.lastResult;
-    if (lr && lr.rank === 1) {
-      const to = lr.roundKey === 'heats' ? 'the semifinals' : lr.roundKey === 'semis' ? 'the final' : null;
-      if (to) return { key: 'advanced', tag: 'Advanced', line: `Won ${lr.label} · through to ${to}` };
+    if (c.drawnIn && c.drawnIn.final) {
+      return { key: 'finalist', tag: 'Finalist', line: `Races in the Final${c.current && c.current.roundKey !== 'final' ? nowBit(null) : ''}` };
+    }
+    if (c.scheduled && c.scheduled.roundKey === 'semis') {
+      return { key: 'advanced', tag: 'Advanced', line: `Races in ${c.scheduled.short}${nowBit(c.scheduled)}` };
+    }
+    if (lr && lr.rank === 1 && lr.roundKey === 'heats') {
+      return { key: 'advanced', tag: 'Advanced', line: `Won ${lr.label} · semifinal draw after all qualifiers${nowBit(null)}` };
+    }
+    if (lr && lr.rank === 1 && lr.roundKey === 'semis') {
+      return { key: 'advanced', tag: 'Advanced', line: `Won ${lr.label} · through to the final` };
     }
     if (lr && lr.roundKey === 'semis' && lr.rank === 2 && !c.finalDrawn) {
       return { key: 'waiting', tag: 'Waiting', line: `2nd in ${lr.label} · wildcard decided after all semifinals` };
     }
-    let where = 'its qualifying race';
-    if (c.drawnIn && c.drawnIn.final) where = 'the final';
-    else if (c.drawnIn && c.drawnIn.semis) where = 'its semifinal';
-    return { key: 'waiting', tag: 'Waiting', line: `Waiting for ${where}` };
+    if (c.scheduled) {
+      return { key: 'waiting', tag: 'Waiting', line: `Races in ${c.scheduled.short}${nowBit(c.scheduled)}` };
+    }
+    return { key: 'waiting', tag: 'Waiting', line: 'Waiting for its qualifying race' };
   }
 
   function ordinal(n) {

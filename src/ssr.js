@@ -66,8 +66,9 @@ function fill(html, anchor, content) {
 
 // ---- /gallery -----------------------------------------------------------------
 // careers: [{id, races, wins, podiums, titles}]; manifest: {id: {img, owner, ownerLink}}
-function renderGallery(html, { careers = [], manifest = {} } = {}) {
+function renderGallery(html, { careers = [], manifest = {}, hof = null } = {}) {
   const car = new Map(careers.map((c) => [c.id, c]));
+  const reigning = hof && hof.currentChampion ? Number(hof.currentChampion.id) : null;
   const cards = [];
   for (let id = 1; id <= 100; id++) {
     const c = car.get(id) || { races: 0, wins: 0, podiums: 0, titles: 0 };
@@ -76,12 +77,13 @@ function renderGallery(html, { careers = [], manifest = {} } = {}) {
     // Card = thumbnail, number, name, one-line career. Owner and the fuller
     // statistics live in the detail view (client-side).
     cards.push(
-      `<div class="card${owner ? ' claimed' : ''}" role="listitem" tabindex="0" data-id="${id}">` +
+      `<div class="card${owner ? ' claimed' : ''}${id === reigning ? ' reigning' : ''}" role="listitem" tabindex="0" data-id="${id}">` +
         `<div class="ball" style="${galleryBall(id, sk)}"></div>` +
         `<div class="m-num">#${pad(id)}</div>` +
         `<div class="m-name">${esc(nameFor(id))}</div>` +
         `<div class="m-stats">${c.races ? `<b>${c.wins}</b> ${c.wins === 1 ? 'win' : 'wins'} · ${c.races} ${c.races === 1 ? 'race' : 'races'}` : 'No races yet'}</div>` +
         (c.titles ? `<span class="m-titles">🏆 ${c.titles} ${c.titles === 1 ? 'title' : 'titles'}</span>` : '') +
+        (id === reigning ? '<span class="m-reign">Reigning champion</span>' : '') +
         `</div>`
     );
   }
@@ -111,7 +113,7 @@ function renderChampions(html, { history = [], hof = null, manifest = {} } = {})
     holder =
       `<span class="ball" style="${champBall(cur.id, color, manifest)}"></span>` +
       `<span><span class="hk">🏆 Reigning champion</span>` +
-      `<div class="hn"><small>#${pad(cur.id)}</small>${esc(cur.name)}</div>` +
+      `<div class="hn"><small>#${pad(cur.id)}</small>${esc(nameFor(cur.id))}</div>` +
       `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''}${titles > 1 ? ` · ${titles}× champion` : ''}</div></span>`;
     html = html.replace('<a class="holder none" id="holder" href="/champions"><!--SSR:HOLDER-->Loading the record books…<!--/SSR:HOLDER--></a>',
       `<a class="holder" id="holder" href="/gallery#${cur.id}">${holder}</a>`);
@@ -124,8 +126,8 @@ function renderChampions(html, { history = [], hof = null, manifest = {} } = {})
     const tiles = [
       { b: hof.tournamentsCompleted, i: 'Tournaments', s: `${hof.racesRun} races run` },
       { b: hof.distinctChampions, i: 'Different champions', s: rep ? `${rep} repeat winner${rep > 1 ? 's' : ''}` : 'no repeat winners yet' },
-      { b: top ? `${top.titles}×` : '—', i: 'Most titles', s: top ? `#${pad(top.id)} ${esc(top.name)}` : 'nobody yet', gold: true },
-      { b: hof.longestStreak ? `${hof.longestStreak.len}` : '1', i: 'Longest streak', s: hof.longestStreak ? `#${pad(hof.longestStreak.id)} ${esc(hof.longestStreak.name)} back-to-back` : 'no back-to-back champions yet' },
+      { b: top ? `${top.titles}×` : '—', i: 'Most titles', s: top ? `#${pad(top.id)} ${esc(nameFor(top.id))}` : 'nobody yet', gold: true },
+      { b: hof.longestStreak ? `${hof.longestStreak.len}` : '1', i: 'Longest streak', s: hof.longestStreak ? `#${pad(hof.longestStreak.id)} ${esc(nameFor(hof.longestStreak.id))} back-to-back` : 'no back-to-back champions yet' },
     ];
     html = fill(html, 'TILES', tiles.map((x) => `<div class="tile"><b class="${x.gold ? 'gold' : ''}">${x.b}</b><i>${x.i}</i><small>${x.s}</small></div>`).join(''));
   }
@@ -141,7 +143,7 @@ function renderChampions(html, { history = [], hof = null, manifest = {} } = {})
             (m, i) =>
               `<a class="trow" href="/gallery#${m.id}"><span class="rk">${i + 1}</span>` +
               `<span class="ball" style="${champBall(m.id, null, manifest)}"></span>` +
-              `<span class="nm"><small>#${pad(m.id)}</small>${esc(m.name)}</span>` +
+              `<span class="nm"><small>#${pad(m.id)}</small>${esc(nameFor(m.id))}</span>` +
               `<span class="tt"><span class="cups" aria-hidden="true">🏆</span>${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
           )
           .join('')
@@ -167,15 +169,16 @@ function renderChampions(html, { history = [], hof = null, manifest = {} } = {})
       .map((p) => `<span class="step${p.roundKey === 'semis' && p.rank === 2 ? ' wild' : ''}"><i>${roundLabel(p)}</i><b>${p.rank ? ordinal(p.rank) : '—'}</b><small>${p.timeSec == null ? 'DNF' : ''}</small></span>`)
       .join('<span class="arrow" aria-hidden="true">›</span>');
     const finalRows = (t.final || [])
-      .map((f) => `<div class="frow${f.rank === 1 ? ' win' : ''}"><span class="pos">${f.rank}</span><span class="sw" style="background:${esc(f.color)}"></span><a href="/gallery#${f.marbleId}">#${pad(f.marbleId)} ${esc(f.marbleName)}</a><span class="t">${f.timeSec == null ? 'DNF' : ''}</span></div>`)
+      .map((f) => `<div class="frow${f.rank === 1 ? ' win' : ''}"><span class="pos">${f.rank}</span><span class="sw" style="background:${esc(f.color)}"></span><a href="/gallery#${f.marbleId}">#${pad(f.marbleId)} ${esc(nameFor(f.marbleId))}</a><span class="t">${f.timeSec == null ? 'DNF' : ''}</span></div>`)
       .join('');
     const n = nthOf.get(t.tournamentId) || 1;
     return (
       `<article class="champ">` +
       `<div class="left"><span class="ball" style="${champBall(t.champion.id, color, manifest)}"></span><div class="tid">TOURNAMENT<b>${t.tournamentId}</b></div></div>` +
       `<div>` +
-      `<div class="head"><a class="name" href="/gallery#${t.champion.id}"><small>#${pad(t.champion.id)}</small>${esc(t.champion.name)}</a>` +
+      `<div class="head"><a class="name" href="/gallery#${t.champion.id}"><small>#${pad(t.champion.id)}</small>${esc(nameFor(t.champion.id))}</a>` +
       (n > 1 ? `<span class="badge">${ordinal(n).toUpperCase()} TITLE</span>` : '') +
+      (t.champion.nameAtTheTime ? `<span class="badge then" title="The name this marble raced under at the time">then “${esc(t.champion.nameAtTheTime)}”</span>` : '') +
       (isWild ? `<span class="badge">WILDCARD RUN</span>` : '') +
       `<span class="when">${fmtDate(t.completedAt)}</span></div>` +
       `<details class="more"><summary>Road to the title</summary>` +
