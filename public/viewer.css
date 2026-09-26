@@ -469,8 +469,10 @@ body.no3d .race-board { display: none !important; }
 /* ---------- bottom bar: your marble + view controls ---------- */
 .bottom-bar { position: fixed; left: max(12px, var(--safe-l)); right: max(12px, var(--safe-r)); bottom: calc(12px + var(--safe-b)); z-index: 41; display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; pointer-events: none; }
 .bottom-bar > * { pointer-events: auto; }
-.my-marble { min-width: 0; }
-.mm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: 'ball info change' 'ball cam change'; align-items: center; column-gap: 10px; row-gap: 6px; width: min(440px, 100%); min-height: 60px; padding: 8px 10px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
+/* The card takes whatever width the view controls leave (a definite width,
+   so its text knows where to wrap), capped on wide screens. */
+.my-marble { min-width: 0; flex: 1 1 auto; }
+.mm { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: 'ball info change' 'ball cam change'; align-items: center; column-gap: 10px; row-gap: 6px; width: 100%; max-width: 440px; min-height: 60px; padding: 8px 10px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
 .mm.cta { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'info act'; }
 .mm-ballbtn { grid-area: ball; }
 .mm-info { grid-area: info; }
@@ -569,7 +571,7 @@ body.drawer-open .bottom-bar { right: calc(min(420px, 100vw) + 12px); }
   .pk .sw { width: 48px; height: 48px; }
   /* Bottom bar: the card takes the width it needs, controls collapse to icons;
      the drawer is a full sheet, so the bar steps aside entirely. */
-  .mm { width: min(100%, calc(100vw - 180px)); min-height: 56px; padding: 6px 8px; column-gap: 8px; row-gap: 4px; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'ball info' 'acts acts'; }
+  .mm { max-width: none; min-height: 56px; padding: 6px 8px; column-gap: 8px; row-gap: 4px; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'ball info' 'acts acts'; }
   .mm-ball { width: 38px; height: 38px; }
   .mm-acts { display: flex; grid-area: acts; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
   .mm-cam { flex: 0 1 auto; }
@@ -585,11 +587,15 @@ body.drawer-open .bottom-bar { right: calc(min(420px, 100vw) + 12px); }
   .pr-card { width: 100%; }
   .stages { flex-wrap: wrap; }
 }
+@media (max-width: 480px) {
+  /* Narrow phones: the view controls stack in the corner so the card keeps
+     enough width for its label, tag and status copy. */
+  .viewbar { flex-direction: column; }
+}
 @media (max-width: 420px) {
   .brand-logo { height: 24px; }
   .race-title { font-size: 0.8125rem; }
   .rc-note { display: none; }
-  .mm { width: min(100%, calc(100vw - 120px)); }
   .mm-line { font-size: 0.6875rem; }
   .race-board { width: 150px; }
   .rb-name { display: none; }
