@@ -15,6 +15,7 @@
 // the untouched static file.
 
 const { Tournament } = require('./tournament');
+const UIModel = require('../public/ui-model.js');
 
 const esc = (s) =>
   String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -200,16 +201,29 @@ function renderHome(html, { snapshot = null, hof = null } = {}) {
   const races = snapshot.rounds.flatMap((r) => r.races);
   const done = races.filter((r) => r.result).length;
   const cur = snapshot.current && races.find((r) => r.key === snapshot.current.raceKey);
-  const race = (cur && !cur.result ? cur : races.find((r) => !r.result)) || null;
+  const announced = cur && !cur.result ? cur : null;
+  const race = announced || races.find((r) => !r.result) || null;
   const label = (r) =>
-    !r ? '' : r.roundKey === 'final' ? 'The Final' : r.roundKey === 'semis' ? `Semifinal ${r.indexInRound + 1} of 4` : `Qualifying · Race ${r.indexInRound + 1} of 20`;
+    r.roundKey === 'final' ? 'The Final' : r.roundKey === 'semis' ? `Semifinal ${r.indexInRound + 1} of 4` : `Qualifying · Race ${r.indexInRound + 1} of 20`;
+  const short = (r) => (r.roundKey === 'final' ? 'The Final' : r.roundKey === 'semis' ? `Semifinal ${r.indexInRound + 1}` : `Qualifier ${r.indexInRound + 1}`);
+  const desc = (r) => (r ? { label: label(r), short: short(r), ordinal: races.indexOf(r) + 1, roundKey: r.roundKey } : null);
+  const lastDone = races.filter((r) => r.result).pop() || null;
   const champ = snapshot.tournament && snapshot.tournament.champion;
-  const title = champ ? 'Tournament complete' : race ? label(race) : 'Tournament starting';
-  const shown = champ ? 25 : Math.min(25, done + (race ? 1 : 0));
+  // The same rule the viewer applies (UIModel.raceHeader), so the server-
+  // rendered header never disagrees with what the script paints over it.
+  const h = UIModel.raceHeader({
+    current: desc(announced),
+    next: announced ? null : desc(race),
+    last: done || cur ? desc(lastDone) : null,
+    champion: !!champ,
+    total: 25,
+  });
+  const title = h.title;
   const alive = (snapshot.standings || []).filter((m) => m.status === 'alive').length;
 
   html = html.replace('<div class="race-title" id="raceTitle">Loading the tournament…</div>', `<div class="race-title" id="raceTitle">${esc(title)}</div>`);
-  html = html.replace('<span class="rc-count" id="progressCount"></span>', `<span class="rc-count" id="progressCount">${shown > 0 ? `Race ${shown} of 25` : ''}</span>`);
+  html = html.replace('<span class="rc-count" id="progressCount"></span>', `<span class="rc-count" id="progressCount">${esc(h.count)}</span>`);
+  html = html.replace('<span class="rc-note" id="rcNote"></span>', `<span class="rc-note" id="rcNote">${esc(h.note)}</span>`);
 
   const lines = [];
   lines.push(`<li>Tournament ${snapshot.tournament ? snapshot.tournament.id : ''}: ${esc(title)}${champ ? ` — champion #${pad(champ.id)} ${esc(champ.name)}` : ''}.</li>`);

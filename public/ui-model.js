@@ -74,6 +74,8 @@
   //                (e.g. "Qualifier 15"), when the draw is known, else null
   //   current      { short, roundKey, number } — the race running / announced
   //                now, if any (e.g. "Qualifier 6"), else null
+  //   next         { short, roundKey, number } — between races: the race that
+  //                comes next but isn't announced yet, else null
   //   lastResult   { roundKey, rank, label, dnf } of the last race it ran, or null
   //   drawnIn      { semis, final } — rounds it has already been drawn into
   //   finalDrawn   the final has been drawn (wildcard resolved)
@@ -83,7 +85,7 @@
     if (c.standing === 'eliminated') {
       const lr = c.lastResult;
       const how = lr ? `${lr.dnf ? 'Did not finish' : ord(lr.rank)} in ${lr.label}` : 'Eliminated';
-      return { key: 'out', tag: 'Out this tournament', line: `${how} · back next tournament` };
+      return { key: 'out', tag: 'Out', line: `${how} · back next tournament` };
     }
     if (c.racingNow) {
       let line = 'Racing now';
@@ -92,16 +94,20 @@
       return { key: 'racing', tag: 'Racing now', line };
     }
     if (c.upNext) return { key: 'next', tag: 'Up next', line: c.nextLabel ? `Up next · ${c.nextLabel}` : 'In the next race' };
-    // "Current race: 6" when it's the same round as the scheduled race, else
-    // the other round's short label — never a countdown or an estimate.
+    // "Current race: 6" (or, between races, "Next race: 7") when it's the same
+    // round as the scheduled race, else the other round's short label — never
+    // a countdown or an estimate. Same vocabulary as the top bar's
+    // "Next: Qualifier 7", so the card and the header agree between races.
     const nowBit = (sched) => {
-      if (!c.current) return '';
-      const same = sched && c.current.roundKey === sched.roundKey && c.current.number != null;
-      return ` · Current race: ${same ? c.current.number : c.current.short}`;
+      const r = c.current || c.next;
+      if (!r) return '';
+      const same = sched && r.roundKey === sched.roundKey && r.number != null;
+      return ` · ${c.current ? 'Current race' : 'Next race'}: ${same ? r.number : r.short}`;
     };
     const lr = c.lastResult;
     if (c.drawnIn && c.drawnIn.final) {
-      return { key: 'finalist', tag: 'Finalist', line: `Races in the Final${c.current && c.current.roundKey !== 'final' ? nowBit(null) : ''}` };
+      const r = c.current || c.next;
+      return { key: 'finalist', tag: 'Finalist', line: `Races in the Final${r && r.roundKey !== 'final' ? nowBit(null) : ''}` };
     }
     if (c.scheduled && c.scheduled.roundKey === 'semis') {
       return { key: 'advanced', tag: 'Advanced', line: `Races in ${c.scheduled.short}${nowBit(c.scheduled)}` };
@@ -119,6 +125,30 @@
       return { key: 'waiting', tag: 'Waiting', line: `Races in ${c.scheduled.short}${nowBit(c.scheduled)}` };
     }
     return { key: 'waiting', tag: 'Waiting', line: 'Waiting for its qualifying race' };
+  }
+
+  // ---- race header ------------------------------------------------------------
+  // The top bar's heading and its "Race N of 25" counter always describe the
+  // SAME race. While a race is announced or running that's the race itself;
+  // between races it's the next one ("Next: Qualifier 7" / "Race 7 of 25")
+  // and the last result is named separately ("Last result: Qualifier 6"), so
+  // the heading and the counter can never point at different races.
+  // Each race is { label, short, ordinal, roundKey } — ordinal is its 1-based
+  // place in the whole 25-race order. `replay` is the race on stage while a
+  // replay runs. Returns { title, count, note }.
+  function raceHeader({ current = null, next = null, last = null, replay = null, champion = false, total = 25 } = {}) {
+    const count = (r) => (r && r.ordinal ? `Race ${r.ordinal} of ${total}` : '');
+    if (replay) return { title: replay.label, count: count(replay), note: 'Replay' };
+    if (champion) return { title: 'Tournament complete', count: `Race ${total} of ${total}`, note: '' };
+    if (current) return { title: current.label, count: count(current), note: '' };
+    const lastNote = last ? `Last result: ${last.short}` : '';
+    if (next) return { title: `Next: ${next.short}`, count: count(next), note: lastNote };
+    if (last) {
+      // The round is complete and the next draw hasn't arrived yet.
+      const drawing = last.roundKey === 'heats' ? 'Drawing the semifinals' : last.roundKey === 'semis' ? 'Drawing the final' : 'Deciding the champion';
+      return { title: drawing, count: count(last), note: lastNote };
+    }
+    return { title: 'Tournament starting', count: '', note: '' };
   }
 
   function ordinal(n) {
@@ -182,6 +212,7 @@
     stageStrip,
     remainingLine,
     yourMarbleStatus,
+    raceHeader,
     ordinal,
     defaultPickerFilter,
     filterMarbles,

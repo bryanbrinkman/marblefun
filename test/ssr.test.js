@@ -87,6 +87,16 @@ check('home: race title, progress and a noscript summary; untouched with no snap
   assert.ok(html.includes('3 of 25 races run · 88 marbles still in'));
   assert.ok(html.includes('#01 M1'));
   assert.ok(!html.includes('<!--SSR:'), 'no anchors left behind');
+  // Between races (the current race has its result, the next isn't announced):
+  // heading and counter name the same race, the last result stands apart.
+  const between = { ...snapshot, current: { raceKey: 'heats:2', phase: 'done' } };
+  const h2 = renderHome(src, { snapshot: between, hof: null });
+  assert.ok(h2.includes('id="raceTitle">Next: Qualifier 4<'), 'between races the heading names the next race');
+  assert.ok(h2.includes('id="progressCount">Race 4 of 25<'), 'the counter matches the heading');
+  assert.ok(h2.includes('id="rcNote">Last result: Qualifier 3<'), 'the last result is named separately');
+  const fresh = { ...snapshot, current: null, rounds: [{ key: 'heats', races: snapshot.rounds[0].races.map((r) => ({ ...r, result: null })) }] };
+  const h3 = renderHome(src, { snapshot: fresh, hof: null });
+  assert.ok(h3.includes('id="raceTitle">Next: Qualifier 1<') && h3.includes('id="progressCount">Race 1 of 25<') && h3.includes('id="rcNote"></span>'), 'a fresh tournament: first race named, no last result');
 });
 
 console.log(`\n${passed} checks passed`);

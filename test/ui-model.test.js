@@ -36,7 +36,7 @@ check('remaining line separates the live count from the fixed sizes', () => {
 });
 
 // ---- your marble ------------------------------------------------------------
-const base = { standing: 'alive', racingNow: false, placement: null, finished: false, upNext: false, nextLabel: '', scheduled: null, current: null, lastResult: null, drawnIn: {}, finalDrawn: false };
+const base = { standing: 'alive', racingNow: false, placement: null, finished: false, upNext: false, nextLabel: '', scheduled: null, current: null, next: null, lastResult: null, drawnIn: {}, finalDrawn: false };
 const st = (over) => M.yourMarbleStatus(Object.assign({}, base, over));
 const Q = (n) => ({ short: `Qualifier ${n}`, roundKey: 'heats', number: n });
 const SF = (n) => ({ short: `Semifinal ${n}`, roundKey: 'semis', number: n });
@@ -45,7 +45,7 @@ check('your marble: champion / out', () => {
   assert.deepStrictEqual(st({ standing: 'champion' }), { key: 'champion', tag: 'Champion', line: 'Tournament champion' });
   const out = st({ standing: 'eliminated', lastResult: { roundKey: 'heats', rank: 4, label: 'Qualifier 3', dnf: false } });
   assert.strictEqual(out.key, 'out');
-  assert.strictEqual(out.tag, 'Out this tournament');
+  assert.strictEqual(out.tag, 'Out');
   assert.ok(out.line.startsWith('4th in Qualifier 3'));
   assert.ok(out.line.includes('back next tournament'));
   const dnf = st({ standing: 'eliminated', lastResult: { roundKey: 'semis', rank: 5, label: 'Semifinal 1', dnf: true } });
@@ -68,6 +68,42 @@ check('your marble: waiting shows the scheduled race and the current race', () =
   assert.strictEqual(st({ scheduled: Q(15), current: Q(6) }).line, 'Races in Qualifier 15 · Current race: 6');
   assert.strictEqual(st({ scheduled: Q(15) }).line, 'Races in Qualifier 15'); // nothing running yet — no invented timing
   assert.strictEqual(st({}).line, 'Waiting for its qualifying race'); // schedule unknown
+});
+
+check('your marble: between races the card names the next race, like the header', () => {
+  assert.strictEqual(st({ scheduled: Q(15), next: Q(7) }).line, 'Races in Qualifier 15 · Next race: 7');
+  assert.strictEqual(st({ lastResult: { roundKey: 'heats', rank: 1, label: 'Qualifier 3' }, next: Q(7) }).line, 'Won Qualifier 3 · semifinal draw after all qualifiers · Next race: Qualifier 7');
+  assert.strictEqual(st({ drawnIn: { semis: true, final: true }, scheduled: { short: 'The Final', roundKey: 'final', number: 1 }, next: SF(4) }).line, 'Races in the Final · Next race: Semifinal 4');
+  assert.strictEqual(st({ scheduled: Q(15), current: Q(6), next: Q(7) }).line, 'Races in Qualifier 15 · Current race: 6', 'a running race wins over the next one');
+});
+
+check('your marble: the "out" tag is short enough for one line; the reason wraps in the copy', () => {
+  const out = st({ standing: 'eliminated', lastResult: { roundKey: 'heats', rank: 4, label: 'Qualifier 3', dnf: false } });
+  assert.strictEqual(out.tag, 'Out');
+  assert.strictEqual(out.line, '4th in Qualifier 3 · back next tournament');
+});
+
+// ---- race header ------------------------------------------------------------------
+const R = (roundKey, i, ordinal) => ({
+  roundKey,
+  ordinal,
+  label: roundKey === 'final' ? 'The Final' : roundKey === 'semis' ? `Semifinal ${i} of 4` : `Qualifying · Race ${i} of 20`,
+  short: roundKey === 'final' ? 'The Final' : roundKey === 'semis' ? `Semifinal ${i}` : `Qualifier ${i}`,
+});
+check('race header: heading and counter always describe the same race', () => {
+  // A race is announced / running: that race, its ordinal.
+  assert.deepStrictEqual(M.raceHeader({ current: R('heats', 7, 7), last: R('heats', 6, 6) }), { title: 'Qualifying · Race 7 of 20', count: 'Race 7 of 25', note: '' });
+  // Between races: the next race in both, and the last result named apart.
+  assert.deepStrictEqual(M.raceHeader({ next: R('heats', 7, 7), last: R('heats', 6, 6) }), { title: 'Next: Qualifier 7', count: 'Race 7 of 25', note: 'Last result: Qualifier 6' });
+  assert.deepStrictEqual(M.raceHeader({ next: R('semis', 1, 21), last: R('heats', 20, 20) }), { title: 'Next: Semifinal 1', count: 'Race 21 of 25', note: 'Last result: Qualifier 20' });
+  assert.deepStrictEqual(M.raceHeader({ next: R('final', 1, 25), last: R('semis', 4, 24) }), { title: 'Next: The Final', count: 'Race 25 of 25', note: 'Last result: Semifinal 4' });
+  // Round complete, next round not drawn yet: say what's being drawn.
+  assert.deepStrictEqual(M.raceHeader({ last: R('heats', 20, 20) }), { title: 'Drawing the semifinals', count: 'Race 20 of 25', note: 'Last result: Qualifier 20' });
+  // Nothing run or announced; tournament over; a replay on stage.
+  assert.deepStrictEqual(M.raceHeader({ next: R('heats', 1, 1) }), { title: 'Next: Qualifier 1', count: 'Race 1 of 25', note: '' });
+  assert.deepStrictEqual(M.raceHeader({}), { title: 'Tournament starting', count: '', note: '' });
+  assert.deepStrictEqual(M.raceHeader({ champion: true, last: R('final', 1, 25) }), { title: 'Tournament complete', count: 'Race 25 of 25', note: '' });
+  assert.deepStrictEqual(M.raceHeader({ replay: R('heats', 6, 6), next: R('heats', 7, 7), last: R('heats', 6, 6) }), { title: 'Qualifying · Race 6 of 20', count: 'Race 6 of 25', note: 'Replay' });
 });
 
 check('your marble: advanced → drawn into a semifinal → finalist', () => {

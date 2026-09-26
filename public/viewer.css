@@ -475,6 +475,9 @@ body.no3d .race-board { display: none !important; }
 .mm-ballbtn { grid-area: ball; }
 .mm-info { grid-area: info; }
 .mm-change { grid-area: change; }
+/* The camera toggle and the compact "Change" action: on desktop each takes
+   its own grid area; on phones the wrapper becomes one row under the info. */
+.mm-acts { display: contents; }
 .mm-cam { grid-area: cam; justify-self: start; max-width: 100%; }
 .mm-cam .sm-only { display: none; }
 .mm.cta .mm-actions { grid-area: act; }
@@ -485,12 +488,16 @@ a.mrow { text-decoration: none; color: inherit; }
 a.mrow:hover { background: var(--panel-3); }
 .mrow-status .tag { margin-left: 4px; }
 .mm-info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.mm-k { font-size: 0.6875rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+/* "YOUR MARBLE" + status tag stay on one line at any width: the words never
+   wrap, and a long tag shortens with an ellipsis rather than pushing down. */
+.mm-k { font-size: 0.6875rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; min-width: 0; }
+.mm-kt { flex: none; }
+.mm-k .tag { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .mm-name { font-size: 0.9375rem; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mm-name small { color: var(--muted); font-weight: 700; margin-right: 4px; }
-/* The status line may run to two lines ("Races in Qualifier 15 · Current
-   race: 6") rather than truncating the useful half. */
-.mm-line { font-size: 0.75rem; color: var(--text); line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+/* The status line wraps in full ("4th in Qualifier 3 · back next tournament")
+   rather than truncating the useful half. */
+.mm-line { font-size: 0.75rem; color: var(--text); line-height: 1.3; white-space: normal; overflow-wrap: anywhere; }
 .mm-line.muted { color: var(--muted); }
 .mm-cam { display: inline-flex; min-width: 0; overflow: hidden; text-overflow: ellipsis; align-items: center; gap: 6px; min-height: 32px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font-size: 0.6875rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .mm-cam[aria-pressed='true'] { color: var(--gold); border-color: var(--gold); }
@@ -562,9 +569,11 @@ body.drawer-open .bottom-bar { right: calc(min(420px, 100vw) + 12px); }
   .pk .sw { width: 48px; height: 48px; }
   /* Bottom bar: the card takes the width it needs, controls collapse to icons;
      the drawer is a full sheet, so the bar steps aside entirely. */
-  .mm { width: min(100%, calc(100vw - 180px)); min-height: 56px; padding: 6px 8px; column-gap: 8px; row-gap: 4px; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'ball info' 'cam cam'; }
+  .mm { width: min(100%, calc(100vw - 180px)); min-height: 56px; padding: 6px 8px; column-gap: 8px; row-gap: 4px; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'ball info' 'acts acts'; }
   .mm-ball { width: 38px; height: 38px; }
-  .mm-change { display: none; }
+  .mm-acts { display: flex; grid-area: acts; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
+  .mm-cam { flex: 0 1 auto; }
+  .mm-change { flex: none; }
   .mm-cam .lg-only { display: none; }
   .mm-cam .sm-only { display: inline; }
   body.drawer-open .bottom-bar { display: none; }

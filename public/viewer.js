@@ -282,15 +282,38 @@ function roundTitle(key) {
   return key === 'heats' ? 'Qualifying' : key === 'semis' ? 'Semifinals' : key === 'final' ? 'Final' : 'Champion';
 }
 
-// The top-bar race label — SAME phase logic as the stage strip (activeRound
-// feeds both), so the bar and the card can never disagree.
-function topLabel() {
+// A race's 1-based place in the 25-race order (0 when unknown).
+function raceOrdinal(race) {
+  return race ? orderedRaces().findIndex((r) => r.key === race.key) + 1 : 0;
+}
+// Plain description of a race for the tested header rule.
+function raceDesc(race) {
+  return race ? { label: raceLabel(race), short: raceShort(race), ordinal: raceOrdinal(race), roundKey: race.roundKey } : null;
+}
+// The race the top bar talks about between races: the first one without a
+// result (its draw is known), or null when the next round isn't drawn yet.
+function nextDrawnRace() {
+  return orderedRaces().find((r) => !r.result) || null;
+}
+// The top-bar heading, counter and note — one rule (UIModel.raceHeader) so
+// the heading and "Race N of 25" always describe the same race, between
+// races included ("Next: Qualifier 7" / "Race 7 of 25" / "Last result:
+// Qualifier 6"). The stage strip's phase (activeRound) feeds the same model.
+function topHeader() {
+  const cur = currentRace();
   const round = activeRound();
-  if (round === null) return 'Tournament starting';
-  if (round === 'champion') return 'Tournament complete';
-  const cur = model.currentKey && model.racesByKey.get(model.currentKey);
-  const race = cur && !cur.result ? cur : orderedRaces().find((r) => !r.result);
-  return race ? raceLabel(race) : 'Tournament starting';
+  return UI.raceHeader({
+    current: cur && !cur.result ? raceDesc(cur) : null,
+    next: cur && !cur.result ? null : raceDesc(nextDrawnRace()),
+    // Before race 1 nothing has been run or announced: "Tournament starting".
+    last: round === null ? null : raceDesc(lastDoneRace()),
+    replay: replaying && _replayRace ? raceDesc(_replayRace) : null,
+    champion: !!model.champion,
+    total: TOTAL_RACES,
+  });
+}
+function topLabel() {
+  return topHeader().title;
 }
 
 // The round currently being competed: the current race's round, else the first
@@ -330,15 +353,12 @@ function renderTopBar() {
   const title = el('raceTitle');
   const round = activeRound();
   title.classList.toggle('final', round === 'final');
-  title.textContent = topLabel();
-  const done = orderedRaces().filter((r) => r.result).length;
-  const cur = currentRace();
-  const shown = model.champion ? TOTAL_RACES : Math.min(TOTAL_RACES, done + (cur && !cur.result ? 1 : 0));
-  el('progressCount').textContent = shown > 0 ? `Race ${shown} of ${TOTAL_RACES}` : '';
+  const h = topHeader();
+  title.textContent = h.title;
+  el('progressCount').textContent = h.count;
   const note = el('rcNote');
-  if (document.body.classList.contains('paused')) note.textContent = 'Paused';
-  else if (replaying) note.textContent = 'Replay';
-  else note.textContent = '';
+  note.textContent = document.body.classList.contains('paused') ? 'Paused' : h.note;
+  const cur = currentRace();
   const cd = el('cd');
   cd.classList.toggle('live', isLiveNow());
   if (cur && !cur.result) renderSeedline(cur);
@@ -631,16 +651,19 @@ function myStatus() {
   // built round), and the race running / announced right now.
   const sched = orderedRaces().find((r) => !r.result && r.roster && r.roster.some((s) => s.marbleId === id)) || null;
   const curInfo = (r) => (r ? { short: raceShort(r), roundKey: r.roundKey, number: r.indexInRound + 1 } : null);
+  const announced = cur && !cur.result ? cur : null;
   return UI.yourMarbleStatus({
     standing: st ? st.status : null,
     racingNow,
     placement: racingNow && _myLive ? _myLive.placement : null,
     finished: racingNow && _myLive ? _myLive.finished : false,
     upNext,
-    nextLabel: nxt ? raceLabel(nxt) : '',
+    nextLabel: nxt ? raceShort(nxt) : '',
     scheduled: curInfo(sched),
-    current: curInfo(cur && !cur.result ? cur : null),
-    lastResult: last ? { roundKey: last.race.roundKey, rank: last.rank, label: raceLabel(last.race), dnf: last.timeSec == null } : null,
+    current: curInfo(announced),
+    // Between races: the same "next" race the top bar names.
+    next: announced ? null : curInfo(nextDrawnRace()),
+    lastResult: last ? { roundKey: last.race.roundKey, rank: last.rank, label: raceShort(last.race), dnf: last.timeSec == null } : null,
     drawnIn: { semis: inRound('semis'), final: inRound('final') },
     finalDrawn: model.rounds.some((r) => r.key === 'final'),
   });
@@ -679,12 +702,13 @@ function renderMyMarble() {
   wrap.innerHTML =
     `<div class="mm${s.key === 'out' ? ' out' : ''}">` +
     `<button class="mm-ballbtn" id="mmBall" aria-label="Change marble" title="Change marble">${swatchHtml(followId, marbleColor(followId), 'sw lg mm-ball')}</button>` +
-    `<span class="mm-info"><span class="mm-k">Your marble <span class="tag ${tagCls}">${esc(s.tag)}</span></span>` +
+    `<span class="mm-info"><span class="mm-k"><span class="mm-kt">Your marble</span><span class="tag ${tagCls}">${esc(s.tag)}</span></span>` +
     `<span class="mm-name"><small>#${numOf(followId)}</small>${esc(st ? st.name : marbleNameOf(followId))}</span>` +
     `<span class="mm-line" title="${esc(career)}">${esc(s.line)}</span></span>` +
+    `<span class="mm-acts">` +
     (no3d ? '' : `<button class="mm-cam" id="mmCam" aria-pressed="${followCamOn ? 'true' : 'false'}" aria-label="Camera: follow my marble" title="Camera follows your marble while it races"><span class="dot" aria-hidden="true"></span><span class="lg-only">Camera: follow my marble</span><span class="sm-only">Follow camera</span></button>`) +
-    `<button class="btn quiet sm mm-change" id="mmChange">Change marble</button>` +
-    `</div>`;
+    `<button class="btn quiet sm mm-change" id="mmChange" aria-label="Change marble" title="Change marble">Change</button>` +
+    `</span></div>`;
 }
 {
   const wrap = el('myMarble');
@@ -1048,7 +1072,9 @@ function stateView() {
       if (mode === 'server' && waited > 60000) {
         return { st: 'BETWEEN_RACES', eyebrow: 'Between races', primary: 'Waiting for the next race…', secondary: `The server hasn't announced it yet (${Math.round(waited / 60000)} min)`, cd: '…' };
       }
-      return { st: 'BETWEEN_RACES', eyebrow: 'Between races', primary, secondary: 'Preparing the next course', cd: '…' };
+      // Name the next race the way the top bar does, so the two agree.
+      const up = nextDrawnRace();
+      return { st: 'BETWEEN_RACES', eyebrow: 'Between races', primary, secondary: up ? `Next: ${raceShort(up)} · Preparing the course` : 'Preparing the next course', cd: '…' };
     }
   }
 }
@@ -2145,17 +2171,20 @@ function renderRacePanel() {
   const v = stateView();
   let html = '';
   if (focus) {
-    const status = cur && !cur.result
+    // Same vocabulary as the top bar: the announced/running race by its full
+    // label; between races "Last result: Qualifier 6" then "Next: Qualifier 7".
+    const announced = !!(cur && !cur.result);
+    const status = announced
       ? live ? '<span class="tag live">Live</span>' : `<span class="tag" id="drCountdown">${esc(v.primary)}</span>`
       : '<span class="tag">Finished</span>';
-    html += `<section class="dr-sec"><h3 class="dr-h"><b>${esc(raceLabel(focus))}</b>${status}</h3>` +
+    html += `<section class="dr-sec"><h3 class="dr-h"><b>${esc(announced ? raceLabel(focus) : `Last result: ${raceShort(focus)}`)}</b>${status}</h3>` +
       `<div class="row-list" id="drRows">${raceRows(focus, live && !replaying ? _lastProg : null)}</div>` +
       `<p class="dr-empty">${esc(advanceRule(focus))}</p></section>`;
-    if (!(cur && !cur.result)) {
+    if (!announced) {
       const nxt = order.find((r) => !r.result);
       html += nxt
-        ? `<section class="dr-sec"><h3 class="dr-h"><b>Next race</b><small>${esc(raceLabel(nxt))} · not announced yet</small></h3><div class="chips">${nxt.roster.map((s) => `<span class="chip${s.marbleId === followId ? ' mine' : ''}">${swatchHtml(s.marbleId, s.color)}#${numOf(s.marbleId)} ${esc(s.marbleName)}</span>`).join('')}</div></section>`
-        : model.champion ? '' : `<section class="dr-sec"><h3 class="dr-h"><b>Next race</b></h3><p class="dr-empty">Drawn when this round is complete.</p></section>`;
+        ? `<section class="dr-sec"><h3 class="dr-h"><b>Next: ${esc(raceShort(nxt))}</b><small>Waiting to start</small></h3><div class="chips">${nxt.roster.map((s) => `<span class="chip${s.marbleId === followId ? ' mine' : ''}">${swatchHtml(s.marbleId, s.color)}#${numOf(s.marbleId)} ${esc(s.marbleName)}</span>`).join('')}</div></section>`
+        : model.champion ? '' : `<section class="dr-sec"><h3 class="dr-h"><b>Next race</b><small>${esc(topHeader().title)}</small></h3><p class="dr-empty">The draw is announced when this round is complete.</p></section>`;
     }
   } else {
     html += `<section class="dr-sec"><p class="dr-empty">${model.rounds.length ? 'The first race will be announced shortly.' : 'Loading the tournament…'}</p></section>`;
@@ -2165,7 +2194,7 @@ function renderRacePanel() {
     const idx = order.findIndex((r) => r.key === cur.key);
     const nxt = order.slice(idx + 1).find((r) => !r.result);
     if (nxt)
-      html += `<section class="dr-sec"><h3 class="dr-h"><b>After this</b><small>${esc(raceLabel(nxt))}</small></h3><div class="chips">${nxt.roster.map((s) => `<span class="chip${s.marbleId === followId ? ' mine' : ''}">${swatchHtml(s.marbleId, s.color)}#${numOf(s.marbleId)} ${esc(s.marbleName)}</span>`).join('')}</div></section>`;
+      html += `<section class="dr-sec"><h3 class="dr-h"><b>After this: ${esc(raceShort(nxt))}</b></h3><div class="chips">${nxt.roster.map((s) => `<span class="chip${s.marbleId === followId ? ' mine' : ''}">${swatchHtml(s.marbleId, s.color)}#${numOf(s.marbleId)} ${esc(s.marbleName)}</span>`).join('')}</div></section>`;
   }
   // Still competing: a compact disclosure, collapsed by default — names and
   // artwork when opened, with an "All competitors" filter for the ones out.
@@ -2686,8 +2715,12 @@ function renderStageFallback(prog) {
   const focus = cur && !cur.result ? cur : lastDoneRace();
   if (!focus) { box.innerHTML = model.rounds.length ? '<p class="dr-empty">The first race will be announced shortly.</p>' : ''; return; }
   const v = stateView();
-  const status = cur && !cur.result ? (isLiveNow() ? 'Live' : v.primary) : 'Finished';
-  box.innerHTML = `<h3 class="dr-h"><b>${esc(raceLabel(focus))}</b><small>${esc(status)}</small></h3><div class="row-list">${raceRows(focus, isLiveNow() ? prog || _lastProg : null)}</div>`;
+  const announced = !!(cur && !cur.result);
+  const status = announced ? (isLiveNow() ? 'Live' : v.primary) : 'Finished';
+  const nxt = announced ? null : nextDrawnRace();
+  box.innerHTML = `<h3 class="dr-h"><b>${esc(announced ? raceLabel(focus) : `Last result: ${raceShort(focus)}`)}</b><small>${esc(status)}</small></h3>` +
+    `<div class="row-list">${raceRows(focus, isLiveNow() ? prog || _lastProg : null)}</div>` +
+    (nxt ? `<p class="dr-empty">Next: ${esc(raceShort(nxt))} · Waiting to start</p>` : '');
 }
 {
   if (el('ssRetry')) el('ssRetry').addEventListener('click', retryRenderer);
