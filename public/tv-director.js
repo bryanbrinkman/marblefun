@@ -16,6 +16,8 @@
 //               one in the race, otherwise the leader
 //   reverse   — planted ahead of the leader looking back at the chasing pack
 //   trackside — fixed broadcast camera the pack rolls past
+//   close     — ultra-tight trailing close-up of the viewer's marble (or the
+//               leader); an occasional beauty shot, never the default
 //
 // Phases, in race order:
 //   idle      — no race on the stage → wide shot
@@ -42,6 +44,11 @@
     followEveryMs: 20000, // guarantee a cut to the viewer's marble this often…
     followHoldMs: 6500, // …and hold it this long
     followMinPos: 0.06, // …but not in the gate scramble
+    closeEveryMs: 28000, // an occasional close-up, at most this often…
+    closeHoldMs: 5000, // …held this long
+    closeFirstAfterMs: 12000, // …never in the opening seconds of a race
+    closeMinPos: 0.12, // …and only once the subject is clear of the gate
+    closeMaxPos: 0.78, // …and before the finish shots take over
     resultsLingerMs: 6500, // hold the finish after the last result, then go wide
     idleCutMs: 4000, // between races, wait this long before resetting to wide
     idleShot: 'overview',
@@ -55,7 +62,7 @@
       results: ['action'],
     },
     // Modes the director must never override — the viewer chose them on purpose.
-    handsOff: ['blast', 'split', 'close'],
+    handsOff: ['blast', 'split'],
   };
 
   // Work out the race phase from the live progress list.
@@ -83,6 +90,8 @@
       this.lastCutAt = 0;
       this.lastFollowAt = 0;
       this.followHoldUntil = 0;
+      this.lastCloseAt = 0;
+      this.closeHoldUntil = 0;
       this.phase = 'idle';
       this.unsupported = new Set(); // shots the game refused (stale build)
     }
@@ -105,6 +114,7 @@
 
       if (phase === 'idle') {
         this.followHoldUntil = 0;
+        this.closeHoldUntil = 0;
         if (cam !== r.idleShot && since >= r.idleCutMs) return this._cut(r.idleShot, now, phase);
         return { cut: null, phase };
       }
@@ -121,8 +131,9 @@
         return { cut: null, phase };
       }
 
-      // Holding a "your marble" shot: nothing interrupts it except the finish.
-      if (now < this.followHoldUntil && phase !== 'finish') return { cut: null, phase };
+      // Holding a "your marble" shot or a close-up: nothing interrupts it
+      // except the finish.
+      if ((now < this.followHoldUntil || now < this.closeHoldUntil) && phase !== 'finish') return { cut: null, phase };
 
       let set = (r.phases[phase] || ['action']).filter((s) => !this.unsupported.has(s));
       if (!set.length) set = ['action'];
@@ -143,6 +154,24 @@
           if (cam !== 'chase') return this._cut('chase', now, phase);
           this.lastCutAt = now; // already on it — just hold
           return { cut: null, phase };
+        }
+      }
+
+      // The occasional close-up: a tight trailing shot of the viewer's marble
+      // (or the leader) while the race is settled into its running order.
+      if (
+        (phase === 'pack' || phase === 'breakaway') &&
+        !this.unsupported.has('close') &&
+        (ctx.raceElapsedMs || 0) >= r.closeFirstAfterMs &&
+        now - this.lastCloseAt >= r.closeEveryMs &&
+        since >= r.minShotMs
+      ) {
+        const act = (ctx.prog || []).filter((p) => !p.finished);
+        const subject = (ctx.followLane && act.find((p) => p.lane === ctx.followLane)) || act.slice().sort((a, b) => b.pos - a.pos)[0];
+        if (subject && subject.pos >= r.closeMinPos && subject.pos <= r.closeMaxPos) {
+          this.lastCloseAt = now;
+          this.closeHoldUntil = now + r.closeHoldMs;
+          return this._cut('close', now, phase);
         }
       }
 

@@ -97,4 +97,30 @@ check('between races the stage resets to the wide shot; unsupported shots are sk
   assert.strictEqual(r.cut, null); // only 'action' left in the pack set → nothing to rotate to
 });
 
+check('an occasional close-up: not in the opening, at most every closeEveryMs, held, never near the finish', () => {
+  const d = new Director();
+  d.lastCutAt = -100000;
+  d.lastFollowAt = 1; // the follow guarantee is not due (now - 1 < followEveryMs) in these ticks
+  // Opening seconds: no close-up even though it is "due".
+  assert.notStrictEqual(d.decide(live({ now: 5000, raceElapsedMs: 5000, cam: 'overview' })).cut, 'close');
+  d.lastCutAt = -100000;
+  // Settled pack, past closeFirstAfterMs → the close-up.
+  const r = d.decide(live({ now: 40000, raceElapsedMs: 40000, cam: 'action' }));
+  assert.strictEqual(r.cut, 'close');
+  // Held: nothing interrupts it inside closeHoldMs…
+  assert.strictEqual(d.decide(live({ now: 42000, raceElapsedMs: 42000, cam: 'close' })).cut, null);
+  // …then the director cuts back to the phase's shot.
+  const back = d.decide(live({ now: 40000 + RULES.minShotMs + 1, raceElapsedMs: 46000, cam: 'close' }));
+  assert.ok(back.cut && back.cut !== 'close', 'leaves the close-up after the hold');
+  // Not again before closeEveryMs.
+  d.lastCutAt = -100000;
+  assert.notStrictEqual(d.decide(live({ now: 50000, raceElapsedMs: 50000, cam: 'action' })).cut, 'close');
+  // Never once the leader is on the finish approach.
+  d.lastCutAt = -100000; d.lastCloseAt = -100000;
+  assert.notStrictEqual(d.decide(live({ now: 90000, raceElapsedMs: 90000, cam: 'action', prog: P([0.85, 0.5, 0.4, 0.3, 0.2]) })).cut, 'close');
+  // The viewer's marble is the subject when it is racing.
+  d.lastCutAt = -100000; d.lastCloseAt = -100000; d.lastFollowAt = 95000; // follow guarantee not due
+  assert.strictEqual(d.decide(live({ now: 100000, raceElapsedMs: 100000, cam: 'action', followLane: 'CREAM' })).cut, 'close');
+});
+
 console.log(`\n${passed} checks passed`);
