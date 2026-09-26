@@ -118,6 +118,7 @@ function toCSV(rows) {
   return lines.join('\r\n') + '\r\n';
 }
 
+const SERVER_STARTED_AT = new Date().toISOString();
 function sendJSON(res, code, obj) {
   res.writeHead(code, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -435,6 +436,12 @@ async function main() {
     }
     if (url.pathname === '/api/state') {
       return sendJSON(res, 200, scheduler ? scheduler.snapshot() : { type: simFailed ? 'no_tournament' : 'starting' });
+    }
+    if (url.pathname === '/api/version') {
+      // Which build is running: the git commit baked in at image build time
+      // (GIT_SHA, passed by the deploy workflow), so a deploy can be verified
+      // against the repository without guessing from the page.
+      return sendJSON(res, 200, { commit: process.env.GIT_SHA || null, startedAt: SERVER_STARTED_AT });
     }
     if (url.pathname === '/api/next') {
       // Convenience for builders: just the upcoming/current race with its

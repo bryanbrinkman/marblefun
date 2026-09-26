@@ -20,6 +20,11 @@ RUN npm install playwright@^1.49.0 \
 # App source.
 COPY . .
 
+# The commit this image was built from (the deploy workflow passes it), served
+# at /api/version so a running deployment can be checked against the repo.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=$GIT_SHA
+
 # Config (fly.toml can override). DB_PATH points at the mounted volume so
 # standings survive restarts.
 ENV NODE_ENV=production \
