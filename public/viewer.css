@@ -584,6 +584,9 @@ body.drawer-open .bottom-bar { right: calc(min(420px, 100vw) + 12px); }
   .pk .sw { width: 48px; height: 48px; }
   /* Bottom bar: the card takes the width it needs, controls collapse to icons;
      the drawer is a full sheet, so the bar steps aside entirely. */
+  /* The bottom bar is taller on phones (two-row card), so everything that
+     keeps clear of it — the stage's panels, the race card, toasts — moves up. */
+  :root { --bottom-h: 116px; }
   .mm { max-width: none; min-height: 56px; padding: 6px 8px; column-gap: 8px; row-gap: 4px; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'ball info' 'acts acts'; }
   .mm-ball { width: 38px; height: 38px; }
   .mm-acts { display: flex; grid-area: acts; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
@@ -604,6 +607,7 @@ body.drawer-open .bottom-bar { right: calc(min(420px, 100vw) + 12px); }
   /* Narrow phones: the view controls stack in the corner so the card keeps
      enough width for its label, tag and status copy. */
   .viewbar { flex-direction: column; }
+  :root { --bottom-h: 160px; }
 }
 @media (max-width: 360px) {
   /* The race title is the header's job on the narrowest phones; the brand
