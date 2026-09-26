@@ -3297,6 +3297,12 @@ function buildChannelPiece(c, baseMat, paintMat, trimMat) {
   outerGroup.position.y = (outerGroup.userData.yOverride !== undefined)
     ? outerGroup.userData.yOverride
     : midY;
+  // Neighbouring tiles overlap by a hair at their shared edge (curved pieces
+  // are built from slightly over-long segments), and identical heights there
+  // z-fight. Odd cells sit 4 thousandths of a unit higher than even ones:
+  // invisible, but no two adjacent tiles share a plane. The physics never
+  // reads these meshes.
+  outerGroup.position.y += (pathCells.indexOf(c) & 1) ? 0.004 : 0;
 
   addToWorld(outerGroup);
 }
@@ -3829,6 +3835,17 @@ function buildCornerChannel(group, c, baseMat, paintMat) {
   const endAngle = 0;
   const arcSteps = 12;
 
+  // The arc is built from boxes made 2% longer than their share so the curve
+  // has no gaps — which means each box overlaps its neighbour (and the last
+  // one reaches into the next tile) on an identical plane, and coplanar
+  // overlaps z-fight. A sub-millimetre stagger keeps every overlapping pair
+  // on different planes: odd segments sit 2 thousandths higher (and every
+  // odd CELL sits 4 thousandths higher than its neighbours — see the cell
+  // dispatcher — so the last segment never shares a plane with the next
+  // tile). Visual only — the physics walls and floors are analytic, never
+  // these meshes.
+  const segDy = (i) => ((i & 1) ? 0.002 : 0);
+
   // Build channel floor as a series of trapezoidal segments
   const floorMat = makeTexturedFloorMaterial(0xd6b683, { roughness: 0.92 });
 
@@ -3846,7 +3863,7 @@ function buildCornerChannel(group, c, baseMat, paintMat) {
 
     const segGeo = new THREE.BoxGeometry(segLength * 1.02, 0.08, channelW);
     const segMesh = new THREE.Mesh(segGeo, floorMat);
-    segMesh.position.set(segCx, 0.04, segCz);
+    segMesh.position.set(segCx, 0.04 + segDy(i), segCz);
     // Tangent direction at midpoint
     const tangentAngle = aMid + Math.PI / 2 * (isRight ? 1 : -1);
     // Actually the tangent to a circle at angle aMid (CCW) is (-sin(aMid), 0, cos(aMid)).
@@ -3866,7 +3883,7 @@ function buildCornerChannel(group, c, baseMat, paintMat) {
 
     const innerSegGeo = new THREE.BoxGeometry(segLength * 1.02, wallH, wallThick);
     const innerMesh = new THREE.Mesh(innerSegGeo, baseMat);
-    innerMesh.position.set(innerCx, wallH / 2, innerCz);
+    innerMesh.position.set(innerCx, wallH / 2 + segDy(i), innerCz);
     innerMesh.rotation.y = rotY;
     innerMesh.castShadow = true;
     innerMesh.receiveShadow = true;
@@ -3877,7 +3894,7 @@ function buildCornerChannel(group, c, baseMat, paintMat) {
     const outerCz = arcCenter.z + Math.sin(aMid) * outerWallRadius;
     const outerSegGeo = new THREE.BoxGeometry(segLength * 1.02, wallH, wallThick);
     const outerMesh = new THREE.Mesh(outerSegGeo, baseMat);
-    outerMesh.position.set(outerCx, wallH / 2, outerCz);
+    outerMesh.position.set(outerCx, wallH / 2 + segDy(i), outerCz);
     outerMesh.rotation.y = rotY;
     outerMesh.castShadow = true;
     outerMesh.receiveShadow = true;
@@ -3886,12 +3903,12 @@ function buildCornerChannel(group, c, baseMat, paintMat) {
     // Painted stripe on top of walls
     const stripeGeo = new THREE.BoxGeometry(segLength * 1.02, 0.06, wallThick * 0.85);
     const innerStripe = new THREE.Mesh(stripeGeo, paintMat);
-    innerStripe.position.set(innerCx, wallH + 0.03, innerCz);
+    innerStripe.position.set(innerCx, wallH + 0.03 + segDy(i), innerCz);
     innerStripe.rotation.y = rotY;
     group.add(innerStripe);
 
     const outerStripe = new THREE.Mesh(stripeGeo, paintMat);
-    outerStripe.position.set(outerCx, wallH + 0.03, outerCz);
+    outerStripe.position.set(outerCx, wallH + 0.03 + segDy(i), outerCz);
     outerStripe.rotation.y = rotY;
     group.add(outerStripe);
   }
