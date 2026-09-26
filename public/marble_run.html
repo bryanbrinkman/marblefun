@@ -4446,7 +4446,15 @@ function applyMarbleSkin(m) {
         // The skin map may have changed while this model was in flight — only
         // dress the marble if this is still its skin, and never stack two.
         if (!_marbleSkins || _marbleSkins[m.name] !== skin) return;
-        if (m.skinModel) m.mesh.remove(m.skinModel);
+        if (m.skinModel) {
+          // Swapping models: release the outgoing clone's materials (its
+          // textures belong to the cached template, which eviction handles).
+          m.skinModel.traverse((n) => {
+            if (!n.isMesh || !n.material) return;
+            (Array.isArray(n.material) ? n.material : [n.material]).forEach((mm) => mm.dispose());
+          });
+          m.mesh.remove(m.skinModel);
+        }
         if (m.mesh.material) m.mesh.material.visible = false; // hide the default sphere
         m.mesh.add(wrapper);
         m.skinModel = wrapper;
@@ -4601,6 +4609,7 @@ function _trimSkinShells(template) {
 function _prepareSkinTemplate(template) {
   _trimSkinShells(template);
   const seen = new Set();
+  const toUpload = [];
   template.traverse((n) => {
     if (!n.isMesh || !n.material) return;
     const mats = Array.isArray(n.material) ? n.material : [n.material];
@@ -4609,6 +4618,7 @@ function _prepareSkinTemplate(template) {
         const tex = mm[key];
         if (!tex || seen.has(tex)) continue;
         seen.add(tex);
+        toUpload.push(tex);
         const img = tex.image;
         const w = img && (img.naturalWidth || img.videoWidth || img.width);
         const h = img && (img.naturalHeight || img.videoHeight || img.height);
@@ -4628,6 +4638,14 @@ function _prepareSkinTemplate(template) {
       }
     }
   });
+  // Push the textures to the GPU now, at parse time, rather than on the frame
+  // the marble is dressed: the first draw of fourteen layers × five marbles
+  // is otherwise a visible hitch right when the models appear.
+  if (!window.__headlessNoGL && renderer && typeof renderer.initTexture === 'function') {
+    for (const tex of toUpload) {
+      try { _conditionSkinTexture(tex); renderer.initTexture(tex); } catch (e) { /* best effort */ }
+    }
+  }
 }
 
 // ---- lane markers --------------------------------------------------------------
@@ -7602,8 +7620,15 @@ window.marbleAPI = {
     _marbleSkins = next;
     // Marbles already standing at the gate are re-dressed on the spot, so the
     // call order (course built first, skins second — or the reverse) is moot.
+    // A marble already wearing a model keeps it until its new model is ready
+    // (place() swaps them in one frame) — stripping it first left a plain
+    // sphere on the track for as long as the next race's download took.
     if (typeof marbles !== 'undefined' && marbles) {
-      marbles.forEach((m) => { _clearSkin(m); applyMarbleSkin(m); });
+      marbles.forEach((m) => {
+        const skin = next && next[m.name];
+        if (!(skin && skin.glb && m.skinModel)) _clearSkin(m);
+        applyMarbleSkin(m);
+      });
     }
   },
   // Warm the model cache for upcoming races — download + parse only, nothing
