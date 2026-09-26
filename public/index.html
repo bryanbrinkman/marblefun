@@ -65,17 +65,23 @@
     <div class="stage" id="stage" data-renderer="loading">
       <iframe id="game" src="marble_run.html?embed=1" title="Live 3D marble race" allow="fullscreen" allowfullscreen></iframe>
       <div class="stage-overlay" id="stageOverlay" aria-hidden="true"></div>
-      <!-- Renderer states. Loading: a quiet line while the game boots. Failed:
-           what happened, what still works, and a retry — laid out in the stage
-           itself so it can never sit on top of the intro or the controls. -->
+      <!-- Renderer states, mutually exclusive: loading → ready | failed.
+           Loading: ONE screen owned by this page (the game's own overlay is
+           hidden when embedded) — the logo, one status line fed by the game's
+           real build progress, one bar. Ready: nothing. Failed: what happened,
+           what still works, and a retry, laid out in the stage itself so it
+           can never sit on top of the intro or the controls. -->
+      <div class="ss-loading" id="ssLoading" role="status">
+        <img src="logo.png" alt="Marble Run" class="ss-logo" onerror="this.hidden=true" />
+        <div class="ss-status" id="ssStatus">Loading the 3D track…</div>
+        <div class="ss-bar indeterminate" id="ssBar" role="progressbar" aria-label="Building the course" aria-valuemin="0" aria-valuemax="100"><div class="ss-fill" id="ssFill"></div></div>
+      </div>
       <div class="stage-state" id="stageState">
-        <div class="ss-loading" id="ssLoading" role="status">
-          <span class="spinner" aria-hidden="true"></span>
-          <span>Loading the 3D track…</span>
-        </div>
-        <div class="ss-failed" id="ssFailed" hidden role="alert">
-          <h2>The 3D race couldn't load</h2>
-          <p>This device or browser couldn't start the 3D view. The tournament is still live — standings, results and the bracket keep updating below.</p>
+        <div class="ss-failed" id="ssFailed" hidden>
+          <div class="ss-msg" role="alert">
+            <h2>The 3D race couldn't load</h2>
+            <p id="ssWhy">This device or browser couldn't start the 3D view. The tournament is still live — standings, results and the bracket keep updating below.</p>
+          </div>
           <div class="ss-actions">
             <button class="btn primary" id="ssRetry">Try 3D again</button>
             <button class="btn" id="ssOpenTournament">Open the tournament</button>

@@ -104,11 +104,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 /* Renderer states live inside the stage, under the top bar and above the
    bottom bar, so they never cover the intro or the controls. */
 .stage-state { position: absolute; inset: 0; z-index: 4; pointer-events: none; display: none; overflow-y: auto; padding: calc(var(--top-h) + 20px) 16px calc(var(--bottom-h) + 20px + var(--safe-b)); }
-.stage[data-renderer='loading'] .stage-state, .stage[data-renderer='failed'] .stage-state { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+.stage[data-renderer='failed'] .stage-state { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
 body.hero-open .stage-state { padding-top: 300px; }
-.ss-loading { display: flex; align-items: center; gap: 10px; color: var(--muted); font-weight: 700; padding: 10px 14px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line); margin-top: auto; margin-bottom: auto; }
-.stage[data-renderer='failed'] .ss-loading { display: none; }
-.stage[data-renderer='loading'] iframe { opacity: 0.6; }
+/* The one loading screen: covers the stage from the first paint (no blank
+   stage, nothing of the game's own loader shows through), then fades out
+   once the game reports its first usable frame. */
+.ss-loading { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: calc(var(--top-h) + 20px) 24px calc(var(--bottom-h) + 20px + var(--safe-b)); background: radial-gradient(120% 80% at 50% 30%, #182033 0%, var(--bg) 70%); color: var(--muted); font-weight: 700; transition: opacity 0.45s ease; }
+.ss-loading.done { opacity: 0; pointer-events: none; }
+.ss-loading[hidden] { display: none; }
+.ss-logo { width: min(260px, 70vw); height: auto; filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.5)); }
+.ss-status { font-size: 0.875rem; letter-spacing: 0.02em; color: var(--text); }
+.ss-bar { position: relative; width: min(280px, 70vw); height: 6px; border-radius: 999px; background: var(--panel-3); overflow: hidden; }
+.ss-fill { position: absolute; left: 0; top: 0; bottom: 0; width: var(--p, 0%); border-radius: 999px; background: var(--gold); transition: width 0.35s ease; }
+.ss-bar.indeterminate .ss-fill { width: 40%; animation: ssSlide 1.4s ease-in-out infinite; }
+@keyframes ssSlide { 0% { left: -40%; } 100% { left: 100%; } }
 .stage[data-renderer='failed'] iframe { opacity: 0.15; pointer-events: none; }
 .stage[data-renderer='failed'] .stage-overlay { display: none; }
 .ss-failed { pointer-events: auto; width: min(520px, 100%); max-height: 100%; display: flex; flex-direction: column; padding: 18px 18px 16px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
@@ -117,6 +126,10 @@ body.hero-open .stage-state { padding-top: 300px; }
 .ss-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .ss-fallback { margin-top: 14px; min-height: 0; overflow-y: auto; }
 .ss-fallback:empty { display: none; }
+/* While the Tournament drawer shows "This race", the standings live there:
+   the stage keeps only the explanation and the retry. */
+.ss-failed.compact { width: min(380px, 100%); }
+.ss-failed.compact .ss-fallback { display: none; }
 
 /* ---------- top bar ---------- */
 .topbar {
@@ -592,6 +605,11 @@ body.drawer-open .bottom-bar { right: calc(min(420px, 100vw) + 12px); }
      enough width for its label, tag and status copy. */
   .viewbar { flex-direction: column; }
 }
+@media (max-width: 360px) {
+  /* The race title is the header's job on the narrowest phones; the brand
+     is on the loading screen and the pages linked from the menu. */
+  .brand { display: none; }
+}
 @media (max-width: 420px) {
   .brand-logo { height: 24px; }
   .race-title { font-size: 0.8125rem; }
@@ -607,7 +625,8 @@ body.drawer-open .bottom-bar { right: calc(min(420px, 100vw) + 12px); }
 
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
-  .li-dot, .spinner, .skeleton, .hero, .pr-card, .drawer, .co-ball { animation: none !important; }
+  .li-dot, .spinner, .skeleton, .hero, .pr-card, .drawer, .co-ball, .ss-bar.indeterminate .ss-fill { animation: none !important; }
+  .ss-loading { transition: none; }
   .cd-fg, .race-toast, .moment, .champ-overlay { transition: none; }
 }
 

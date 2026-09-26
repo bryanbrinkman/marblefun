@@ -22,6 +22,9 @@
      game's beige toolbar and leaderboard stay out of the picture entirely.
      updateLeaderboard() keeps running underneath — it also reveals the podium. */
   html.embed #topMenu, html.embed #ui { display: none !important; }
+  /* Embedded, the host page owns the loading screen (it reads window.__boot
+     for progress); the game's own overlay would only stack under it. */
+  html.embed #loadingOverlay { display: none !important; }
   html, body {
     width: 100%; height: 100%; overflow: hidden;
     /* Light blue (top) to light tan (bottom) sky gradient. Canvas is transparent so
@@ -6390,15 +6393,19 @@ function buildPodium() {
     band.position.set(x, bandY, 0);
     band.userData.noPrint = true;
     podiumGroup.add(band);
-    const hanger = new THREE.Mesh(new THREE.BoxGeometry(0.1, P.bandH / 2 + 0.06, 0.016), bandMat);
-    hanger.position.set(x, bandY - P.bandH / 2 - 0.01, frontZ + 0.012);
+    // The hanger's front face used to share the rim's front plane exactly
+    // (both at frontZ + 0.02), so the strip where the two overlap z-fought.
+    // Each front-face layer now sits on its own depth: band +0.01, hanger
+    // +0.02, rim +0.03, medal +0.0475, label +0.05.
+    const hanger = new THREE.Mesh(new THREE.BoxGeometry(0.1, P.bandH / 2 + 0.06, 0.02), bandMat);
+    hanger.position.set(x, bandY - P.bandH / 2 - 0.01, frontZ + 0.01);
     hanger.userData.noPrint = true;
     podiumGroup.add(hanger);
 
     const rimGeo = new THREE.CylinderGeometry(medalR + 0.02, medalR + 0.02, 0.02, 40);
     rimGeo.rotateX(Math.PI / 2);
     const rim = new THREE.Mesh(rimGeo, ink);
-    rim.position.set(x, medalY, frontZ + 0.01);
+    rim.position.set(x, medalY, frontZ + 0.02);
     podiumGroup.add(rim);
     const medalGeo = new THREE.CylinderGeometry(medalR, medalR, 0.035, 40);
     medalGeo.rotateX(Math.PI / 2);
@@ -9099,19 +9106,25 @@ updateOrthoCamera();
   const overlay = document.getElementById('loadingOverlay');
   const bar     = document.getElementById('loaderBar');
   const labelEl = document.getElementById('loaderLabel');
+  // Embedded in the tournament viewer the host draws the loading screen and
+  // reads this record for real progress; the overlay here stays hidden and
+  // its slow-device helpers (which would reload the frame under the host)
+  // are left to the host's own retry.
+  const embedded = document.documentElement.classList.contains('embed');
+  window.__boot = { pct: 0, label: 'PLOTTING COURSE', done: false };
   overlay.classList.add('indeterminate'); // the marble idles until real progress arrives
 
   // After a short brand beat, melt the overlay away so the course visibly
   // assembles on screen — watching the workshop build the track IS the show.
   const peekTimer = setTimeout(() => {
-    if (!overlay.classList.contains('done')) overlay.classList.add('peek');
+    if (!embedded && !overlay.classList.contains('done')) overlay.classList.add('peek');
   }, 1600);
 
   // Slow-device safety nets: a retry action if the build is still going after
   // 15 s, and a friendlier "still working" fallback at 30 s. Both are cleared
   // the moment the build completes — fast devices never see them.
   const retryTimer = setTimeout(() => {
-    if (overlay.classList.contains('done') || document.getElementById('loaderRetry')) return;
+    if (embedded || overlay.classList.contains('done') || document.getElementById('loaderRetry')) return;
     const b = document.createElement('button');
     b.id = 'loaderRetry';
     b.textContent = '↻ Taking a while — tap to retry';
@@ -9119,7 +9132,7 @@ updateOrthoCamera();
     overlay.appendChild(b);
   }, 15000);
   const fallbackTimer = setTimeout(() => {
-    if (overlay.classList.contains('done')) return;
+    if (embedded || overlay.classList.contains('done')) return;
     labelEl.textContent = 'STILL WORKING — HANG TIGHT';
   }, 30000);
 
@@ -9127,17 +9140,20 @@ updateOrthoCamera();
     // Real progress moves the fill and the marble; before the first
     // measurable step the marble just idles on the plank.
     if (pct !== null && pct !== undefined && pct > 0) {
+      window.__boot.pct = pct;
       overlay.classList.remove('indeterminate');
       bar.style.setProperty('--p', pct);
       bar.setAttribute('aria-valuenow', String(pct));
     }
-    if (label) labelEl.textContent = label;
+    if (label) { window.__boot.label = label; labelEl.textContent = label; }
   });
   // Fade the overlay out, then remove it from the DOM entirely so its
   // backdrop never costs the compositor anything again.
   clearTimeout(peekTimer);
   clearTimeout(retryTimer);
   clearTimeout(fallbackTimer);
+  window.__boot.pct = 100;
+  window.__boot.done = true;
   overlay.classList.add('done');
   setTimeout(() => overlay.remove(), 600);
 })();

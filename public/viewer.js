@@ -1159,7 +1159,10 @@ function renderPreRace() {
   const celebrating = !el('champOverlay').hidden;
   const heroUp = !el('pickHero').hidden;
   const momentUp = !el('moment').hidden;
-  if (isLiveNow() || replaying || celebrating || heroUp || momentUp || rendererState === 'failed') {
+  // While the 3D track loads, the loading screen is the only thing on the
+  // stage; the card returns with the first frame (or the failure panel
+  // takes over). The countdown tick re-evaluates this every second.
+  if (isLiveNow() || replaying || celebrating || heroUp || momentUp || rendererState !== 'ready') {
     panel.hidden = true;
     return;
   }
@@ -2089,6 +2092,7 @@ function openDrawer(tab) {
   document.body.classList.add('drawer-open');
   el('tourBtn').setAttribute('aria-expanded', 'true');
   renderDrawer();
+  renderStageFallback();
   const t = d.querySelector(`.dr-tab[data-tab="${drawerTab}"]`);
   if (t) t.focus();
 }
@@ -2099,12 +2103,16 @@ function closeDrawer() {
   d.hidden = true;
   document.body.classList.remove('drawer-open');
   el('tourBtn').setAttribute('aria-expanded', 'false');
+  // The stage's standings (and "Open the tournament") come back before focus
+  // returns, so a keyboard user lands on a visible control.
+  renderStageFallback();
   if (_drawerOpener && document.contains(_drawerOpener)) { try { _drawerOpener.focus(); } catch {} }
   _drawerOpener = null;
 }
 function setDrawerTab(tab) {
   drawerTab = tab;
   renderDrawer();
+  renderStageFallback();
 }
 function renderDrawer() {
   if (!drawerOpen) return;
@@ -2651,11 +2659,28 @@ function closeCamPop() {
 let rendererState = 'loading';
 let _rendererWatch = 0;
 let _retryN = 0;
+let _loaderHide = 0;
 function setRendererState(next) {
   if (next === rendererState) return;
+  const prev = rendererState;
   rendererState = next;
   el('stage').dataset.renderer = next;
-  el('ssLoading').hidden = next !== 'loading';
+  // The loading screen is the only thing on the stage until the game's first
+  // usable frame; it fades out over 'ready' and is replaced outright by the
+  // failure panel. A retry brings the same single screen back.
+  const loader = el('ssLoading');
+  clearTimeout(_loaderHide);
+  if (next === 'loading') {
+    loader.classList.remove('done');
+    loader.hidden = false;
+    setLoaderProgress(null, 'Loading the 3D track…');
+  } else if (next === 'ready' && prev === 'loading') {
+    loader.classList.add('done');
+    _loaderHide = setTimeout(() => { loader.hidden = true; }, 500);
+  } else {
+    loader.classList.add('done');
+    loader.hidden = true;
+  }
   el('ssFailed').hidden = next !== 'failed';
   document.body.classList.toggle('no3d', next === 'failed');
   if (next === 'failed') { announce('The 3D race could not load. Standings and results are still live.'); hideRaceBoard(); }
@@ -2664,16 +2689,51 @@ function setRendererState(next) {
   renderStageFallback();
   syncCamUI();
 }
+// One status line + one bar. Real progress when the game reports it (its
+// build steps), otherwise an indeterminate sweep — never an invented number.
+function setLoaderProgress(pct, label) {
+  const bar = el('ssBar');
+  const status = el('ssStatus');
+  if (status && label && status.textContent !== label) status.textContent = label;
+  if (!bar) return;
+  const real = typeof pct === 'number' && pct > 0;
+  bar.classList.toggle('indeterminate', !real);
+  if (real) {
+    bar.style.setProperty('--p', Math.min(100, pct) + '%');
+    bar.setAttribute('aria-valuenow', String(Math.round(pct)));
+  } else {
+    bar.style.removeProperty('--p');
+    bar.removeAttribute('aria-valuenow');
+  }
+}
+// The game's step labels are shouted ('STACKING BLOCKS'); the screen speaks
+// normally ('Stacking blocks…').
+function loaderLabel(raw) {
+  const s = String(raw || '').trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() + '…' : '';
+}
 function rendererEvent(ev) {
   setRendererState(UI.rendererNext(rendererState, ev));
 }
 function watchRenderer(isRetry) {
   clearInterval(_rendererWatch);
   const started = Date.now();
+  let lastProgressAt = started;
+  let lastSeen = '';
   let timedOut = false;
   _rendererWatch = setInterval(() => {
     const a = api();
-    if (a && typeof a.startRace === 'function') {
+    // The game publishes its boot progress (window.__boot) as the course is
+    // built; the stage is "ready" only once that build has produced its
+    // first frame, not when the API object merely exists.
+    let boot = null;
+    try { boot = gameFrame.contentWindow && gameFrame.contentWindow.__boot; } catch {}
+    if (boot) {
+      const seen = `${boot.pct}|${boot.label}|${boot.done}`;
+      if (seen !== lastSeen) { lastSeen = seen; lastProgressAt = Date.now(); }
+      setLoaderProgress(boot.done ? 100 : boot.pct, loaderLabel(boot.label));
+    }
+    if (a && typeof a.startRace === 'function' && (!boot || boot.done)) {
       clearInterval(_rendererWatch);
       let noGl = false;
       try { noGl = !!gameFrame.contentWindow.__headlessNoGL; } catch {}
@@ -2683,7 +2743,9 @@ function watchRenderer(isRetry) {
       if (!noGl && isRetry) onRendererReady();
       return;
     }
-    if (!timedOut && Date.now() - started > 30000) { timedOut = true; rendererEvent('timeout'); }
+    // Give up only when nothing has happened for 30 s — a slow device that
+    // is still visibly making progress keeps its loading screen.
+    if (!timedOut && Date.now() - lastProgressAt > 30000) { timedOut = true; rendererEvent('timeout'); }
   }, 250);
 }
 function onRendererReady() {
@@ -2706,11 +2768,24 @@ function retryRenderer() {
   try { gameFrame.src = 'marble_run.html?embed=1&retry=' + _retryN; } catch {}
   watchRenderer(true);
 }
-// With no 3D view, the stage shows the current race as a list instead.
+// With no 3D view, the stage shows the current race as a list instead —
+// unless the Tournament drawer is open on "This race", which shows the same
+// list: then only one copy is on screen and the stage keeps the explanation
+// and the retry. (The list comes straight back when the drawer closes or
+// moves to another tab; nothing about the race is touched.)
+const SS_WHY_FULL = "This device or browser couldn't start the 3D view. The tournament is still live — standings, results and the bracket keep updating below.";
+const SS_WHY_DRAWER = "This device or browser couldn't start the 3D view. The tournament is still live — follow it in the Tournament panel.";
 function renderStageFallback(prog) {
   if (rendererState !== 'failed') return;
   const box = el('ssFallback');
   if (!box) return;
+  const inDrawer = drawerOpen && drawerTab === 'race';
+  el('ssFailed').classList.toggle('compact', inDrawer);
+  const why = el('ssWhy');
+  if (why) { const t = inDrawer ? SS_WHY_DRAWER : SS_WHY_FULL; if (why.textContent !== t) why.textContent = t; }
+  const open = el('ssOpenTournament');
+  if (open) open.hidden = drawerOpen;
+  if (inDrawer) { if (box.innerHTML) box.innerHTML = ''; return; }
   const cur = currentRace();
   const focus = cur && !cur.result ? cur : lastDoneRace();
   if (!focus) { box.innerHTML = model.rounds.length ? '<p class="dr-empty">The first race will be announced shortly.</p>' : ''; return; }
