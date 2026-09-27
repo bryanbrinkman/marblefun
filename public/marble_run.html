@@ -3933,6 +3933,13 @@ let startGateMesh = null;
 // on total course length; 0.009 sits at the very end of even the longest course's
 // first tile while staying inside it.
 const GATE_T = 0.009;
+// The gate board's thickness (its centre plane sits at GATE_T), so the marble
+// stop is at its BACK face rather than its middle.
+const GATE_THICKNESS = 0.35;
+// Where a parked marble rests relative to its spawn point: the spawn hovers
+// 0.05 above the block top, the visible floor is 0.08 thick → +0.03 puts the
+// marble's bottom on the floor surface while it waits for the gate.
+const PARKED_LIFT = 0.03;
 
 function buildStartGate() {
   startGateMesh = null;
@@ -3954,7 +3961,7 @@ function buildStartGate() {
   //     and rotates around its local Z to swing the gate forward.
   // The gate mesh hangs DOWNWARD from the hinge so the hinge sits at the gate's top.
   const gateHeight = CONFIG.wallHeight + 0.3;
-  const gateThickness = 0.35;
+  const gateThickness = GATE_THICKNESS;
   const gateWidth = CONFIG.trackWidth + 0.3;
   const gateGeo = new THREE.BoxGeometry(gateThickness, gateHeight, gateWidth);
   const gateMat = new THREE.MeshStandardMaterial({
@@ -5639,6 +5646,22 @@ function stepPhysics(dt) {
       continue;
     }
 
+    // Parked until the gate opens: held at the canonical spawn transform, no
+    // gravity, no jostling. They used to run live physics while waiting —
+    // rolling down the sloped start tile into the closed gate, squeezing five
+    // abreast into the narrowing channel, and visibly jittering and clipping
+    // through the gate board. The race is unaffected: beginRace() snaps every
+    // marble back to spawnPos and reseeds the stream at gate-open anyway. The
+    // parked row sits on the visible floor surface (spawnPos hovers just above
+    // the block top); the 0.03 snap at gate-open is imperceptible.
+    if (!STATE.gateOpen) {
+      m.pos.copy(m.spawnPos);
+      m.pos.y += PARKED_LIFT;
+      m.vel.set(0, 0, 0);
+      m.mesh.position.copy(m.pos);
+      continue;
+    }
+
     m.vel.y -= CONFIG.gravity * dt;
     m.pos.addScaledVector(m.vel, dt);
 
@@ -6081,8 +6104,9 @@ function stepPhysics(dt) {
       const gatePoint = curve.getPointAt(GATE_T);
       const gateTangent = curve.getTangentAt(GATE_T);
       const forwardDist = m.pos.clone().sub(gatePoint).dot(gateTangent);
-      if (forwardDist > -CONFIG.marbleRadius) {
-        const overshoot = forwardDist + CONFIG.marbleRadius;
+      const stopDist = CONFIG.marbleRadius + GATE_THICKNESS / 2; // surface meets the board's back face
+      if (forwardDist > -stopDist) {
+        const overshoot = forwardDist + stopDist;
         m.pos.addScaledVector(gateTangent, -overshoot);
         const forwardVel = m.vel.dot(gateTangent);
         if (forwardVel > 0) {
