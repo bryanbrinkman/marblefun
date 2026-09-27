@@ -75,17 +75,19 @@ function renderGallery(html, { careers = [], manifest = {}, hof = null } = {}) {
     const c = car.get(id) || { races: 0, wins: 0, podiums: 0, titles: 0 };
     const sk = manifest[id] || manifest[String(id)] || null;
     const owner = sk && sk.owner ? String(sk.owner) : null;
-    // Card = thumbnail, number, name, one-line career. Owner and the fuller
-    // statistics live in the detail view (client-side).
+    // Card = the marble on its shelf with a plaque: number, name, wins. Owner
+    // and the fuller statistics live in the detail view (client-side). Same
+    // markup as gallery.html's render() so hydration changes nothing.
     cards.push(
       `<div class="card${owner ? ' claimed' : ''}${id === reigning ? ' reigning' : ''}" role="listitem" tabindex="0" data-id="${id}">` +
-        `<div class="ball" style="${galleryBall(id, sk)}"></div>` +
-        `<div class="m-num">#${pad(id)}</div>` +
-        `<div class="m-name">${esc(nameFor(id))}</div>` +
-        `<div class="m-stats">${c.races ? `<b>${c.wins}</b> ${c.wins === 1 ? 'win' : 'wins'} · ${c.races} ${c.races === 1 ? 'race' : 'races'}` : 'No races yet'}</div>` +
+        `<div class="ball-wrap"><div class="ball" style="${galleryBall(id, sk)}"></div></div>` +
+        `<div class="plaque">` +
+        `<span class="m-num">#${pad(id)}</span>` +
+        `<span class="m-name">${esc(nameFor(id))}</span>` +
+        `<span class="m-stats">${c.races ? `<b>${c.wins}</b> ${c.wins === 1 ? 'win' : 'wins'}` : 'No races yet'}</span>` +
         (c.titles ? `<span class="m-titles">🏆 ${c.titles} ${c.titles === 1 ? 'title' : 'titles'}</span>` : '') +
         (id === reigning ? '<span class="m-reign">Reigning champion</span>' : '') +
-        `</div>`
+        `</div></div>`
     );
   }
   html = fill(html, 'GRID', cards.join(''));

@@ -30,7 +30,8 @@ check('gallery: 100 marble cards with names + careers in the initial HTML', () =
   assert.ok(html.includes('Reigning champion'));
   assert.strictEqual((html.match(/class="card( claimed)?( reigning)?" role="listitem"/g) || []).length, 100);
   assert.ok(html.includes('Royal Flush')); // #42's permanent name
-  assert.ok(html.includes('<b>9</b> wins · 30 races')); // concise career line on the card
+  assert.ok(html.includes('<span class="m-stats"><b>9</b> wins</span>')); // the plaque names the wins; races live in the detail view
+  assert.ok(html.includes('<span class="m-name">Royal Flush</span>') && html.includes('class="plaque"'), 'number, name and wins sit on the shelf plaque');
   assert.ok(html.includes('🏆 2 titles')); // one trophy + a count, never a string of trophies
   assert.ok(!html.includes('👤 Bryan') && !html.includes('class="m-owner'), 'ownership lives in the detail view, not on cards');
   assert.ok(html.includes('id="count">100 marbles<'));

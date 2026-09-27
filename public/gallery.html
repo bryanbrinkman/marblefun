@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Marble Gallery — Marble Run</title>
+<title>The Lost Marble Collection — Marble Run</title>
 <meta name="description" content="Meet all 100 Marble Run competitors: every marble’s name, number, career record, championships and owner.">
 <link rel="canonical" href="https://marblerun.fun/gallery">
-<meta name="theme-color" content="#0a0d14">
+<meta name="theme-color" content="#f6f1ea">
 <meta property="og:site_name" content="Marble Run">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Marble Gallery — Marble Run">
+<meta property="og:title" content="The Lost Marble Collection — Marble Run">
 <meta property="og:description" content="Meet all 100 Marble Run competitors: every marble’s name, number, career record, championships and owner.">
 <meta property="og:url" content="https://marblerun.fun/gallery">
 <meta property="og:image" content="https://marblerun.fun/og.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Marble Gallery — Marble Run">
+<meta name="twitter:title" content="The Lost Marble Collection — Marble Run">
 <meta name="twitter:description" content="Meet all 100 Marble Run competitors: every marble’s name, number, career record, championships and owner.">
 <meta name="twitter:image" content="https://marblerun.fun/og.png">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -22,157 +22,280 @@
 <style>
   :root {
     --skin-zoom: 1.34; /* artwork margin → sphere fills the circle (keep in sync with viewer.css) */
-    --bg: #0a0d14; --panel: rgba(20, 26, 40, 0.72); --panel2: rgba(27, 34, 51, 0.8);
-    --line: rgba(120, 140, 175, 0.22); --text: #eaf0f8; --muted: #97a4ba;
-    --accent: #ffcf5c; --live: #35d07f;
+    --bg: #f6f1ea; --text: #1e1a16; --muted: #7b7168; --line: rgba(60, 45, 30, 0.14);
+    --field: #eeeae3; --accent: #f3c14b; --accent-ink: #2a1f0a; --hot: #e5522c;
+    /* Wood: the frame (walnut), the back panel (oak) and the shelf plank (maple). */
+    --frame-1: #a8743f; --frame-2: #7d5028; --frame-3: #5a3719;
+    --panel-1: #cfa56d; --panel-2: #b8895a;
+    --plank-1: #e2b57c; --plank-2: #c8935a; --plank-ink: #3a2817; --plank-muted: #6b4e33;
+    --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --cols: 5;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text);
-    font: 0.875rem/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-  a { color: var(--accent); }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font: 0.9375rem/1.5 var(--sans); }
+  a { color: inherit; }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--hot); outline-offset: 3px; }
 
-  .top {
-    position: sticky; top: 0; z-index: 5;
-    background: linear-gradient(rgba(10,13,20,.97), rgba(10,13,20,.88));
-    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--line);
-    padding: 14px 18px 12px;
-  }
-  .top-inner { max-width: 1060px; margin: 0 auto; }
-  .crumbs { font-size: 12px; margin-bottom: 4px; }
-  .crumbs a { text-decoration: none; color: var(--muted); }
-  .crumbs a:hover { color: var(--accent); }
-  h1 { margin: 0 0 2px; font-size: 22px; letter-spacing: .3px; }
-  .sub { margin: 0; color: var(--muted); font-size: 12.5px; }
-  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
-  .toolbar input, .toolbar select {
-    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
-    border-radius: 10px; padding: 8px 11px; font: 600 13px system-ui, sans-serif;
-    outline: none; min-height: 38px;
-  }
-  .toolbar input { flex: 1 1 180px; min-width: 140px; }
-  .toolbar input:focus, .toolbar select:focus { border-color: var(--accent); }
-  .count { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+  /* ---------- masthead ---------- */
+  .top { padding: 18px 24px 0; }
+  .top-inner { max-width: 1240px; margin: 0 auto; }
+  .bar { display: flex; align-items: center; gap: 18px; row-gap: 6px; flex-wrap: wrap; font-size: 0.8125rem; color: var(--muted); }
+  .wordmark { font: 800 0.875rem/1 var(--sans); letter-spacing: 0.18em; color: var(--text); text-decoration: none; }
+  .bar .sep { width: 1px; height: 18px; background: var(--line); }
+  .crumbs a { text-decoration: none; color: var(--muted); font-family: var(--serif); font-size: 0.9375rem; white-space: nowrap; }
+  .crumbs a:hover { color: var(--text); }
+  .tagline { margin-left: auto; font-family: var(--serif); white-space: nowrap; }
+  .hero { text-align: center; padding: 26px 0 18px; }
+  h1 { margin: 0; font: 700 clamp(2.25rem, 6vw, 4.25rem)/1.02 var(--serif); letter-spacing: -0.035em; }
+  .sub { margin: 8px 0 0; font: 400 clamp(1rem, 2vw, 1.375rem)/1.3 var(--serif); color: #4f463d; }
 
-  .wrap { max-width: 1060px; margin: 0 auto; padding: 16px 18px 60px; }
+  /* ---------- toolbar ---------- */
+  .toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 6px 0 14px; }
+  .search { position: relative; flex: 1 1 280px; max-width: 520px; }
+  .search svg { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--muted); pointer-events: none; }
+  .search input { width: 100%; min-height: 46px; padding: 10px 16px 10px 46px; border: 1px solid transparent; border-radius: 12px; background: var(--field); font-size: 0.9375rem; }
+  .search input::placeholder { color: #9a9086; }
+  .search input:focus { outline: none; border-color: var(--text); background: #fff; }
+  .sortwrap { display: flex; align-items: center; gap: 10px; margin-left: auto; font-family: var(--serif); font-size: 1rem; color: var(--muted); }
+  .sortwrap select { min-height: 46px; padding: 8px 40px 8px 16px; border: 1px solid transparent; border-radius: 12px; background: var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%231e1a16' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 14px center; appearance: none; -webkit-appearance: none; font: 700 0.9375rem var(--serif); color: var(--text); cursor: pointer; }
+  .sortwrap select:focus { outline: none; border-color: var(--text); }
+  .count { font-family: var(--serif); font-size: 1rem; color: var(--muted); white-space: nowrap; }
+  .views { display: flex; gap: 4px; }
+  .views button { width: 40px; height: 40px; border: 0; border-radius: 10px; background: none; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .views button[aria-pressed='true'] { color: var(--hot); }
+  .views button:hover { background: var(--field); }
+  .views svg { width: 22px; height: 22px; }
 
-  .grid {
-    display: grid; gap: 10px;
-    grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px 70px; }
+  .notice { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: var(--field); color: var(--muted); font-size: 0.875rem; }
+  .notice[hidden] { display: none; }
+  .caption { margin: 14px 4px 0; font-family: var(--serif); color: var(--muted); font-size: 0.9375rem; text-align: center; }
+  .caption:empty { display: none; }
+
+  /* ---------- the display case ---------- */
+  /* Walnut frame with a bevel, an oak back panel that darkens toward the
+     top like a real cabinet, and one continuous maple shelf per row (each
+     card paints its own stretch of plank; the row has no gaps). */
+  .case {
+    padding: 22px; border-radius: 6px;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 2px, rgba(0,0,0,0) 2px 7px, rgba(0,0,0,0.06) 7px 9px, rgba(0,0,0,0) 9px 16px),
+      linear-gradient(180deg, var(--frame-1), var(--frame-2) 55%, var(--frame-3));
+    box-shadow: inset 0 3px 0 rgba(255,255,255,0.28), inset 0 -3px 0 rgba(0,0,0,0.35), 0 24px 50px -18px rgba(40, 24, 8, 0.55), 0 8px 18px rgba(40, 24, 8, 0.18);
   }
-  .card {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-    padding: 14px 10px 12px; text-align: center; cursor: pointer;
-    transition: border-color .15s, transform .15s;
+  .case-in {
+    position: relative; border-radius: 2px; overflow: hidden;
+    background:
+      repeating-linear-gradient(90deg, rgba(0,0,0,0.045) 0 1px, rgba(0,0,0,0) 1px 11px, rgba(255,255,255,0.05) 11px 12px, rgba(0,0,0,0) 12px 23px),
+      linear-gradient(180deg, var(--panel-2), var(--panel-1) 30%, var(--panel-1));
+    box-shadow: inset 0 22px 36px rgba(60, 35, 12, 0.45), inset 12px 0 26px rgba(60, 35, 12, 0.22), inset -12px 0 26px rgba(60, 35, 12, 0.22), inset 0 -8px 20px rgba(60, 35, 12, 0.25);
   }
-  .card:hover, .card:focus-visible { border-color: var(--accent); transform: translateY(-2px); outline: none; }
+  .grid { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 0; }
+  .card { display: flex; flex-direction: column; align-items: center; cursor: pointer; padding: 30px 0 0; min-width: 0; position: relative; }
+  .card:focus-visible { outline: none; }
+  .card:focus-visible .ball, .card:hover .ball { transform: translateY(-5px) scale(1.03); }
+  .card:focus-visible .plaque { box-shadow: inset 0 3px 0 rgba(255,255,255,0.4), inset 0 -4px 0 rgba(0,0,0,0.28), inset 0 0 0 2px var(--hot); }
+  .ball-wrap { position: relative; width: clamp(64px, calc((100vw - 96px) / var(--cols) * 0.72), 172px); height: clamp(64px, calc((100vw - 96px) / var(--cols) * 0.72), 172px); margin-bottom: 24px; }
   .ball {
-    width: 62px; height: 62px; border-radius: 50%; margin: 0 auto 9px;
+    position: relative; width: 100%; height: 100%; border-radius: 50%; display: block;
     /* Artwork is zoomed so the sphere's edge meets the circle (see --skin-zoom). */
-    background-size: calc(100% * var(--skin-zoom, 1)); background-position: center;
-    box-shadow: inset -6px -8px 14px rgba(0,0,0,.45), 0 4px 10px rgba(0,0,0,.4);
+    background-size: calc(100% * var(--skin-zoom, 1)); background-position: center; background-repeat: no-repeat; background-color: #d9d2c8;
+    box-shadow: inset -8px -12px 22px rgba(0,0,0,0.28), inset 4px 6px 12px rgba(255,255,255,0.18);
+    transition: transform 0.18s ease;
   }
-  .m-num { font-size: 11px; color: var(--muted); font-weight: 700; }
-  .m-name { font-weight: 800; font-size: 14px; margin: 1px 0 5px; }
-  .m-stats { font-size: 11.5px; color: var(--muted); }
-  .m-stats b { color: var(--text); }
+  /* Glass: a soft highlight top-left and a darker limb, over whatever the artwork is. */
+  .ball::before { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle at 31% 26%, rgba(255,255,255,0.55), rgba(255,255,255,0.12) 18%, rgba(255,255,255,0) 40%), radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 62%, rgba(0,0,0,0.22) 100%); }
+  /* Contact shadow on the shelf. */
+  .ball-wrap::after { content: ''; position: absolute; left: 8%; right: 8%; bottom: -16px; height: 18px; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 50%, rgba(50, 28, 8, 0.5), rgba(50, 28, 8, 0.18) 55%, rgba(50, 28, 8, 0) 72%); }
+  /* Exactly the card's width, no overlap with its neighbours: the row's
+     plaques butt together into one continuous plank with one shadow. */
+  .plaque {
+    width: 100%; margin: 0; padding: 12px 10px 13px; min-height: 48px; flex: 1 0 auto;
+    display: flex; flex-wrap: wrap; align-items: baseline; align-content: center; justify-content: center; column-gap: 8px; row-gap: 2px;
+    background:
+      repeating-linear-gradient(90deg, rgba(0,0,0,0) 0 14px, rgba(0,0,0,0.035) 14px 16px),
+      linear-gradient(180deg, var(--plank-1), var(--plank-2));
+    box-shadow: inset 0 3px 0 rgba(255,255,255,0.4), inset 0 -4px 0 rgba(0,0,0,0.28);
+    font-family: var(--serif); color: var(--plank-ink); text-align: center; line-height: 1.25;
+  }
+  /* The plank's drop shadow falls onto the panel below, like a real shelf. */
+  .plaque::after { content: ''; position: absolute; left: 0; right: 0; bottom: -14px; height: 14px; pointer-events: none;
+    background: linear-gradient(180deg, rgba(50, 28, 8, 0.32), rgba(50, 28, 8, 0)); }
+  .m-num { font-size: 0.8125rem; color: var(--plank-muted); font-weight: 700; letter-spacing: 0.02em; }
+  .m-name { font-size: 1.0625rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .m-stats { font-size: 0.8125rem; color: var(--plank-muted); white-space: nowrap; }
+  .m-stats::before { content: '·'; margin-right: 8px; color: var(--plank-muted); }
+  .m-stats b { font-weight: 700; color: var(--plank-ink); }
   /* Title counts are quiet secondary text; gold is kept for the reigning
      champion and selected states. */
-  .m-titles { display: block; margin-top: 4px; font-size: 11px; font-weight: 700; color: var(--muted); }
-  .card.reigning { border-color: var(--accent); }
-  .card.reigning .m-name { color: var(--accent); }
-  .m-reign { display: inline-block; margin-top: 5px; font-size: 11px; font-weight: 800;
-    color: #1c1607; background: var(--accent); border-radius: 999px; padding: 2px 8px; }
-  .m-stats .sk { display: inline-block; width: 5.5em; height: 0.8em; border-radius: 4px; background: rgba(120,140,175,.25); vertical-align: middle; animation: shimmer 1.4s ease-in-out infinite; }
+  .m-titles { flex-basis: 100%; font-size: 0.75rem; color: var(--plank-muted); }
+  .m-reign { flex-basis: auto; font: 800 0.6875rem/1 var(--sans); color: var(--accent-ink); background: var(--accent); border-radius: 999px; padding: 4px 9px; margin-top: 3px; letter-spacing: 0.02em; }
+  .card.reigning .ball-wrap { filter: drop-shadow(0 0 12px rgba(243, 193, 75, 0.75)); }
+  .m-stats .sk { display: inline-block; width: 4.5em; height: 0.75em; border-radius: 4px; background: rgba(58, 40, 23, 0.18); vertical-align: middle; animation: shimmer 1.4s ease-in-out infinite; }
   @keyframes shimmer { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
-  .notice { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
-  .notice[hidden] { display: none; }
-  @media (prefers-reduced-motion: reduce) { .m-stats .sk { animation: none; } .card { transition: none; } }
+  .empty { text-align: center; color: #fff5e6; font-family: var(--serif); font-size: 1.125rem; padding: 60px 20px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+  .empty[hidden] { display: none; }
 
-  .empty { text-align: center; color: var(--muted); padding: 50px 0; }
+  /* ---------- list view ---------- */
+  /* One long shelf: a plank per marble, artwork to the left, record to the right. */
+  .grid.list { grid-template-columns: 1fr; }
+  .grid.list .card { flex-direction: row; align-items: center; gap: 16px; padding: 10px 22px; width: 100%; margin: 0;
+    background: repeating-linear-gradient(90deg, rgba(0,0,0,0) 0 14px, rgba(0,0,0,0.035) 14px 16px), linear-gradient(180deg, var(--plank-1), var(--plank-2));
+    box-shadow: inset 0 3px 0 rgba(255,255,255,0.4), inset 0 -4px 0 rgba(0,0,0,0.28); }
+  .grid.list .card + .card { margin-top: 10px; }
+  .grid.list .ball-wrap { width: 54px; height: 54px; margin: 0; flex: none; }
+  .grid.list .ball-wrap::after { display: none; }
+  .grid.list .plaque { width: auto; margin: 0; padding: 0; min-height: 0; flex: 1 1 auto; background: none; box-shadow: none; justify-content: flex-start; text-align: left; }
+  .grid.list .plaque::after { display: none; }
+  .grid.list .m-titles { flex-basis: auto; }
+  .grid.list .m-titles::before { content: '·'; margin-right: 8px; }
+  .grid.list .card:focus-visible { box-shadow: inset 0 3px 0 rgba(255,255,255,0.4), inset 0 -4px 0 rgba(0,0,0,0.28), inset 0 0 0 2px var(--hot); }
 
-  /* Detail modal */
-  .veil { position: fixed; inset: 0; z-index: 20; background: rgba(5, 8, 14, 0.72);
+  /* ---------- detail: a wooden display box ---------- */
+  .veil { position: fixed; inset: 0; z-index: 20; background: rgba(246, 241, 234, 0.55); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
     display: flex; align-items: center; justify-content: center; padding: 18px; }
   .veil[hidden] { display: none; }
-  .sheet {
-    background: #141a28; border: 1px solid var(--line); border-radius: 18px;
-    width: min(400px, 100%); max-height: 88vh; overflow: auto;
-    padding: 26px 22px 20px; text-align: center; position: relative;
-    box-shadow: 0 18px 60px rgba(0,0,0,.6);
+  .box {
+    width: min(560px, 100%); max-height: 92vh; overflow: auto; position: relative;
+    padding: 16px; border-radius: 5px;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 2px, rgba(0,0,0,0) 2px 7px, rgba(0,0,0,0.06) 7px 9px, rgba(0,0,0,0) 9px 16px),
+      linear-gradient(180deg, var(--frame-1), var(--frame-2) 55%, var(--frame-3));
+    box-shadow: inset 0 3px 0 rgba(255,255,255,0.28), inset 0 -3px 0 rgba(0,0,0,0.35), 0 40px 80px -20px rgba(40, 24, 8, 0.6), 0 10px 24px rgba(40, 24, 8, 0.25);
   }
-  .sheet .x { position: absolute; top: 10px; right: 10px; background: none; border: none;
-    color: var(--muted); font-size: 18px; cursor: pointer; padding: 6px 10px; }
-  .sheet .x:hover { color: var(--text); }
-  .sheet .ball { width: 118px; height: 118px; margin-bottom: 14px; }
-  .sheet h2 { margin: 0 0 2px; font-size: 21px; }
-  .d-owner { font-size: 12.5px; color: var(--muted); margin: 4px 0 14px; }
-  .d-owner a { font-weight: 700; }
-  .statgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 14px; }
-  .stat { background: var(--panel2); border: 1px solid var(--line); border-radius: 11px; padding: 9px 4px; }
-  .stat b { display: block; font-size: 17px; }
-  .stat i { font-style: normal; font-size: 9.5px; color: var(--muted); letter-spacing: .6px;
-    text-transform: uppercase; }
-  .d-line { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
-  .cheer {
-    display: inline-block; background: var(--accent); color: #1c1607; border: none;
-    border-radius: 12px; padding: 11px 20px; font: 800 13.5px system-ui, sans-serif;
-    cursor: pointer; text-decoration: none;
+  .box-top {
+    position: relative; height: clamp(220px, 46vw, 330px); display: flex; align-items: flex-end; justify-content: center;
+    background:
+      repeating-linear-gradient(90deg, rgba(0,0,0,0.045) 0 1px, rgba(0,0,0,0) 1px 11px, rgba(255,255,255,0.05) 11px 12px, rgba(0,0,0,0) 12px 23px),
+      linear-gradient(180deg, var(--panel-2), var(--panel-1) 35%, var(--panel-1));
+    box-shadow: inset 0 26px 40px rgba(60, 35, 12, 0.45), inset 16px 0 30px rgba(60, 35, 12, 0.25), inset -16px 0 30px rgba(60, 35, 12, 0.25);
   }
-  .cheer:hover { filter: brightness(1.08); }
-  .d-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-  .share2 {
-    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
-    border-radius: 12px; padding: 11px 16px; font: 800 13.5px system-ui, sans-serif;
-    cursor: pointer;
-  }
-  .share2:hover { border-color: var(--accent); color: var(--accent); }
+  .ledge { position: absolute; left: 0; right: 0; bottom: 0; height: 22px;
+    background: repeating-linear-gradient(90deg, rgba(0,0,0,0) 0 14px, rgba(0,0,0,0.035) 14px 16px), linear-gradient(180deg, var(--plank-1), var(--plank-2));
+    box-shadow: inset 0 3px 0 rgba(255,255,255,0.4), inset 0 -4px 0 rgba(0,0,0,0.28); }
+  .box-top .ball-wrap { width: clamp(150px, 34vw, 250px); height: clamp(150px, 34vw, 250px); margin: 0 0 22px; z-index: 1; }
+  .box-top .ball-wrap::after { bottom: -14px; }
+  .box .x { position: absolute; top: 26px; right: 26px; z-index: 2; width: 40px; height: 40px; border: 0; border-radius: 50%; background: rgba(255, 245, 230, 0.12); color: #2a1a0a; font-size: 22px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .box .x:hover { background: rgba(255, 245, 230, 0.35); }
+  .box-card { background: #fbf8f2; padding: 26px 24px 24px; text-align: center; }
+  .box-card .m-num { display: block; color: var(--muted); font: 700 0.9375rem var(--serif); }
+  .box-card h2 { margin: 2px 0 6px; font: 700 clamp(2rem, 6vw, 3rem)/1.05 var(--serif); letter-spacing: -0.03em; }
+  .d-owner { font: 400 clamp(0.9375rem, 2.5vw, 1.125rem)/1.35 var(--serif); color: var(--muted); margin: 0 0 20px; }
+  .d-owner a { color: var(--text); font-weight: 700; }
+  .statgrid { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0 0 18px; }
+  .stat { padding: 6px 4px; border-left: 1px solid var(--line); }
+  .stat:first-child { border-left: 0; }
+  .stat b { display: block; font: 700 clamp(1.5rem, 5vw, 2.25rem)/1.1 var(--serif); letter-spacing: -0.02em; }
+  .stat i { display: block; margin-top: 4px; font: 600 0.6875rem/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  .d-line { font: 400 clamp(0.9375rem, 2.5vw, 1.125rem)/1.35 var(--serif); color: #4f463d; margin: 0 0 22px; }
+  .d-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .cheer, .share2 { display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 12px 22px; border-radius: 14px; font: 700 1.125rem var(--serif); cursor: pointer; text-decoration: none; }
+  .cheer { background: var(--accent); color: var(--accent-ink); border: 1px solid rgba(0,0,0,0.06); flex: 1 1 260px; justify-content: center; }
+  .cheer:hover { filter: brightness(1.04); }
+  .share2 { background: #fff; color: var(--text); border: 1px solid var(--line); }
+  .share2:hover { border-color: var(--text); }
+  .cheer svg, .share2 svg { width: 20px; height: 20px; flex: none; }
 
-  @media (max-width: 470px) {
-    .grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
-    .ball { width: 52px; height: 52px; }
+  @media (max-width: 1000px) { :root { --cols: 4; } }
+  @media (max-width: 760px) {
+    :root { --cols: 3; }
+    .top { padding: 14px 16px 0; }
+    .tagline { display: none; }
+    .wrap { padding: 0 16px 50px; }
+    .case { padding: 12px; }
+    .card { padding-top: 22px; }
+    .ball-wrap { margin-bottom: 20px; }
+    .plaque { padding: 9px 6px 10px; }
+    .m-name { font-size: 0.9375rem; }
+    .m-num, .m-stats { font-size: 0.75rem; }
+    .sortwrap { margin-left: 0; }
+    .sortwrap .sortlabel { display: none; }
+    .veil { padding: 10px; align-items: flex-end; }
+    .box { padding: 10px; border-radius: 6px 6px 0 0; max-height: 94vh; }
+    .box .x { top: 18px; right: 18px; }
+    .box-card { padding: 20px 16px 18px; }
   }
+  @media (max-width: 480px) {
+    :root { --cols: 2; }
+    .bar { gap: 12px; }
+    .bar .sep { display: none; }
+    .m-stats { flex-basis: 100%; }
+    .m-stats::before { content: none; }
+    .grid.list .card { padding: 8px 12px; gap: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .m-stats .sk { animation: none; } .ball { transition: none; } }
 </style>
 </head>
 <body>
 
 <header class="top">
   <div class="top-inner">
-    <div class="crumbs"><a href="/">← Back to the races</a></div>
-    <h1>🔮 Marble Gallery</h1>
-    <p class="sub" id="subLine">All 100 competitors — every name, career record and owner.</p>
-    <div class="toolbar">
-      <input id="q" type="search" placeholder="Search name or number…" aria-label="Search marbles">
-      <select id="sort" aria-label="Sort marbles">
+    <div class="bar">
+      <a class="wordmark" href="/">MARBLERUN.FUN</a>
+      <span class="sep" aria-hidden="true"></span>
+      <span class="crumbs"><a href="/">← Back to the races</a></span>
+      <span class="tagline">The marble racing universe by Bryan Brinkman</span>
+    </div>
+    <div class="hero">
+      <h1>The Lost Marble Collection</h1>
+      <p class="sub" id="subLine">100 marbles. Every one has a story.</p>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="toolbar">
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Search name or number…" aria-label="Search marbles" autocomplete="off">
+    </label>
+    <div class="sortwrap">
+      <span class="sortlabel" id="sortLabel">Sort by</span>
+      <select id="sort" aria-labelledby="sortLabel">
         <option value="num">By number</option>
         <option value="wins">Most wins</option>
         <option value="podiums">Most podiums</option>
         <option value="titles">Most titles</option>
         <option value="races">Most races</option>
       </select>
-      <span class="count" id="count"><!--SSR:COUNT--></span>
+    </div>
+    <span class="count" id="count"><!--SSR:COUNT--></span>
+    <div class="views" role="group" aria-label="View">
+      <button type="button" id="viewGrid" aria-pressed="true" aria-label="Shelf view" title="Shelf view"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></button>
+      <button type="button" id="viewList" aria-pressed="false" aria-label="List view" title="List view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg></button>
     </div>
   </div>
-</header>
-
-<main class="wrap">
   <p class="notice" id="notice" hidden></p>
-  <div class="grid" id="grid" role="list"><!--SSR:GRID--></div>
-  <div class="empty" id="empty" hidden>No marbles match that search.</div>
+  <section class="case" aria-label="The marble collection">
+    <div class="case-in">
+      <div class="grid" id="grid" role="list"><!--SSR:GRID--></div>
+      <div class="empty" id="empty" hidden>No marbles match that search.</div>
+    </div>
+  </section>
+  <p class="caption" id="caption"></p>
 </main>
 
 <div class="veil" id="veil" hidden>
-  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dName">
+  <div class="box" role="dialog" aria-modal="true" aria-labelledby="dName">
     <button class="x" id="dClose" aria-label="Close">✕</button>
-    <div class="ball" id="dBall"></div>
-    <div class="m-num" id="dNum"></div>
-    <h2 id="dName"></h2>
-    <div class="d-owner" id="dOwner"></div>
-    <div class="statgrid" id="dStats"></div>
-    <div class="d-line" id="dLine"></div>
-    <div class="d-actions">
-      <a class="cheer" id="dCheer" href="/">📍 Cheer for this marble</a>
-      <button class="share2" id="dShare">🔗 Share</button>
+    <div class="box-top">
+      <div class="ball-wrap"><div class="ball" id="dBall"></div></div>
+      <div class="ledge" aria-hidden="true"></div>
+    </div>
+    <div class="box-card">
+      <span class="m-num" id="dNum"></span>
+      <h2 id="dName"></h2>
+      <p class="d-owner" id="dOwner"></p>
+      <div class="statgrid" id="dStats"></div>
+      <p class="d-line" id="dLine"></p>
+      <div class="d-actions">
+        <a class="cheer" id="dCheer" href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.3-9.2C1.5 8.2 3.6 5 6.8 5c1.9 0 3.4 1 4.2 2.4h2C13.8 6 15.3 5 17.2 5c3.2 0 5.3 3.2 4.1 6.3-1.8 4.6-9.3 9.2-9.3 9.2z"/></svg><span>Cheer for this marble</span></a>
+        <button class="share2" id="dShare" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg><span id="dShareText">Share</span></button>
+      </div>
     </div>
   </div>
 </div>
@@ -255,21 +378,23 @@
       card.dataset.id = id;
       if (owner) card.classList.add('claimed');
       if (id === reigningId) card.classList.add('reigning');
-      // Card = thumbnail, number, name, one-line career. Owner + full stats
+      // A plaque under the marble: number, name, wins. Owner + full stats
       // live in the detail view. While careers load, a placeholder — never
       // "No races yet" for a marble whose record simply hasn't arrived.
       const stats = careersState === 'loading'
         ? '<span class="sk" aria-label="Loading career"></span>'
         : careersState === 'error'
           ? 'Career unavailable'
-          : c.races ? `<b>${c.wins}</b> ${c.wins === 1 ? 'win' : 'wins'} · ${c.races} ${c.races === 1 ? 'race' : 'races'}` : 'No races yet';
+          : c.races ? `<b>${c.wins}</b> ${c.wins === 1 ? 'win' : 'wins'}` : 'No races yet';
       card.innerHTML =
-        `<div class="ball" style="${ballStyle(id, skinOf(id))}"></div>` +
-        `<div class="m-num">#${pad(id)}</div>` +
-        `<div class="m-name">${nameFor(id)}</div>` +
-        `<div class="m-stats">${stats}</div>` +
+        `<div class="ball-wrap"><div class="ball" style="${ballStyle(id, skinOf(id))}"></div></div>` +
+        `<div class="plaque">` +
+        `<span class="m-num">#${pad(id)}</span>` +
+        `<span class="m-name">${nameFor(id)}</span>` +
+        `<span class="m-stats">${stats}</span>` +
         (careersState === 'ok' && c.titles ? `<span class="m-titles">🏆 ${c.titles} ${c.titles === 1 ? 'title' : 'titles'}</span>` : '') +
-        (id === reigningId ? '<span class="m-reign">Reigning champion</span>' : '');
+        (id === reigningId ? '<span class="m-reign">Reigning champion</span>' : '') +
+        `</div>`;
       frag.appendChild(card);
     }
     grid.replaceChildren(frag);
@@ -281,6 +406,20 @@
     return String(s).replace(/[&<>"']/g, (ch) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   }
+
+  // ---- view: shelves or list (remembered on this device) -------------------
+  const viewGrid = document.getElementById('viewGrid');
+  const viewList = document.getElementById('viewList');
+  function setView(v) {
+    const list = v === 'list';
+    grid.classList.toggle('list', list);
+    viewGrid.setAttribute('aria-pressed', list ? 'false' : 'true');
+    viewList.setAttribute('aria-pressed', list ? 'true' : 'false');
+    try { localStorage.setItem('galleryView', list ? 'list' : 'grid'); } catch {}
+  }
+  viewGrid.addEventListener('click', () => setView('grid'));
+  viewList.addEventListener('click', () => setView('list'));
+  try { if (localStorage.getItem('galleryView') === 'list') setView('list'); } catch {}
 
   // ---- detail modal --------------------------------------------------------
   const veil = document.getElementById('veil');
@@ -300,7 +439,7 @@
           : `<b>${esc(owner.name)}</b>`))
       : 'Unclaimed — this marble is looking for an owner';
     const winPct = c.races ? Math.round((c.wins / c.races) * 100) : 0;
-    const v = (n) => (careersState === 'ok' ? n : '…');
+    const v = (n) => (careersState === 'ok' ? Number(n).toLocaleString() : '…');
     document.getElementById('dStats').innerHTML =
       `<div class="stat"><b>${v(c.races)}</b><i>Races</i></div>` +
       `<div class="stat"><b>${v(c.wins)}</b><i>Wins</i></div>` +
@@ -319,7 +458,8 @@
       // href="/" performs the navigation.
     };
     const share = document.getElementById('dShare');
-    share.textContent = '🔗 Share';
+    const shareText = document.getElementById('dShareText');
+    shareText.textContent = 'Share';
     share.onclick = async () => {
       const url = location.origin + '/gallery#' + id;
       const payload = { title: nameFor(id) + ' — MarbleRun.fun', url };
@@ -328,8 +468,8 @@
       } catch { return; } // user dismissed the share sheet — not a failure
       try {
         await navigator.clipboard.writeText(url);
-        share.textContent = '✓ Copied';
-        setTimeout(() => { share.textContent = '🔗 Share'; }, 1600);
+        shareText.textContent = 'Copied';
+        setTimeout(() => { shareText.textContent = 'Share'; }, 1600);
       } catch {}
     };
     // Deep-linkable: /gallery#42 opens this marble. replaceState avoids both
@@ -388,9 +528,8 @@
       let races = 0, titles = 0;
       for (const c of d.careers) { races += c.races || 0; titles += c.titles || 0; }
       if (races) {
-        document.getElementById('subLine').textContent =
-          `All 100 competitors · ${races.toLocaleString()} race entries recorded · ` +
-          `${titles} championship${titles === 1 ? '' : 's'} decided.`;
+        document.getElementById('caption').textContent =
+          `${races.toLocaleString()} race entries recorded · ${titles} championship${titles === 1 ? '' : 's'} decided.`;
       }
       render();
       refreshOpenDetail();
