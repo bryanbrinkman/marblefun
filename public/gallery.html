@@ -206,9 +206,15 @@
   .m-stats::before { content: '·'; margin-right: 8px; color: var(--ink-wood-muted); }
   .m-stats b { font-weight: 700; color: var(--ink-wood); }
   /* Title counts are not repeated on the shelf; the detail view has them.
-     The reigning champion gets a small gold mark, nothing louder. */
+     Two small labels can join the plaque: a gold "Champion" for the reigning
+     champion, and a heart "Your pick" on the marble this visitor cheers for
+     (the same stored choice the home page's favourite card uses). */
   .m-titles { display: none; }
-  .m-reign { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-left: 8px; vertical-align: 2px; background: var(--accent); box-shadow: 0 0 0 1px rgba(var(--shadow-ink), 0.35); }
+  .m-reign, .m-pick { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font: 700 0.6875rem/1 var(--sans); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+  .m-reign { color: #6d4a00; }
+  .m-reign::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px rgba(var(--shadow-ink), 0.35); }
+  .m-pick { color: var(--hot); }
+  .m-pick svg { width: 11px; height: 11px; flex: none; }
   .m-stats .sk { display: inline-block; width: 4.5em; height: 0.75em; border-radius: 4px; background: rgba(58, 40, 23, 0.18); vertical-align: middle; animation: shimmer 1.4s ease-in-out infinite; }
   @keyframes shimmer { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
   .empty { text-align: center; color: #fff5e6; font-family: var(--serif); font-size: 1.125rem; padding: 60px 20px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
@@ -293,15 +299,32 @@
   @media (max-width: 1000px) { :root { --cols: 4; } }
   @media (max-width: 760px) {
     :root { --cols: 3; --frame-w: 14px; --side-w: 8px; --floor-h: 26px; --fascia-h: 38px; }
-    .top { padding: 14px 16px 0; }
+    /* A tighter masthead: the cabinet should start within the first screen. */
+    .top { padding: 10px 16px 0; }
     .tagline { display: none; }
+    .hero { padding: 10px 0 6px; }
+    h1 { font-size: clamp(1.9rem, 8.4vw, 2.6rem); letter-spacing: -0.03em; }
+    .sub { margin-top: 4px; font-size: 1rem; }
     .wrap { padding: 0 16px 50px; }
+    /* Toolbar as a grid: search across the top, then one row of sort ·
+       count · view toggles that can never wrap — the sort box sits in a
+       minmax(0, 1fr) column, so it gives way (never the row) on the
+       narrowest phones. Controls stay ≥ 44px tall; 16px input text keeps
+       iOS from zooming on focus. */
+    .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; margin: 6px 0 8px; }
+    .search { grid-column: 1 / -1; max-width: none; }
+    .search input { min-height: 44px; padding: 8px 12px 8px 40px; font-size: 1rem; }
+    .search svg { left: 13px; }
+    .sortwrap { display: contents; }
+    .sortwrap .sortlabel { display: none; }
+    .sortwrap select { min-height: 44px; padding: 6px 30px 6px 12px; background-position: right 10px center; font-size: 0.875rem; justify-self: start; max-width: 100%; }
+    .count { font-size: 0.875rem; }
+    .views { gap: 0; }
+    .views button { width: 44px; height: 44px; }
     .card { padding-top: 22px; }
     .plaque { padding: 8px 6px 9px; }
     .m-name { font-size: 0.9375rem; }
     .m-num, .m-stats { font-size: 0.75rem; }
-    .sortwrap { margin-left: 0; }
-    .sortwrap .sortlabel { display: none; }
     .veil { padding: 10px; align-items: flex-end; }
     .box { --frame-w: 10px; --side-w: 10px; --floor-h: 34px; --fascia-h: 20px; border-radius: 6px 6px 0 0; max-height: 94vh; }
     .box-card { padding: 20px 16px 18px; }
@@ -311,9 +334,21 @@
     .bar { gap: 12px; }
     .bar .sep { display: none; }
     .brand-logo { height: 28px; }
+    /* Two bays per shelf: name on the first line (long names wrap), wins on
+       the second, labels below — all top-aligned so neighbours line up. */
+    .plaque { justify-content: flex-start; padding: 7px 6px 8px; }
+    .plaque-l { row-gap: 2px; }
+    .m-nm { display: inline; white-space: normal; }
+    .m-num { margin-right: 6px; }
+    .m-name { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.2; }
     .m-stats::before { content: none; }
-    .m-stats { flex-basis: 100%; text-align: center; }
+    .m-stats, .m-reign, .m-pick { flex-basis: 100%; justify-content: center; text-align: center; margin-left: 0; }
     .grid.list .card { padding: 8px 12px; gap: 12px; }
+  }
+  @media (max-width: 360px) {
+    .toolbar { column-gap: 6px; }
+    .sortwrap select { font-size: 0.8125rem; padding: 6px 26px 6px 10px; background-position: right 8px center; }
+    .count { font-size: 0.75rem; }
   }
   @media (prefers-reduced-motion: reduce) { .m-stats .sk { animation: none; } .ball { transition: none; } }
 </style>
@@ -490,6 +525,7 @@
     }
     grid.replaceChildren(frag);
     layoutRows();
+    applyPick();
     empty.hidden = ids.length > 0;
     countEl.textContent = needle ? `${ids.length} of ${TOTAL}` : `${TOTAL} marbles`;
   }
@@ -503,8 +539,27 @@
       `<span class="m-name">${nameFor(id)}</span></span>` +
       `<span class="m-stats">${stats}</span>` +
       (titles ? `<span class="m-titles">🏆 ${titles} ${titles === 1 ? 'title' : 'titles'}</span>` : '') +
-      (reigning ? '<span class="m-reign" title="Reigning champion"><span class="sr-only">Reigning champion</span></span>' : '') +
+      (reigning ? REIGN_HTML : '') +
       `</span></div>`;
+  }
+  const REIGN_HTML = '<span class="m-reign" title="Reigning champion"><span class="sr-only">Reigning </span>Champion</span>';
+  const PICK_HTML = '<span class="m-pick" title="The marble you cheer for"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-7.8-4.8-9.7-9.6C.9 8.1 3.1 4.8 6.5 4.8c2 0 3.6 1 4.5 2.5H13c.9-1.5 2.5-2.5 4.5-2.5 3.4 0 5.6 3.3 4.2 6.6C19.8 16.2 12 21 12 21z"/></svg>Your pick</span>';
+  // The visitor's cheered-for marble (shared with the home page's favourite
+  // card via localStorage). Applied in place so the server-rendered grid
+  // keeps its real careers.
+  function pickId() {
+    try { const n = parseInt(localStorage.getItem('marbleFollow'), 10); return Number.isInteger(n) && n >= 1 && n <= TOTAL ? n : null; } catch { return null; }
+  }
+  function applyPick() {
+    const id = pickId();
+    for (const el of grid.querySelectorAll('.m-pick')) el.remove();
+    for (const el of grid.querySelectorAll('.card.picked')) el.classList.remove('picked');
+    if (id == null) return;
+    const card = grid.querySelector(`.card[data-id="${id}"]`);
+    if (!card) return;
+    card.classList.add('picked');
+    const l = card.querySelector('.plaque-l');
+    if (l) l.insertAdjacentHTML('beforeend', PICK_HTML);
   }
 
   // ---- shelves --------------------------------------------------------------
@@ -639,7 +694,7 @@
   // paint names + placeholders now.
   const ssrCards = grid.querySelectorAll('.card').length === TOTAL;
   { const r = grid.querySelector('.card.reigning'); if (r) reigningId = Number(r.dataset.id); }
-  if (!ssrCards) render(); else layoutRows();
+  if (!ssrCards) render(); else { layoutRows(); applyPick(); }
   openFromHash(); // deep link: /gallery#42
 
   // A deep-linked modal may have opened before the fetches landed — refresh it.

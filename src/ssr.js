@@ -101,7 +101,7 @@ function renderGallery(html, { careers = [], manifest = {}, hof = null } = {}) {
         `<span class="m-name">${esc(nameFor(id))}</span></span>` +
         `<span class="m-stats">${c.races ? `<b>${c.wins}</b> ${c.wins === 1 ? 'win' : 'wins'}` : 'No races yet'}</span>` +
         (c.titles ? `<span class="m-titles">🏆 ${c.titles} ${c.titles === 1 ? 'title' : 'titles'}</span>` : '') +
-        (id === reigning ? '<span class="m-reign" title="Reigning champion"><span class="sr-only">Reigning champion</span></span>' : '') +
+        (id === reigning ? '<span class="m-reign" title="Reigning champion"><span class="sr-only">Reigning </span>Champion</span>' : '') +
         `</span></div></div>`
     );
   }
