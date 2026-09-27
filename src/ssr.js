@@ -80,14 +80,15 @@ function renderGallery(html, { careers = [], manifest = {}, hof = null } = {}) {
     // markup as gallery.html's render() so hydration changes nothing.
     cards.push(
       `<div class="card${owner ? ' claimed' : ''}${id === reigning ? ' reigning' : ''}" role="listitem" tabindex="0" data-id="${id}">` +
-        `<div class="ball-wrap"><div class="ball" style="${galleryBall(id, sk)}"></div></div>` +
-        `<div class="plaque">` +
-        `<span class="m-num">#${pad(id)}</span>` +
-        `<span class="m-name">${esc(nameFor(id))}</span>` +
+        `<div class="ball-wrap"><div class="ball${sk && sk.img ? ' art' : ''}" style="${galleryBall(id, sk)}"></div></div>` +
+        `<div class="floor" aria-hidden="true"></div>` +
+        `<div class="plaque"><span class="plaque-l">` +
+        `<span class="m-nm"><span class="m-num">#${pad(id)}</span>` +
+        `<span class="m-name">${esc(nameFor(id))}</span></span>` +
         `<span class="m-stats">${c.races ? `<b>${c.wins}</b> ${c.wins === 1 ? 'win' : 'wins'}` : 'No races yet'}</span>` +
         (c.titles ? `<span class="m-titles">🏆 ${c.titles} ${c.titles === 1 ? 'title' : 'titles'}</span>` : '') +
-        (id === reigning ? '<span class="m-reign">Reigning champion</span>' : '') +
-        `</div></div>`
+        (id === reigning ? '<span class="m-reign" title="Reigning champion"><span class="sr-only">Reigning champion</span></span>' : '') +
+        `</span></div></div>`
     );
   }
   html = fill(html, 'GRID', cards.join(''));
