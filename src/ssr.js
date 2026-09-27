@@ -186,7 +186,7 @@ function renderChampions(html, { history = [], hof = null, manifest = {}, covera
   // Count line: what this page shows out of what exists.
   let count = '';
   if (coverage) {
-    const cut = coverage.abandoned ? ` · <b>${fmtN(coverage.abandoned)}</b> cut short by restarts (no champion)` : '';
+    const cut = (coverage.abandoned ? ` · <b>${fmtN(coverage.abandoned)}</b> cut short by restarts (no champion)` : '') + (coverage.oldestId > 1 ? ` · records begin at tournament ${fmtN(coverage.oldestId)}` : '');
     count = hasMore
       ? `Showing the latest <b>${fmtN(history.length)}</b> of <b>${fmtN(coverage.completed)}</b> completed tournaments${cut}`
       : `All <b>${fmtN(coverage.completed)}</b> completed tournaments${cut}`;

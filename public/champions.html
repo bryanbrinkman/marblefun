@@ -350,7 +350,7 @@
       const span = state.since ? ` in the last ${SPANS[state.since]} days` : '';
       text = n ? `<b>${fmtN(n)}${state.hasMore ? '+' : ''}</b> completed tournament${n === 1 ? '' : 's'} ${what}${span}` : `No completed tournament ${what}${span}`;
     } else if (cov) {
-      const cut = cov.abandoned ? ` · <b>${fmtN(cov.abandoned)}</b> cut short by restarts (no champion)` : '';
+      const cut = (cov.abandoned ? ` · <b>${fmtN(cov.abandoned)}</b> cut short by restarts (no champion)` : '') + (cov.oldestId > 1 ? ` · records begin at tournament ${fmtN(cov.oldestId)}` : '');
       text = state.hasMore
         ? `Showing the latest <b>${fmtN(n)}</b> of <b>${fmtN(cov.completed)}</b> completed tournaments${cut}`
         : `All <b>${fmtN(cov.completed)}</b> completed tournaments${cut}`;

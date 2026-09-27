@@ -61,7 +61,7 @@ check('champions: history renders holder, tiles, title table, count line, timeli
     racesRun: 25,
   }];
   const hof = { tournamentsCompleted: 1194, racesRun: 25, distinctChampions: 1, currentChampion: { id: 73, name: 'Molder', tournamentId: 3 }, mostTitles: [{ id: 73, name: 'Molder', titles: 13, lastTournamentId: 3 }], repeatChampions: [], longestStreak: null };
-  const coverage = { completed: 1194, abandoned: 9, running: 1, oldestId: 1, newestId: 14 };
+  const coverage = { completed: 1194, abandoned: 9, running: 1, oldestId: 184, newestId: 14 };
   const gaps = [{ tournamentId: 14, status: 'running', createdAt: 1, endedAt: null, racesDone: 2 }, { tournamentId: 5, status: 'abandoned', racesDone: 3 }, { tournamentId: 4, status: 'abandoned', racesDone: 0 }];
   const html = renderChampions(read('champions.html'), { history, hof, coverage, gaps, hasMore: true });
   assert.ok(html.includes('Reigning champion'));
@@ -77,7 +77,7 @@ check('champions: history renders holder, tiles, title table, count line, timeli
   assert.ok(html.includes('then “Frosty Drifter”'), 'a historical name is labelled as the name at the time');
   assert.ok(!/Frosty Drifter<\/a>/.test(html), 'the current name is what links and headings show');
   assert.ok(!html.includes('30.6s'), 'no finish times in results views');
-  assert.ok(html.includes('Showing the latest <b>1</b> of <b>1,194</b> completed tournaments · <b>9</b> cut short by restarts (no champion)'), 'the count line says what exists and what is shown');
+  assert.ok(html.includes('Showing the latest <b>1</b> of <b>1,194</b> completed tournaments · <b>9</b> cut short by restarts (no champion) · records begin at tournament 184'), 'the count line says what exists, what is shown, and where the records start');
   assert.ok(html.includes('<b>Tournaments 5–4</b><span>2 tournaments were cut short by a server restart — no champion was crowned (3 races had run)</span>'), 'skipped numbers are explained, folded into a run');
   assert.ok(html.includes('<b>Tournament 14</b><span>in progress right now'), 'the running tournament is named as such');
   const order = [...html.matchAll(/data-gap="(\d+)"|id="t(\d+)"/g)].map((m) => Number(m[1] || m[2]));
