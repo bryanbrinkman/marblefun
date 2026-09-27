@@ -5039,6 +5039,7 @@ function createMarbles() {
       progress: 0,
       onPodium: false,
       stuckTime: 0,
+      _stallMax: 0, // diagnostics: the longest progress stall this race
       // Stepramp cell index that this marble has already been "kicked off the ledge"
       // from. Prevents repeated boosting during the brief moment the marble is in
       // the air above the lower floor. Reset when leaving the cell.
@@ -5422,9 +5423,19 @@ function nearestOnTrack(pos, hintT) {
     const B = sampledPoints[bestSegIB];
     _notAB.subVectors(B, A);
     bestPoint = new THREE.Vector3().copy(A).addScaledVector(_notAB, bestSegU);
-    // Interpolate tangent/right between samples.
-    _notTan.copy(sampledTangents[bestSegIA]).lerp(sampledTangents[bestSegIB], bestSegU).normalize();
+    // Interpolate tangent/right between samples. Where the spline kinks (a
+    // cell boundary where the Catmull-Rom briefly doubles back) the two sample
+    // tangents disagree and their blend is a near-zero, arbitrary direction;
+    // a marble projected there was clamped along a lateral axis that pointed
+    // back down the track and pushed into the floor every step — stuck until
+    // the 20 s rescue. Fall back to the segment's own direction in that case.
+    // (The sampled `right` axes are built from each sample's horizontal
+    // heading with a continuity flip, so they stay correct through the kink
+    // and are left alone: only the tangent is repaired.)
+    _notTan.copy(sampledTangents[bestSegIA]).lerp(sampledTangents[bestSegIB], bestSegU);
     _notRight.copy(sampledRights[bestSegIA]).lerp(sampledRights[bestSegIB], bestSegU).normalize();
+    if (_notTan.lengthSq() < 0.25 || _notTan.dot(_notAB) < 0) _notTan.copy(_notAB);
+    _notTan.normalize();
     bestTangent = new THREE.Vector3().copy(_notTan);
     bestRight = new THREE.Vector3().copy(_notRight);
     bestT = (bestSegIA + bestSegU) / SAMPLE_COUNT;
@@ -5810,6 +5821,7 @@ function stepPhysics(dt) {
       } else {
         m._rescueTime = (m._rescueTime || 0) + dt;
       }
+      if (m._rescueTime > m._stallMax) m._stallMax = m._rescueTime; // diagnostics only
       if (m._rescueTime > 6.0) {
         m.vel.addScaledVector(tangent, 2.5 * dt);
         // Escalation: some corner pockets eat the continuous push (wall
@@ -5959,7 +5971,7 @@ function stepPhysics(dt) {
       } else if (lateralOffset < leftBound) {
         const overshoot = leftBound - lateralOffset;
         const normal = makeWallNormal(leftSlope, -1);
-        m.pos.addScaledVector(normal, overshoot);
+            m.pos.addScaledVector(normal, overshoot);
         const velAlongNormal = m.vel.dot(normal);
         if (velAlongNormal < 0) {
           m.vel.addScaledVector(normal, -velAlongNormal * (1 + SURFACES.wood.restitution));
@@ -7873,6 +7885,9 @@ window.marbleAPI = {
       results: this.getResults(),
     };
   },
+  // Diagnostics after a race or simulateRace: the longest progress stall per
+  // marble (see the anti-stuck rescue).
+  stallStats: () => marbles.map((m) => ({ lane: m.name, stallMax: +(m._stallMax || 0).toFixed(2), finished: !!m.finished, timeSec: m.finishTime })),
   // Facts about the course on screen (for hosts and diagnostics).
   courseInfo() {
     return { trackSeed: SEEDS.track, cells: pathCells.length, finishClear: _courseFinishClear };
