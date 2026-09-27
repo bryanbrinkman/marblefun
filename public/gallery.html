@@ -37,11 +37,11 @@
        along the length of each board. */
     --wood-h: url(/textures/wood-h.png);
     --wood-v: url(/textures/wood-v.png);
-    --oak-frame: #b6824a; --oak-frame-dark: #8f6035;
-    --oak-side: #a4703f;
-    --oak-back: #a57646; --oak-back-deep: #8a5f36;
-    --maple-floor: #dcb27c; --maple-floor-back: #c2955f;
-    --maple-fascia: #d3a66e; --maple-fascia-dark: #b8895a;
+    --oak-frame: #b58c5e; --oak-frame-dark: #8e6a44;
+    --oak-side: #a07a52;
+    --oak-back: #9f7f5b; --oak-back-deep: #836647;
+    --maple-floor: #e0c397; --maple-floor-back: #c6a374;
+    --maple-fascia: #d5b384; --maple-fascia-dark: #b99465;
     --ink-wood: #3a2817; --ink-wood-muted: #6b4e33;
     --shadow-ink: 46, 26, 8;
 
@@ -111,8 +111,9 @@
     background-image: var(--wood-v), linear-gradient(90deg, var(--oak-frame), var(--oak-frame-dark));
     background-blend-mode: soft-light, normal; background-size: 512px 512px, auto;
   }
-  .case::before { left: 0; border-radius: 4px 0 0 4px; box-shadow: inset 2px 0 0 rgba(255, 236, 205, 0.32), inset -1px 0 0 rgba(var(--shadow-ink), 0.35); }
-  .case::after { right: 0; border-radius: 0 4px 4px 0; background-image: var(--wood-v), linear-gradient(90deg, var(--oak-frame-dark), var(--oak-frame)); box-shadow: inset -2px 0 0 rgba(var(--shadow-ink), 0.3), inset 1px 0 0 rgba(255, 236, 205, 0.18); }
+  /* The stiles are cut at 45° so the rails' grain shows in the corner triangles: a mitre joint. */
+  .case::before { left: 0; border-radius: 4px 0 0 4px; clip-path: polygon(0 0, 100% var(--frame-w), 100% calc(100% - var(--frame-w)), 0 100%); box-shadow: inset 2px 0 0 rgba(255, 236, 205, 0.32), inset -1px 0 0 rgba(var(--shadow-ink), 0.35); }
+  .case::after { right: 0; border-radius: 0 4px 4px 0; clip-path: polygon(0 var(--frame-w), 100% 0, 100% 100%, 0 calc(100% - var(--frame-w))); background-image: var(--wood-v), linear-gradient(90deg, var(--oak-frame-dark), var(--oak-frame)); box-shadow: inset -2px 0 0 rgba(var(--shadow-ink), 0.3), inset 1px 0 0 rgba(255, 236, 205, 0.18); }
   /* The niche: a back panel in shade, with the two inner side walls and the
      underside of the top rail as thin lit/shaded strips, and occlusion in the
      top corners where the boards meet. */
@@ -125,7 +126,7 @@
       linear-gradient(180deg, rgba(var(--shadow-ink), 0.42), rgba(var(--shadow-ink), 0) 120px),
       var(--wood-h), linear-gradient(180deg, var(--oak-back-deep), var(--oak-back) 40%, var(--oak-back));
     background-blend-mode: normal, normal, normal, soft-light, normal; background-size: auto, auto, auto, 512px 512px, auto;
-    box-shadow: inset 0 var(--side-w) 0 rgba(var(--shadow-ink), 0.3);
+    box-shadow: inset 0 var(--side-w) 0 rgba(var(--shadow-ink), 0.3), 0 0 0 1px rgba(var(--shadow-ink), 0.45), 0 0 0 2px rgba(255, 236, 205, 0.22);
   }
   .case-in::before, .case-in::after {
     content: ''; position: absolute; top: 0; bottom: 0; width: var(--side-w); z-index: 3; pointer-events: none;
@@ -149,23 +150,29 @@
   .card:focus-visible .plaque { box-shadow: inset 0 2px 0 rgba(255, 240, 215, 0.45), inset 0 -3px 0 rgba(var(--shadow-ink), 0.35), inset 0 0 0 2px var(--hot); }
   .ball-wrap { position: relative; z-index: 2; width: var(--ball); height: var(--ball); margin-bottom: calc(-1 * var(--floor-h) * var(--sit)); --ball: clamp(64px, calc((100vw - 120px) / var(--cols) * 0.7), 172px); }
   .ball {
-    position: relative; z-index: 1; width: 100%; height: 100%; border-radius: 50%; display: block;
+    position: relative; z-index: 1; width: 100%; height: 100%; border-radius: 50%; display: block; isolation: isolate; overflow: hidden;
     background-size: calc(100% * var(--skin-zoom, 1)); background-position: center; background-repeat: no-repeat; background-color: #cfc5b8;
     transition: transform 0.18s ease;
   }
-  /* Glass: gradient balls get full sphere shading; real artwork already
-     carries its own lighting, so it only gets a faint limb to seat it. */
-  .ball::before { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
-    background: radial-gradient(circle at 31% 26%, rgba(255,255,255,0.6), rgba(255,255,255,0.14) 18%, rgba(255,255,255,0) 40%), radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.26) 100%); }
-  .ball.art::before { background: radial-gradient(circle at 50% 55%, rgba(0,0,0,0) 74%, rgba(var(--shadow-ink), 0.12) 100%); }
-  .ball:not(.art) { box-shadow: inset -8px -12px 22px rgba(0,0,0,0.28), inset 4px 6px 12px rgba(255,255,255,0.18); }
+  /* Sphere lighting over the artwork, clipped by the silhouette (the zoom
+     already puts the sphere's edge on the circle). ::before multiplies a
+     shade that leaves the upper left untouched and curves the surface away
+     into a soft lower-right terminator, so the artwork's own colours stay;
+     ::after screens in one broad, soft key light from the upper left. No
+     hard specular spot, no dark outline. */
+  .ball::before { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; mix-blend-mode: multiply;
+    background: radial-gradient(circle at 36% 32%, #ffffff 0%, #ffffff 30%, #f1eae1 48%, #d8cab8 66%, #ad9a84 84%, #7f6b58 100%); }
+  .ball::after { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; mix-blend-mode: screen;
+    background: radial-gradient(circle at 29% 25%, rgba(255,255,255,0.40) 0%, rgba(255,255,255,0.18) 20%, rgba(255,255,255,0.05) 40%, rgba(255,255,255,0) 56%); }
+  /* Plain gradient balls (no artwork) keep a little extra rim so they read as glass. */
+  .ball:not(.art) { box-shadow: inset -8px -12px 22px rgba(0,0,0,0.22), inset 4px 6px 12px rgba(255,255,255,0.18); }
   /* Shadows on the floor, anchored to the sphere: a tight dark contact
      shadow right under it, and a softer cast shadow thrown to the right and
      forward by the light from the upper left. Both sit below the ball. */
-  .ball-wrap::after { content: ''; position: absolute; z-index: 0; left: 16%; right: 12%; bottom: -5px; height: 12px; border-radius: 50%; pointer-events: none;
-    background: radial-gradient(ellipse at 50% 50%, rgba(var(--shadow-ink), 0.55), rgba(var(--shadow-ink), 0.3) 45%, rgba(var(--shadow-ink), 0) 72%); }
-  .ball-wrap::before { content: ''; position: absolute; z-index: 0; left: 24%; right: -22%; bottom: -12px; height: 22px; border-radius: 50%; pointer-events: none; filter: blur(5px);
-    background: radial-gradient(ellipse at 45% 50%, rgba(var(--shadow-ink), 0.34), rgba(var(--shadow-ink), 0.14) 50%, rgba(var(--shadow-ink), 0) 75%); }
+  .ball-wrap::after { content: ''; position: absolute; z-index: 0; left: 20%; right: 16%; bottom: -4px; height: 10px; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 50%, rgba(var(--shadow-ink), 0.6), rgba(var(--shadow-ink), 0.34) 40%, rgba(var(--shadow-ink), 0) 70%); }
+  .ball-wrap::before { content: ''; position: absolute; z-index: 0; left: 34%; right: -34%; bottom: -11px; height: 18px; border-radius: 50%; pointer-events: none; filter: blur(4px); transform: skewX(-22deg);
+    background: radial-gradient(ellipse at 40% 50%, rgba(var(--shadow-ink), 0.3), rgba(var(--shadow-ink), 0.14) 45%, rgba(var(--shadow-ink), 0) 72%); }
   /* The floor: an upward-facing board seen from slightly above — a dark seam
      where it meets the back panel, brightening toward the rounded front
      edge, grain running along the shelf. */
@@ -232,8 +239,8 @@
   }
   .box::before, .box::after { content: ''; position: absolute; top: 0; bottom: 0; width: var(--frame-w); pointer-events: none; z-index: 2;
     background-image: var(--wood-v), linear-gradient(90deg, var(--oak-frame), var(--oak-frame-dark)); background-blend-mode: soft-light, normal; background-size: 512px 512px, auto; }
-  .box::before { left: 0; box-shadow: inset 2px 0 0 rgba(255, 236, 205, 0.32), inset -1px 0 0 rgba(var(--shadow-ink), 0.35); }
-  .box::after { right: 0; background-image: var(--wood-v), linear-gradient(90deg, var(--oak-frame-dark), var(--oak-frame)); box-shadow: inset -2px 0 0 rgba(var(--shadow-ink), 0.3); }
+  .box::before { left: 0; clip-path: polygon(0 0, 100% var(--frame-w), 100% calc(100% - var(--frame-w)), 0 100%); box-shadow: inset 2px 0 0 rgba(255, 236, 205, 0.32), inset -1px 0 0 rgba(var(--shadow-ink), 0.35); }
+  .box::after { right: 0; clip-path: polygon(0 var(--frame-w), 100% 0, 100% 100%, 0 calc(100% - var(--frame-w))); background-image: var(--wood-v), linear-gradient(90deg, var(--oak-frame-dark), var(--oak-frame)); box-shadow: inset -2px 0 0 rgba(var(--shadow-ink), 0.3); }
   .box-top {
     position: relative; height: clamp(230px, 48vw, 340px); display: flex; align-items: flex-end; justify-content: center; padding: 0 var(--side-w);
     background-image:
@@ -242,7 +249,7 @@
       linear-gradient(180deg, rgba(var(--shadow-ink), 0.45), rgba(var(--shadow-ink), 0) 140px),
       var(--wood-h), linear-gradient(180deg, var(--oak-back-deep), var(--oak-back) 45%, var(--oak-back));
     background-blend-mode: normal, normal, normal, soft-light, normal; background-size: auto, auto, auto, 512px 512px, auto;
-    box-shadow: inset 0 var(--side-w) 0 rgba(var(--shadow-ink), 0.3);
+    box-shadow: inset 0 var(--side-w) 0 rgba(var(--shadow-ink), 0.3), 0 0 0 1px rgba(var(--shadow-ink), 0.45), 0 0 0 2px rgba(255, 236, 205, 0.22);
   }
   .box-top::before, .box-top::after { content: ''; position: absolute; top: 0; bottom: 0; width: var(--side-w); z-index: 3; pointer-events: none;
     background-image: var(--wood-v), linear-gradient(90deg, var(--oak-side), var(--oak-back-deep)); background-blend-mode: soft-light, normal; background-size: 512px 512px, auto; }
