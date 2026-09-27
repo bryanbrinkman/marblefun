@@ -6,7 +6,7 @@
 <title>3D-Print a Track — Marble Run</title>
 <meta name="description" content="Export any Marble Run course as 3D-printable pieces, straight from its track seed.">
 <link rel="canonical" href="https://marblerun.fun/print">
-<meta name="theme-color" content="#0a0d14">
+<meta name="theme-color" content="#f6f1ea">
 <meta property="og:site_name" content="Marble Run">
 <meta property="og:type" content="website">
 <meta property="og:title" content="3D-Print a Track — Marble Run">
@@ -19,79 +19,79 @@
 <meta name="twitter:image" content="https://marblerun.fun/og.png">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/site.css">
 <style>
-  :root {
-    --bg: #0a0d14; --panel: rgba(20, 26, 40, 0.72); --panel2: rgba(27, 34, 51, 0.8);
-    --line: rgba(120, 140, 175, 0.22); --text: #eaf0f8; --muted: #97a4ba;
-    --accent: #ffcf5c; --live: #35d07f; --warn: #ff7d6b;
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text);
-    font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-  a { color: var(--accent); }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 18px 16px 60px; }
-  header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
-  header img { height: 34px; }
-  header h1 { font-size: 18px; font-weight: 900; margin: 0; letter-spacing: .4px; }
-  header .sub { color: var(--muted); font-size: 12px; }
-  header .back { margin-left: auto; font-size: 12px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-    padding: 14px 16px; margin-bottom: 12px; }
+  :root { --warn: #b33a22; --ok: #1f5e3a; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 12px; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-  label { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
-  input[type=number], select {
-    background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--line);
-    border-radius: 9px; padding: 10px 12px; font: inherit; width: 170px;
-  }
-  button {
-    cursor: pointer; font: 800 13px/1 inherit; color: var(--text);
-    padding: 12px 16px; min-height: 44px; border-radius: 11px;
-    border: 1px solid var(--line); background: var(--panel2);
-  }
-  button:hover { border-color: var(--muted); }
-  button.primary { color: var(--accent); border-color: rgba(255,207,92,.55);
-    background: linear-gradient(180deg, rgba(255,207,92,.2), rgba(255,207,92,.06)); }
-  button:disabled { opacity: .45; cursor: default; }
-  .stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
-  .stats b { color: var(--text); font-variant-numeric: tabular-nums; }
-  #status { font-size: 12.5px; color: var(--accent); min-height: 18px; }
-  #fitWarn { font-size: 12.5px; color: var(--warn); }
+  .row > div { display: flex; flex-direction: column; gap: 6px; }
+  label { font: 600 0.6875rem/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  input[type=number].field { width: 190px; }
+  select.field { min-width: 220px; }
+  /* one status line, coloured by outcome; the states are named in the markup too */
+  #status { font-family: var(--serif); font-size: 1rem; min-height: 24px; margin: 12px 0 0; }
+  #status[data-level="loading"] { color: var(--muted); }
+  #status[data-level="ok"] { color: var(--ok); }
+  #status[data-level="partial"] { color: #6d4a00; }
+  #status[data-level="error"] { color: var(--warn); }
+  #fitWarn { font-size: 0.875rem; color: var(--warn); margin: 6px 0 0; }
   #fitWarn[hidden] { display: none; }
-  #preview { width: 100%; height: 420px; border-radius: 12px; background: #05070c;
-    border: 1px solid var(--line); display: block; touch-action: none; }
-  .modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 7px; }
-  .mod { display: flex; align-items: center; gap: 8px; background: var(--panel2);
-    border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12px; }
+  .stats { display: flex; gap: 18px 24px; flex-wrap: wrap; font-size: 0.875rem; color: var(--muted); margin-top: 12px; }
+  .stats b { color: var(--text); font-family: var(--serif); font-size: 1rem; font-variant-numeric: tabular-nums; }
+  .stats[hidden] { display: none; }
+  #preview { width: 100%; height: 420px; border-radius: 12px; background: #05070c; border: 1px solid var(--line); display: block; touch-action: none; }
+  #preview[hidden] { display: none; }
+  .pv-off { padding: 26px 18px; border-radius: 12px; border: 1px dashed rgba(60, 45, 30, 0.35); background: var(--field); font-family: var(--serif); color: var(--text); text-align: center; }
+  .pv-off[hidden] { display: none; }
+  .pv-off p { margin: 0 0 12px; }
+  .pv-off small { display: block; color: var(--muted); margin-bottom: 12px; }
+  .modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 7px; }
+  .mod { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font-size: 0.8125rem; }
   .mod.over { border-color: var(--warn); }
   .mod .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
-  .mod .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-variant-numeric: tabular-nums; }
-  .mod .sz { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mod .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .mod .sz { color: var(--muted); font-size: 0.6875rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .mod.over .sz { color: var(--warn); font-weight: 700; }
-  .mod button { min-height: 32px; padding: 7px 10px; font-size: 11px; border-radius: 8px; }
-  .notes { font-size: 12.5px; color: var(--muted); }
-  .notes li { margin-bottom: 5px; }
-  h2 { font-size: 12px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+  .mod .btn.sm { min-height: 32px; padding: 2px 10px; font-size: 0.8125rem; }
+  .notes { font-size: 0.875rem; color: var(--muted); }
+  .notes li { margin-bottom: 6px; }
+  .notes b { color: var(--text); }
+  h2 { font: 700 1.125rem var(--serif); margin: 0 0 12px; }
+  h2 small { font: 400 0.875rem var(--sans); color: var(--muted); margin-left: 8px; }
+  .opts { display: flex; gap: 6px 16px; flex-wrap: wrap; align-items: center; margin-top: 10px; font-size: 0.875rem; color: var(--muted); }
+  .opts label { font: inherit; text-transform: none; letter-spacing: 0; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; cursor: pointer; }
   #frameBox { position: fixed; width: 10px; height: 10px; left: -9999px; top: 0; overflow: hidden; }
   #frameBox iframe { width: 900px; height: 700px; border: 0; }
+  @media (max-width: 760px) { .card { padding: 14px; } input[type=number].field, select.field { width: 100%; min-width: 0; } .row > div { flex: 1 1 200px; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <img src="logo.png" alt="" onerror="this.hidden=true" />
-    <div>
-      <h1>3D-print a track</h1>
-      <div class="sub">Turn any deterministic course into modular, printable pieces</div>
+<header class="site-top">
+  <div class="site-top-inner">
+    <div class="site-bar">
+      <a class="brand" href="/" aria-label="Marble Run — home"><img src="/logo.png" alt="Marble Run" class="brand-logo" onerror="this.hidden=true"><span class="wordmark" aria-hidden="true">MARBLERUN.FUN</span></a>
+      <nav class="site-nav" aria-label="Site">
+        <a href="/" class="back">← <span class="long">Back to the races</span><span class="short">Races</span></a>
+        <span class="sep" aria-hidden="true"></span>
+        <a href="/gallery">Gallery</a>
+        <a href="/champions">Champions</a>
+        <a href="/print" aria-current="page"><span class="long">Print a track</span><span class="short">Print</span></a>
+      </nav>
+      <span class="site-tagline">The marble racing universe by Bryan Brinkman</span>
     </div>
-    <a class="back" href="/">← back to the races</a>
-  </header>
+    <div class="site-hero">
+      <h1>3D-print a track</h1>
+      <p class="sub">Turn any deterministic course into modular, printable pieces.</p>
+    </div>
+  </div>
+</header>
 
+<main class="site-wrap">
   <div class="card">
     <div class="row">
-      <div><label>Track seed</label><br /><input id="seed" type="number" min="0" step="1" /></div>
-      <div><label>Piece size</label><br />
-        <select id="scale">
+      <div><label for="seed">Track seed</label><input class="field" id="seed" type="number" min="0" step="1" /></div>
+      <div><label for="scale">Piece size</label>
+        <select class="field" id="scale">
           <option value="20">20 mm / cell (desk toy)</option>
           <option value="30">30 mm / cell (compact)</option>
           <option value="40" selected>40 mm / cell (standard)</option>
@@ -99,19 +99,19 @@
           <option value="80">80 mm / cell (XL)</option>
         </select>
       </div>
-      <div><label>Printer</label><br />
-        <select id="printer">
+      <div><label for="printer">Printer</label>
+        <select class="field" id="printer">
           <option value="256" selected>Bambu Lab X1 Carbon (256³ mm)</option>
           <option value="180">Bambu Lab A1 mini (180³ mm)</option>
           <option value="220">Ender-3 class (220 mm)</option>
           <option value="999999">No limit (display model)</option>
         </select>
       </div>
-      <div><button id="liveBtn">📡 Use the live track</button></div>
-      <div><button id="randomBtn">🎲 Random track</button></div>
-      <div><button id="buildBtn" class="primary">🔨 Build for print</button></div>
+      <div><button class="btn" id="liveBtn" type="button">📡 Use the live track</button></div>
+      <div><button class="btn" id="randomBtn" type="button">🎲 Random track</button></div>
+      <div><button class="btn primary" id="buildBtn" type="button">🔨 Build for print</button></div>
     </div>
-    <p id="status"></p>
+    <p id="status" role="status" aria-live="polite" data-level="idle"></p>
     <p id="fitWarn" hidden></p>
     <div class="stats" id="stats" hidden>
       <span>Pieces <b id="stModules">–</b></span>
@@ -125,25 +125,27 @@
   </div>
 
   <div class="card" id="previewCard" hidden>
-    <h2>Preview <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:600">— drag to orbit, wheel to zoom; each color is one course module</span></h2>
+    <h2>Preview<small id="previewHint">drag to orbit, wheel to zoom; each colour is one course module</small></h2>
     <canvas id="preview"></canvas>
-    <div class="row" style="margin-top:10px">
-      <button class="primary" id="dlZip">⬇ All pieces (.zip)</button>
-      <button id="dlFull">⬇ Whole track, one file (.stl)</button>
-      <label style="align-self:center;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">
-        <input type="checkbox" id="addSupports" checked /> bake breakaway supports
-      </label>
-      <label style="align-self:center;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">
-        <input type="checkbox" id="hollowBlocks" checked /> hollow big blocks
-      </label>
-      <label style="align-self:center;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">
-        <input type="checkbox" id="incScenery" /> include table &amp; scenery
-      </label>
+    <div class="pv-off" id="previewOff" hidden role="status">
+      <p><b>3D preview unavailable</b> on this device or browser.</p>
+      <small id="previewWhy"></small>
+      <p>The track was generated all the same — the piece list and downloads below are the real thing.</p>
+      <button class="btn sm" id="previewRetry" type="button">Try the preview again</button>
+    </div>
+    <div class="row" style="margin-top:12px" id="exportRow">
+      <button class="btn primary" id="dlZip" type="button">⬇ All pieces (.zip)</button>
+      <button class="btn" id="dlFull" type="button">⬇ Whole track, one file (.stl)</button>
+    </div>
+    <div class="opts">
+      <label><input type="checkbox" id="addSupports" checked /> bake breakaway supports</label>
+      <label><input type="checkbox" id="hollowBlocks" checked /> hollow big blocks</label>
+      <label><input type="checkbox" id="incScenery" /> include table &amp; scenery</label>
     </div>
   </div>
 
   <div class="card" id="modulesCard" hidden>
-    <h2>Pieces <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:600">— tall modules are split into a/b/c… segments that each fit your printer</span></h2>
+    <h2>Pieces<small>tall modules are split into a/b/c… segments that each fit your printer</small></h2>
     <div class="modules" id="modules"></div>
   </div>
 
@@ -160,11 +162,12 @@
       <li>The same seed always builds the same track — print the course your favorite race ran on. 🏁</li>
     </ul>
   </div>
-</div>
+</main>
 
 <div id="frameBox"><iframe id="game" src="marble_run.html?embed=1"></iframe></div>
 
 <script src="vendor/three.min.js"></script>
+<script src="/print-state.js"></script>
 <script>
 'use strict';
 const $ = (id) => document.getElementById(id);
@@ -181,7 +184,31 @@ function whenApiReady() {
     t();
   });
 }
-function setStatus(s) { $('status').textContent = s; }
+// Geometry, preview and export are tracked apart (public/print-state.js): a
+// dead WebGL context must not read as a failed build, and a failed build must
+// not leave the last build's numbers and downloads on screen.
+const ps = { geometry: 'idle', preview: 'idle', seed: null, pieces: 0, error: '', previewError: '' };
+function setStatus(text, level) { $('status').textContent = text; $('status').dataset.level = level || 'idle'; }
+function syncState() {
+  const st = PrintState.printStatus(ps);
+  if (st.level !== 'idle') setStatus(st.text, st.level);
+  const ready = PrintState.exportReady(ps);
+  $('dlZip').disabled = !ready;
+  $('dlFull').disabled = !ready;
+  for (const b of $('modules').querySelectorAll('button')) b.disabled = !ready;
+  const off = ps.geometry === 'ok' && ps.preview === 'failed';
+  $('preview').hidden = off;
+  $('previewOff').hidden = !off;
+  $('previewHint').hidden = off;
+  if (off) $('previewWhy').textContent = ps.previewError ? `(${ps.previewError})` : '';
+}
+function clearBuild() {
+  data = null; modules = [];
+  $('stats').hidden = true; $('fitWarn').hidden = true;
+  $('previewCard').hidden = true; $('modulesCard').hidden = true;
+  $('modules').innerHTML = '';
+  if (pv && pv.group) { pv.scene.remove(pv.group); pv.group = null; }
+}
 
 // Prefill the seed: ?seed= wins, else the live server's current track.
 (async function initSeed() {
@@ -203,10 +230,10 @@ async function fetchLiveSeed() {
   } catch { return null; }
 }
 $('liveBtn').addEventListener('click', async () => {
-  setStatus('Fetching the live track seed…');
+  setStatus('Fetching the live track seed…', 'loading');
   const s = await fetchLiveSeed();
-  if (s === null) setStatus('No live server reachable — enter a seed by hand.');
-  else { $('seed').value = s; setStatus('Live track seed loaded — hit Build.'); }
+  if (s === null) setStatus('No live server reachable — enter a seed by hand.', 'error');
+  else { $('seed').value = s; setStatus('Live track seed loaded — hit Build.', 'ok'); }
 });
 
 // One-click roulette: roll a fresh seed and build it straight away, so you
@@ -222,20 +249,34 @@ $('buildBtn').addEventListener('click', async () => {
   const seed = ($('seed').value || 0) >>> 0;
   $('buildBtn').disabled = true;
   $('randomBtn').disabled = true;
-  setStatus('Building the course (the same deterministic build the game runs)…');
+  // A new build starts from nothing: the previous track's figures and files
+  // must never stand in for this one.
+  clearBuild();
+  Object.assign(ps, { geometry: 'building', preview: 'idle', seed, pieces: 0, error: '', previewError: '' });
+  syncState();
   try {
     const a = await whenApiReady();
     a.newCourse(seed);
     await new Promise((r) => setTimeout(r, 120));
-    data = a.getPrintGeometry();
-    refresh();
-    setStatus(`Track ${data.trackSeed} ready — ${modules.length} printable pieces.`);
+    const d = a.getPrintGeometry();
+    if (!d || !Array.isArray(d.cells) || !d.cells.length) throw new Error('the course produced no printable geometry');
+    data = d;
+    ps.geometry = 'ok';
+    ps.seed = data.trackSeed;
   } catch (e) {
-    setStatus('Build failed: ' + (e && e.message ? e.message : e));
+    clearBuild();
+    ps.geometry = 'failed';
+    ps.error = e && e.message ? e.message : String(e);
+    syncState();
+    $('buildBtn').disabled = false;
+    $('randomBtn').disabled = false;
+    return;
   }
+  refresh();
   $('buildBtn').disabled = false;
   $('randomBtn').disabled = false;
 });
+$('previewRetry').addEventListener('click', () => { if (data) { ps.preview = 'idle'; ps.previewError = ''; pv = null; refresh(); } });
 $('scale').addEventListener('change', () => { if (data) refresh(); });
 $('printer').addEventListener('change', () => { if (data) refresh(); });
 $('incScenery').addEventListener('change', () => { if (data) refresh(); });
@@ -245,9 +286,23 @@ $('hollowBlocks').addEventListener('change', () => { if (data) refresh(); });
 function refresh() {
   mmPerUnit = Number($('scale').value) / data.cellSize;
   computeModules();
+  ps.pieces = modules.length;
   renderStats();
   renderModules();
-  renderPreview();
+  $('previewCard').hidden = false;
+  $('modulesCard').hidden = false;
+  // The preview is the one step allowed to fail on its own: no WebGL means
+  // no picture, not no track.
+  try {
+    renderPreview();
+    ps.preview = 'ok';
+    ps.previewError = '';
+  } catch (e) {
+    pv = null;
+    ps.preview = 'failed';
+    ps.previewError = e && e.message ? e.message : String(e);
+  }
+  syncState();
 }
 
 // ---- segmentation --------------------------------------------------------
@@ -571,8 +626,6 @@ function renderStats() {
 // ---- preview -------------------------------------------------------------
 let pv = null;
 function renderPreview() {
-  $('previewCard').hidden = false;
-  $('modulesCard').hidden = false;
   const canvas = $('preview');
   if (!pv) {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -652,6 +705,8 @@ function renderModules() {
       `<span class="nm">${m.name}</span>` +
       `<span class="sz">${m.dims.map((d) => Math.round(d)).join('×')}</span>`;
     const b = document.createElement('button');
+    b.className = 'btn sm';
+    b.type = 'button';
     b.textContent = '.stl';
     b.addEventListener('click', () => download(`${m.name}.stl`, stlForParts(m.parts, true)));
     div.appendChild(b);
@@ -702,7 +757,8 @@ function download(name, bytes) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 $('dlFull').addEventListener('click', () => {
-  if (data) download(`marblerun_track_${data.trackSeed}.stl`, stlForParts(modules.flatMap((m) => m.parts), true));
+  if (!PrintState.exportReady(ps)) return;
+  download(`marblerun_track_${data.trackSeed}.stl`, stlForParts(modules.flatMap((m) => m.parts), true));
 });
 
 // Store-only ZIP (no compression) — enough to bundle the piece STLs.
@@ -758,12 +814,14 @@ function makeZip(files) {
   return out;
 }
 $('dlZip').addEventListener('click', () => {
-  if (!modules.length) return;
-  setStatus('Bundling piece STLs…');
+  if (!PrintState.exportReady(ps)) return;
+  setStatus('Bundling piece STLs…', 'loading');
   const files = modules.map((m) => ({ name: `${m.name}.stl`, bytes: stlForParts(m.parts, true) }));
   download(`marblerun_track_${data.trackSeed}_pieces.zip`, makeZip(files));
-  setStatus('Piece bundle downloaded.');
+  setStatus(`Piece bundle downloaded — ${files.length} STL files.`, 'ok');
 });
+// For the export verification harness: the same functions the buttons call.
+window.__print = { stlForParts, makeZip, get modules() { return modules; }, get data() { return data; }, get state() { return ps; } };
 </script>
 </body>
 </html>

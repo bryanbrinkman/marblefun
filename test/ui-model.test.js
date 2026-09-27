@@ -170,4 +170,23 @@ check('renderer: loading → ready / failed, retry → loading, late ready recov
   assert.strictEqual(M.rendererNext('ready', 'bogus'), 'ready');
 });
 
+// ---- replay requests -------------------------------------------------------
+check('replay request: plays on a ready stage, waits for a loading one, falls back without 3D', () => {
+  const race = { result: [{ rank: 1 }], raceSeed: 5, trackSeed: 9 };
+  assert.strictEqual(M.replayRequest({ mode: 'server', rendererState: 'ready', race }).action, 'play');
+  assert.strictEqual(M.replayRequest({ mode: 'server', rendererState: 'loading', race }).action, 'play-when-ready');
+  const fb = M.replayRequest({ mode: 'server', rendererState: 'failed', race });
+  assert.strictEqual(fb.action, 'fallback');
+  assert.ok(/recorded finishing order/.test(fb.reason), 'the fallback explains itself');
+});
+check('replay request: never steals the stage from an imminent live race; nothing to replay locally or without a result', () => {
+  const race = { result: [{ rank: 1 }], raceSeed: 5, trackSeed: 9 };
+  assert.strictEqual(M.replayRequest({ mode: 'server', rendererState: 'ready', race, msToLive: 3000 }).action, 'wait');
+  assert.strictEqual(M.replayRequest({ mode: 'server', rendererState: 'failed', race, msToLive: 3000 }).action, 'fallback', 'no 3D stage to protect: the recorded result is always available');
+  assert.strictEqual(M.replayRequest({ mode: 'server', rendererState: 'ready', race, msToLive: 9000 }).action, 'play');
+  assert.strictEqual(M.replayRequest({ mode: 'local', rendererState: 'ready', race }).action, 'unavailable');
+  assert.strictEqual(M.replayRequest({ mode: 'server', rendererState: 'ready', race: { result: null, raceSeed: 5, trackSeed: 9 } }).action, 'unavailable');
+  assert.strictEqual(M.replayRequest({ mode: 'server', rendererState: 'ready', race: null }).action, 'unavailable');
+});
+
 console.log(`\n${passed} checks passed`);

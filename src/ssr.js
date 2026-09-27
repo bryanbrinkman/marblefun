@@ -79,6 +79,15 @@ function fill(html, anchor, content) {
   return html.replace(`<!--SSR:${anchor}-->`, content);
 }
 
+// The gallery list view's columns — same markup and rounding as gallery.html's
+// careerCols(), so hydration changes nothing.
+function careerCols(c) {
+  const cell = (cls, v, dim) => `<span class="m-c ${cls}${dim ? ' dim' : ''}">${v}</span>`;
+  const rate = c.races ? Math.round((c.wins / c.races) * 100) + '%' : '—';
+  return `<span class="m-cols" aria-label="${c.races} races, ${c.wins} wins, win rate ${rate}, ${c.podiums} podiums, ${c.titles} titles">` +
+    cell('c-races', c.races, !c.races) + cell('c-wins', c.wins, !c.wins) + cell('c-rate', rate, !c.races) + cell('c-podiums', c.podiums, !c.podiums) + cell('c-titles', c.titles, !c.titles) + `</span>`;
+}
+
 // ---- /gallery -----------------------------------------------------------------
 // careers: [{id, races, wins, podiums, titles}]; manifest: {id: {img, owner, ownerLink}}
 function renderGallery(html, { careers = [], manifest = {}, hof = null } = {}) {
@@ -102,7 +111,7 @@ function renderGallery(html, { careers = [], manifest = {}, hof = null } = {}) {
         `<span class="m-stats">${c.races ? `<b>${c.wins}</b> ${c.wins === 1 ? 'win' : 'wins'}` : 'No races yet'}</span>` +
         (c.titles ? `<span class="m-titles">🏆 ${c.titles} ${c.titles === 1 ? 'title' : 'titles'}</span>` : '') +
         (id === reigning ? '<span class="m-reign" title="Reigning champion"><span class="sr-only">Reigning </span>Champion</span>' : '') +
-        `</span></div></div>`
+        `</span></div>` + careerCols(c) + `</div>`
     );
   }
   html = fill(html, 'GRID', cards.join(''));
@@ -111,10 +120,15 @@ function renderGallery(html, { careers = [], manifest = {}, hof = null } = {}) {
 }
 
 // ---- /champions ---------------------------------------------------------------
-// history: db.championHistory() rows (newest first); hof: db.hallOfFame()
-function renderChampions(html, { history = [], hof = null, manifest = {} } = {}) {
+// history: db.championHistory() rows (newest first, each with titleNumber —
+// the champion's cumulative count as of that tournament — and lifetimeTitles);
+// hof: db.hallOfFame(); coverage: db.archiveCoverage(); gaps: the tournament
+// numbers in this page's span that have no champion (cut short, or running).
+// Same markup as champions.html's script, which re-renders over it.
+function renderChampions(html, { history = [], hof = null, manifest = {}, coverage = null, gaps = [], hasMore = false } = {}) {
   const fmtDate = (ms) =>
     ms ? new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC' }) + ' UTC' : '';
+  const fmtN = (n) => Number(n || 0).toLocaleString('en-US');
   const roundLabel = (p) => (p.roundKey === 'final' ? 'FINAL' : p.roundKey === 'semis' ? `SEMI ${p.indexInRound + 1}` : `HEAT ${p.indexInRound + 1}`);
 
   // Holder
@@ -130,9 +144,9 @@ function renderChampions(html, { history = [], hof = null, manifest = {} } = {})
     const titles = ((hof.mostTitles || []).find((m) => m.id === cur.id) || {}).titles || 1;
     holder =
       `<span class="ball" style="${champBall(cur.id, color, manifest)}"></span>` +
-      `<span><span class="hk">🏆 Reigning champion</span>` +
+      `<span><span class="hk">Reigning champion</span>` +
       `<div class="hn"><small>#${pad(cur.id)}</small>${esc(nameFor(cur.id))}</div>` +
-      `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''}${titles > 1 ? ` · ${titles}× champion` : ''}</div></span>`;
+      `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''} · ${titles === 1 ? 'first title' : `${ordinal(titles)} title`}</div></span>`;
     html = html.replace('<a class="holder none" id="holder" href="/champions"><!--SSR:HOLDER-->Loading the record books…<!--/SSR:HOLDER--></a>',
       `<a class="holder" id="holder" href="/gallery#${cur.id}">${holder}</a>`);
   }
@@ -141,10 +155,11 @@ function renderChampions(html, { history = [], hof = null, manifest = {} } = {})
   if (hof) {
     const top = (hof.mostTitles || [])[0];
     const rep = (hof.repeatChampions || []).length;
+    const cut = coverage && coverage.abandoned ? `${fmtN(coverage.abandoned)} cut short` : '';
     const tiles = [
-      { b: hof.tournamentsCompleted, i: 'Tournaments', s: `${hof.racesRun} races run` },
+      { b: fmtN(hof.tournamentsCompleted), i: 'Tournaments completed', s: `${fmtN(hof.racesRun)} races run${cut ? ' · ' + cut : ''}` },
       { b: hof.distinctChampions, i: 'Different champions', s: rep ? `${rep} repeat winner${rep > 1 ? 's' : ''}` : 'no repeat winners yet' },
-      { b: top ? `${top.titles}×` : '—', i: 'Most titles', s: top ? `#${pad(top.id)} ${esc(nameFor(top.id))}` : 'nobody yet', gold: true },
+      { b: top ? `${top.titles}` : '—', i: 'Most titles', s: top ? `#${pad(top.id)} ${esc(nameFor(top.id))}` : 'nobody yet', gold: true },
       { b: hof.longestStreak ? `${hof.longestStreak.len}` : '1', i: 'Longest streak', s: hof.longestStreak ? `#${pad(hof.longestStreak.id)} ${esc(nameFor(hof.longestStreak.id))} back-to-back` : 'no back-to-back champions yet' },
     ];
     html = fill(html, 'TILES', tiles.map((x) => `<div class="tile"><b class="${x.gold ? 'gold' : ''}">${x.b}</b><i>${x.i}</i><small>${x.s}</small></div>`).join(''));
@@ -162,17 +177,29 @@ function renderChampions(html, { history = [], hof = null, manifest = {} } = {})
               `<a class="trow" href="/gallery#${m.id}"><span class="rk">${i + 1}</span>` +
               `<span class="ball" style="${champBall(m.id, null, manifest)}"></span>` +
               `<span class="nm"><small>#${pad(m.id)}</small>${esc(nameFor(m.id))}</span>` +
-              `<span class="tt"><span class="cups" aria-hidden="true">🏆</span>${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
+              `<span class="tt">${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
           )
           .join('')
       : '<div class="empty">The title table fills in as tournaments finish.</div>'
   );
 
+  // Count line: what this page shows out of what exists.
+  let count = '';
+  if (coverage) {
+    const cut = coverage.abandoned ? ` · <b>${fmtN(coverage.abandoned)}</b> cut short by restarts (no champion)` : '';
+    count = hasMore
+      ? `Showing the latest <b>${fmtN(history.length)}</b> of <b>${fmtN(coverage.completed)}</b> completed tournaments${cut}`
+      : `All <b>${fmtN(coverage.completed)}</b> completed tournaments${cut}`;
+  }
+  html = fill(html, 'COUNT', count);
+
   // Timeline
-  if (!history.length) {
+  if (!history.length && !gaps.length) {
     html = fill(html, 'TIMELINE', '<div class="empty">No tournament has finished yet. <a href="/">Watch the one running now →</a></div>');
     return html;
   }
+  // Rows without titleNumber (older callers, tests) fall back to counting
+  // within the page, which is only right when the page is the whole archive.
   const nth = new Map();
   const nthOf = new Map();
   history.slice().reverse().forEach((t) => {
@@ -189,25 +216,46 @@ function renderChampions(html, { history = [], hof = null, manifest = {} } = {})
     const finalRows = (t.final || [])
       .map((f) => `<div class="frow${f.rank === 1 ? ' win' : ''}"><span class="pos">${f.rank}</span><span class="sw" style="background:${esc(f.color)}"></span><a href="/gallery#${f.marbleId}">#${pad(f.marbleId)} ${esc(nameFor(f.marbleId))}</a><span class="t">${f.timeSec == null ? 'DNF' : ''}</span></div>`)
       .join('');
-    const n = nthOf.get(t.tournamentId) || 1;
-    return (
-      `<article class="champ">` +
-      `<div class="left"><span class="ball" style="${champBall(t.champion.id, color, manifest)}"></span><div class="tid">TOURNAMENT<b>${t.tournamentId}</b></div></div>` +
-      `<div>` +
-      `<div class="head"><a class="name" href="/gallery#${t.champion.id}"><small>#${pad(t.champion.id)}</small>${esc(nameFor(t.champion.id))}</a>` +
-      (n > 1 ? `<span class="badge">${ordinal(n).toUpperCase()} TITLE</span>` : '') +
-      (t.champion.nameAtTheTime ? `<span class="badge then" title="The name this marble raced under at the time">then “${esc(t.champion.nameAtTheTime)}”</span>` : '') +
-      (isWild ? `<span class="badge">WILDCARD RUN</span>` : '') +
-      `<span class="when">${fmtDate(t.completedAt)}</span></div>` +
-      `<details class="more"><summary>Road to the title</summary>` +
-      `<div class="road">${road || '<span class="step"><i>ROAD</i><b>—</b></span>'}</div>` +
-      (finalRows ? `<div class="final"><div class="fh">THE FINAL</div>${finalRows}</div>` : '') +
-      `<div class="seed">master seed ${t.masterSeed} · ${t.racesRun} races</div>` +
-      `</details>` +
-      `</div></article>`
-    );
+    const n = t.titleNumber || nthOf.get(t.tournamentId) || 1;
+    const lifetime = t.lifetimeTitles && t.lifetimeTitles !== n ? ` <small>(${t.lifetimeTitles} today)</small>` : '';
+    return {
+      id: t.tournamentId,
+      html:
+        `<article class="champ" id="t${t.tournamentId}">` +
+        `<div class="left"><span class="ball" style="${champBall(t.champion.id, color, manifest)}"></span><div class="tid">Tournament<b>${t.tournamentId}</b></div></div>` +
+        `<div>` +
+        `<div class="head"><a class="name" href="/gallery#${t.champion.id}"><small>#${pad(t.champion.id)}</small>${esc(nameFor(t.champion.id))}</a>` +
+        `<span class="badge" title="${n === 1 ? 'First title' : `Title number ${n} for this marble as of this tournament`}">${n === 1 ? 'First title' : ordinal(n) + ' title'}${lifetime}</span>` +
+        (t.champion.nameAtTheTime ? `<span class="badge then" title="The name this marble raced under at the time">then “${esc(t.champion.nameAtTheTime)}”</span>` : '') +
+        (isWild ? `<span class="badge wild">Wildcard run</span>` : '') +
+        `<span class="when">${fmtDate(t.completedAt)}</span></div>` +
+        `<details class="more"><summary>Road to the title</summary>` +
+        `<div class="road">${road || '<span class="step"><i>ROAD</i><b>—</b></span>'}</div>` +
+        (finalRows ? `<div class="final"><div class="fh">The final</div>${finalRows}</div>` : '') +
+        `</details>` +
+        `<details class="tech"><summary>Technical details</summary><div class="seed">` +
+        `<b>master seed</b> ${esc(t.masterSeed)}${t.masterSeedHex ? `<br><b>256-bit seed</b> ${esc(t.masterSeedHex)}` : ''}${t.commit ? `<br><b>commitment</b> ${esc(t.commit)}` : ''}` +
+        `<br><b>races run</b> ${t.racesRun}` +
+        `</div></details>` +
+        `</div></article>`,
+    };
   });
-  return fill(html, 'TIMELINE', cards.join(''));
+  // Numbers with no champion, folded into runs, in tournament order.
+  const runs = [];
+  for (const g of gaps.slice().sort((a, b) => b.tournamentId - a.tournamentId)) {
+    const last = runs[runs.length - 1];
+    if (last && last.status === g.status && last.lo === g.tournamentId + 1) { last.lo = g.tournamentId; last.n++; last.races += g.racesDone || 0; }
+    else runs.push({ status: g.status, hi: g.tournamentId, lo: g.tournamentId, n: 1, races: g.racesDone || 0 });
+  }
+  const gapRows = runs.map((g) => {
+    const range = g.n === 1 ? `Tournament ${g.hi}` : `Tournaments ${g.hi}–${g.lo}`;
+    const h = g.status === 'running'
+      ? `<div class="gap live" data-gap="${g.hi}"><b>${range}</b><span>in progress right now — <a href="/">watch it live</a></span></div>`
+      : `<div class="gap" data-gap="${g.hi}"><b>${range}</b><span>${g.n === 1 ? 'was' : `${g.n} tournaments were`} cut short by a server restart — no champion was crowned${g.races ? ` (${fmtN(g.races)} race${g.races === 1 ? '' : 's'} had run)` : ''}</span></div>`;
+    return { id: g.hi, html: h };
+  });
+  const items = cards.concat(gapRows).sort((a, b) => b.id - a.id);
+  return fill(html, 'TIMELINE', items.map((x) => x.html).join(''));
 }
 
 // ---- / (homepage) --------------------------------------------------------------

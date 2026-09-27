@@ -398,11 +398,21 @@ async function main() {
         return ssr.renderGallery(html, { careers: db ? db.marbleCareers() : [], manifest: readManifest(), hof: db ? db.hallOfFame() : null });
       }
       if (file === 'champions.html') {
-        return ssr.renderChampions(html, {
-          history: db ? db.championHistory(200) : [],
-          hof: db ? db.hallOfFame() : null,
-          manifest: readManifest(),
-        });
+        // First archive page, same size the script fetches, with the gaps in
+        // its span and how much archive exists (the script paginates on).
+        const PAGE = 40;
+        let history = [];
+        let coverage = null;
+        let gaps = [];
+        let hasMore = false;
+        if (db) {
+          history = db.championHistory({ limit: PAGE + 1 });
+          hasMore = history.length > PAGE;
+          if (hasMore) history = history.slice(0, PAGE);
+          coverage = db.archiveCoverage();
+          if (history.length) gaps = db.tournamentGaps(history[history.length - 1].tournamentId, coverage.newestId);
+        }
+        return ssr.renderChampions(html, { history, hof: db ? db.hallOfFame() : null, manifest: readManifest(), coverage, gaps, hasMore });
       }
       return ssr.renderHome(html, { snapshot: scheduler ? scheduler.snapshot() : null, hof: db ? db.hallOfFame() : null });
     } catch (e) {
@@ -492,18 +502,45 @@ async function main() {
       // `champions` rows are the long-standing shape (kept for existing
       // consumers); `history` adds each champion's road through the bracket
       // and the final's finishing order, for the /champions page.
+      // Filters: before=<tournament id> (cursor for older pages), id=<one
+      // tournament>, marble=<ids, comma-separated>, since/until=<ms>. Every
+      // response also says how much archive exists (`coverage`) and which
+      // tournament numbers in the returned span have no champion (`gaps`).
       let champions = [];
       let history = [];
+      let coverage = null;
+      let gaps = [];
+      let hasMore = false;
       try {
-        const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit')) || 50));
+        const q = url.searchParams;
+        const num = (k) => (q.get(k) != null && q.get(k) !== '' && Number.isFinite(Number(q.get(k))) ? Number(q.get(k)) : null);
+        const limit = Math.max(1, Math.min(200, num('limit') || 50));
+        const before = num('before');
+        const id = num('id');
+        const since = num('since');
+        const until = num('until');
+        const marbleIds = (q.get('marble') || '').split(',').map((s) => parseInt(s, 10)).filter((n) => Number.isInteger(n) && n >= 1 && n <= 100);
+        const filtered = before != null || id != null || since != null || until != null || marbleIds.length > 0;
         if (db) {
-          champions = db.exportChampions().slice(-limit).reverse();
-          history = db.championHistory(limit);
+          if (!filtered) champions = db.exportChampions().slice(-limit).reverse();
+          history = db.championHistory({ limit: limit + 1, before, id, marbleIds: marbleIds.length ? marbleIds : null, since, until });
+          hasMore = history.length > limit;
+          if (hasMore) history = history.slice(0, limit);
+          coverage = db.archiveCoverage();
+          // Gaps only make sense for a contiguous run of tournaments: an
+          // unfiltered page (or a cursor page) spans from its oldest row up
+          // to the page's upper bound (the newest tournament on record, or
+          // the cursor). A single-tournament or per-marble view has none.
+          if (id == null && !marbleIds.length && history.length) {
+            const oldest = history[history.length - 1].tournamentId;
+            const top = before != null ? before - 1 : coverage.newestId;
+            gaps = db.tournamentGaps(oldest, top);
+          }
         }
       } catch (e) {
         console.error('[api] champions failed:', e && e.message);
       }
-      return sendJSON(res, 200, { champions, history });
+      return sendJSON(res, 200, { champions, history, coverage, gaps, hasMore });
     }
     if (url.pathname === '/api/hall-of-fame') {
       // Aggregates across all completed tournaments: title counts, repeat
@@ -720,6 +757,11 @@ async function main() {
     const firstSeed = priorTournaments > 0 ? randomSeed() : cfg.masterSeed;
     if (priorTournaments > 0)
       console.log(`[server] ${priorTournaments} tournament(s) on record — starting a fresh one with a random 256-bit seed`);
+    // Whatever was 'running' when the previous process died was cut short
+    // (a deploy, a restart); record that so the archive can say so rather
+    // than skipping the number.
+    const cut = db.abandonStale(Date.now());
+    if (cut) console.log(`[server] ${cut} unfinished tournament(s) marked as cut short (no champion)`);
     startTournament(firstSeed);
   } catch (err) {
     simFailed = true;

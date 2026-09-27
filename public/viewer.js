@@ -453,7 +453,7 @@ function renderRaceBoard(race, prog) {
         // Lane colour, not artwork: during a race the marble is identified by
         // the cone over it in the 3D view — the board matches.
         `<span class="rb-pos">${i + 1}</span><span class="sw" style="background:${s.color}"></span>` +
-        `<span class="rb-num">${numOf(s.marbleId)}</span><span class="rb-name">${esc(s.marbleName)}${mine ? ' (you)' : ''}</span>` +
+        `<span class="rb-num">${numOf(s.marbleId)}</span><span class="rb-name">${esc(s.marbleName)}${mine ? ' (your pick)' : ''}</span>` +
         `<span class="rb-fin">${p.finished ? 'Finished' : ''}</span></div>`
       );
     })
@@ -929,25 +929,39 @@ function surpriseMe() {
 async function startLatestReplay() {
   return startReplayOf(lastDoneRace());
 }
+// 'recorded' when the stage has no 3D and the replay is the recorded finishing
+// order on the fallback panel; '3d' when the race is re-run from its seeds.
+let _replayMode = '3d';
 async function startReplayOf(last) {
-  if (replaying || mode !== 'server') return;
-  if (!last || !last.result || last.raceSeed == null || last.trackSeed == null) return;
+  if (replaying) return;
   const cur = currentRace();
-  // Too close to a live start? Don't steal the stage for a replay.
-  if (cur && !cur.result && cur.scheduledStart && toLocal(cur.scheduledStart) - Date.now() < 8000) {
-    showToast('The next race starts in a moment — replays resume after it', null, null);
+  const msToLive = cur && !cur.result && cur.scheduledStart ? toLocal(cur.scheduledStart) - Date.now() : Infinity;
+  // The tested rule (UIModel.replayRequest) decides what a replay press does
+  // on this stage; every branch answers the press right away.
+  const req = UI.replayRequest({ mode, rendererState, race: last, msToLive });
+  if (req.action === 'unavailable' || req.action === 'wait') {
+    showToast(req.reason, null, null);
+    announce(req.reason);
     return;
   }
   replaying = true;
   _replayRace = last;
-  el('replayChipText').textContent = `▶ Replay · ${raceLabel(last)}`;
+  _replayMode = req.action === 'fallback' ? 'recorded' : '3d';
+  el('replayChipText').textContent = `▶ Replay · ${raceLabel(last)}${_replayMode === 'recorded' ? ' · recorded result' : ''}`;
   el('replayChip').hidden = false;
   el('preRace').hidden = true;
   hideMoment();
   closeDrawer();
   renderHero();
   renderTopBar();
+  if (_replayMode === 'recorded') {
+    renderStageFallback();
+    announce(`Replay of ${raceLabel(last)}: ${req.reason}`);
+    return;
+  }
+  showToast(`▶ Replay · ${raceShort(last)}${req.action === 'play-when-ready' ? ' — loading the 3D track…' : ''}`, null, null);
   const a = await whenApiReady();
+  if (!replaying || _replayRace !== last || _replayMode !== '3d') return; // exited, or the stage failed meanwhile
   a.newCourse(last.trackSeed); // hard reset even on the same track: clean gate start
   builtTrack = last.trackSeed;
   applyRaceSkins(a, last);
@@ -966,13 +980,14 @@ function stopReplay(restoreStage) {
   if (!replaying) return;
   replaying = false;
   _replayRace = null;
+  _replayMode = '3d';
   el('replayChip').hidden = true;
   hideRaceBoard();
   renderHero();
   if (restoreStage) {
     const a = api();
     const cur = currentRace();
-    if (a && cur && !cur.result) {
+    if (a && cur && !cur.result && rendererState === 'ready') {
       a.newCourse(cur.trackSeed);
       builtTrack = cur.trackSeed;
       applyFollow(cur);
@@ -981,6 +996,7 @@ function stopReplay(restoreStage) {
   }
   renderTopBar();
   renderPreRace();
+  renderStageFallback();
 }
 
 // ---- between-races card ------------------------------------------------------
@@ -2140,7 +2156,7 @@ function competitorRow(s, { pos = '', status = '', statusCls = '', win = false, 
   return (
     `<div class="mrow${mine ? ' mine' : ''}${win ? ' win' : ''}${lead ? ' lead' : ''}">` +
     `<span class="mrow-pos">${pos}</span>${swatchHtml(s.marbleId, s.color, 'sw lg')}` +
-    `<span class="mrow-name"><small>#${numOf(s.marbleId)}</small>${esc(s.marbleName)}${mine ? '<span class="you">you</span>' : ''}</span>` +
+    `<span class="mrow-name"><small>#${numOf(s.marbleId)}</small>${esc(s.marbleName)}${mine ? '<span class="you">your pick</span>' : ''}</span>` +
     `<span class="mrow-status ${statusCls}">${status}</span></div>`
   );
 }
@@ -2214,7 +2230,7 @@ function renderRacePanel() {
         const out = m.status === 'eliminated';
         const status = out ? 'Out this tournament' : m.status === 'champion' ? 'Champion' : '';
         return `<div class="mrow compact${m.id === followId ? ' mine' : ''}${out ? ' out' : ''}"><span></span>${swatchHtml(m.id, marbleColor(m.id), 'sw lg')}` +
-          `<span class="mrow-name"><small>#${numOf(m.id)}</small>${esc(m.name)}${m.id === followId ? '<span class="you">you</span>' : ''}</span>` +
+          `<span class="mrow-name"><small>#${numOf(m.id)}</small>${esc(m.name)}${m.id === followId ? '<span class="you">your pick</span>' : ''}</span>` +
           `<span class="mrow-status${out ? ' out' : m.status === 'champion' ? ' gold' : ''}">${status}</span></div>`;
       })
       .join('');
@@ -2263,13 +2279,17 @@ function renderBracketPanel() {
     const cur = race.key === model.currentKey && !race.result;
     const w = race.result && race.result[0];
     const mine = followId != null && race.roster && race.roster.some((s) => s.marbleId === followId);
-    const you = mine ? '<span class="tag gold">you</span>' : '<span></span>';
+    // The favourite's presence is its own label, never mistakable for the
+    // winner shown beside it; the expanded row says how it did.
+    const you = mine ? '<span class="tag gold">Your pick raced here</span>' : '<span></span>';
+    const open = _openRaces.has(race.key);
     if (w) {
-      return `<div class="rr done${mine ? ' mine' : ''}" data-race="${race.key}"><span class="rr-l">${label}</span>` +
-        `<span class="rr-w">${swatchHtml(w.marbleId, w.color)}<span>#${numOf(w.marbleId)} ${esc(w.marbleName)}</span><small>won</small></span>${you}</div>`;
+      return `<details class="rr-x done${mine ? ' mine' : ''}" data-race="${race.key}"${open ? ' open' : ''}>` +
+        `<summary class="rr done"><span class="rr-l">${label}</span>` +
+        `<span class="rr-w">${swatchHtml(w.marbleId, w.color)}<span>#${numOf(w.marbleId)} ${esc(w.marbleName)}</span><small>won</small></span>${you}</summary>` +
+        `<div class="rr-body list"><div class="row-list">${raceRows(race)}</div></div></details>`;
     }
     const state = cur ? (startedRaces.has(race.key) ? '<span class="tag live">Live now</span>' : '<span class="tag info">Up next</span>') : '';
-    const open = _openRaces.has(race.key);
     return `<details class="rr-x${cur ? ' current' : ''}${mine ? ' mine' : ''}" data-race="${race.key}"${open ? ' open' : ''}>` +
       `<summary class="rr"><span class="rr-l">${label}</span><span class="rr-w muted"><span>${state || `${race.roster.length} marbles`}</span></span>${you}</summary>` +
       `<div class="rr-body">${race.roster.map((s) => `<span class="chip${s.marbleId === followId ? ' mine' : ''}">${swatchHtml(s.marbleId, s.color)}#${numOf(s.marbleId)} ${esc(s.marbleName)}</span>`).join('')}</div></details>`;
@@ -2417,7 +2437,11 @@ let _historyAll = false;
       const rb = e.target.closest('[data-round]');
       if (rb) { bracketRound = rb.dataset.round; _bracketFocused = true; renderDrawer(); return; }
       const rp = e.target.closest('[data-replay]');
-      if (rp) { const r = model.racesByKey.get(rp.dataset.replay); if (r) startReplayOf(r); return; }
+      if (rp) {
+        const r = model.racesByKey.get(rp.dataset.replay);
+        if (r) { rp.disabled = true; rp.textContent = 'Loading…'; startReplayOf(r); }
+        return;
+      }
       if (e.target.closest('#histMore')) { _historyAll = !_historyAll; renderHistoryPanel(); return; }
       if (e.target.closest('#champRetry')) { loadChampions(); }
     });
@@ -2684,6 +2708,20 @@ function setRendererState(next) {
   el('ssFailed').hidden = next !== 'failed';
   document.body.classList.toggle('no3d', next === 'failed');
   if (next === 'failed') { announce('The 3D race could not load. Standings and results are still live.'); hideRaceBoard(); }
+  // A replay caught by the change of stage: a 3D replay that lost its stage
+  // continues as the recorded result; a recorded one gets its 3D run once a
+  // retry brings the stage back.
+  if (replaying && _replayRace) {
+    if (next === 'failed' && _replayMode === '3d') {
+      _replayMode = 'recorded';
+      el('replayChipText').textContent = `▶ Replay · ${raceLabel(_replayRace)} · recorded result`;
+    } else if (next === 'ready' && _replayMode === 'recorded') {
+      const r = _replayRace;
+      replaying = false;
+      _replayRace = null;
+      setTimeout(() => startReplayOf(r), 0);
+    }
+  }
   renderMyMarble();
   renderPreRace();
   renderStageFallback();
@@ -2765,6 +2803,9 @@ function retryRenderer() {
   rendererEvent('retry');
   _retryN++;
   builtTrack = null;
+  // The old document stays in the frame until the new one loads; blank its
+  // API first so the watcher can't mistake it for the retry coming up ready.
+  try { const w = gameFrame.contentWindow; if (w) { w.marbleAPI = undefined; w.__boot = null; } } catch {}
   try { gameFrame.src = 'marble_run.html?embed=1&retry=' + _retryN; } catch {}
   watchRenderer(true);
 }
@@ -2785,6 +2826,21 @@ function renderStageFallback(prog) {
   if (why) { const t = inDrawer ? SS_WHY_DRAWER : SS_WHY_FULL; if (why.textContent !== t) why.textContent = t; }
   const open = el('ssOpenTournament');
   if (open) open.hidden = drawerOpen;
+  // A replay on a stage with no 3D: the recorded finishing order, clearly
+  // marked as a replay, with a retry for the 3D run and a way back to live.
+  const recorded = !!(replaying && _replayRace && _replayMode === 'recorded');
+  box.classList.toggle('replaying', recorded);
+  el('ssFailed').classList.toggle('replaying', recorded);
+  if (replaying && _replayRace && _replayMode === 'recorded') {
+    const r = _replayRace;
+    box.innerHTML = `<h3 class="dr-h"><b>Replay · ${esc(raceLabel(r))}</b><small>Recorded result</small></h3>` +
+      `<p class="dr-empty">3D animation is unavailable on this device, so here is the recorded finishing order.</p>` +
+      `<div class="row-list">${raceRows(r)}</div>` +
+      `<div class="dr-inline ss-replay-acts"><button class="btn sm primary" id="ssReplayRetry">Try 3D again</button><button class="btn sm" id="ssReplayLive">Back to live</button></div>`;
+    el('ssReplayRetry').addEventListener('click', retryRenderer);
+    el('ssReplayLive').addEventListener('click', () => stopReplay(true));
+    return;
+  }
   if (inDrawer) { if (box.innerHTML) box.innerHTML = ''; return; }
   const cur = currentRace();
   const focus = cur && !cur.result ? cur : lastDoneRace();

@@ -205,6 +205,24 @@
     }
   }
 
+  // What pressing "Replay" on a recorded race should do, given the stage:
+  //   play            – the 3D stage is ready: run the race from its seeds
+  //   play-when-ready – the 3D track is still loading: run it once it is
+  //   fallback        – no 3D on this device: show the recorded finishing order
+  //   wait            – a live race starts within `msToLive`: keep the stage
+  //   unavailable     – nothing to replay (local mode, or no recorded result)
+  // Every branch carries the sentence to show the viewer.
+  function replayRequest({ mode, rendererState, race, msToLive = Infinity }) {
+    if (mode !== 'server') return { action: 'unavailable', reason: 'Replays come from the live server’s records; races running locally in your browser have none.' };
+    if (!race || !race.result || race.raceSeed == null || race.trackSeed == null) return { action: 'unavailable', reason: 'That race has no recorded result to replay yet.' };
+    // No 3D stage → nothing a live start could steal: the recorded result is
+    // always available (the live race takes the panel back when it starts).
+    if (rendererState === 'failed') return { action: 'fallback', reason: '3D animation is unavailable on this device, so here is the recorded finishing order.' };
+    if (msToLive < 8000) return { action: 'wait', reason: 'The next race starts in a moment — replays resume after it.' };
+    if (rendererState !== 'ready') return { action: 'play-when-ready', reason: 'Loading the 3D track for the replay…' };
+    return { action: 'play', reason: '' };
+  }
+
   return {
     MARBLE_COUNT,
     STAGES,
@@ -218,5 +236,6 @@
     filterMarbles,
     surprisePool,
     rendererNext,
+    replayRequest,
   };
 });

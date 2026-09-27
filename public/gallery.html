@@ -19,13 +19,10 @@
 <meta name="twitter:image" content="https://marblerun.fun/og.png">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/site.css">
 <style>
   :root {
-    --skin-zoom: 1.34; /* artwork margin → sphere fills the circle (keep in sync with viewer.css) */
-    --bg: #f6f1ea; --text: #1e1a16; --muted: #7b7168; --line: rgba(60, 45, 30, 0.14);
-    --field: #eeeae3; --accent: #f3c14b; --accent-ink: #2a1f0a; --hot: #e5522c;
-    --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, "Times New Roman", serif;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* page tokens, masthead, buttons and fields come from /site.css */
     --cols: 5;
 
     /* ---- materials + lighting, shared by the cabinet and the detail box ----
@@ -51,31 +48,6 @@
     --fascia-h: 44px;   /* front edge carrying the labels */
     --sit: 0.55;        /* where on the floor's depth the marble touches (0 back, 1 front) */
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font: 0.9375rem/1.5 var(--sans); }
-  a { color: inherit; }
-  button, input, select { font: inherit; color: inherit; }
-  :focus-visible { outline: 2px solid var(--hot); outline-offset: 3px; }
-  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-
-  /* ---------- masthead ---------- */
-  .top { padding: 18px 24px 0; }
-  .top-inner { max-width: 1240px; margin: 0 auto; }
-  .bar { display: flex; align-items: center; gap: 18px; row-gap: 6px; flex-wrap: wrap; font-size: 0.8125rem; color: var(--muted); }
-  /* The Marble Run logo from the home page; the wordmark stands in if it fails to load. */
-  .brand { display: flex; align-items: center; flex: none; text-decoration: none; color: var(--text); min-height: 40px; }
-  .brand-logo { height: 36px; width: auto; display: block; }
-  .wordmark { display: none; font: 800 0.875rem/1 var(--sans); letter-spacing: 0.18em; color: var(--text); text-decoration: none; }
-  .brand-logo[hidden] { display: none; }
-  .brand-logo[hidden] + .wordmark { display: inline; }
-  .bar .sep { width: 1px; height: 18px; background: var(--line); }
-  .crumbs a { text-decoration: none; color: var(--muted); font-family: var(--serif); font-size: 0.9375rem; white-space: nowrap; }
-  .crumbs a:hover { color: var(--text); }
-  .tagline { margin-left: auto; font-family: var(--serif); white-space: nowrap; }
-  .hero { text-align: center; padding: 26px 0 18px; }
-  h1 { margin: 0; font: 700 clamp(2.25rem, 6vw, 4.25rem)/1.02 var(--serif); letter-spacing: -0.035em; }
-  .sub { margin: 8px 0 0; font: 400 clamp(1rem, 2vw, 1.375rem)/1.3 var(--serif); color: #4f463d; }
-
   /* ---------- toolbar ---------- */
   .toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 6px 0 14px; }
   .search { position: relative; flex: 1 1 280px; max-width: 520px; }
@@ -93,9 +65,6 @@
   .views button:hover { background: var(--field); }
   .views svg { width: 22px; height: 22px; }
 
-  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px 70px; }
-  .notice { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: var(--field); color: var(--muted); font-size: 0.875rem; }
-  .notice[hidden] { display: none; }
   .caption { margin: 14px 4px 0; font-family: var(--serif); color: var(--muted); font-size: 0.9375rem; text-align: center; }
   .caption:empty { display: none; }
 
@@ -220,21 +189,54 @@
   .empty { text-align: center; color: #fff5e6; font-family: var(--serif); font-size: 1.125rem; padding: 60px 20px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
   .empty[hidden] { display: none; }
 
-  /* ---------- list view ---------- */
-  /* One long shelf: a plank per marble, artwork to the left, record to the right. */
+  /* ---------- list view: a comparison table ----------
+     The cabinet frame stays; inside it the shelves give way to an ivory
+     ledger — one hairline row per marble with the career figures in aligned
+     columns (races, wins, win rate, podiums, titles). Phones keep marble,
+     wins and titles; the rest is in the detail view. */
+  .m-cols { display: none; }
+  .list-head { display: none; }
+  .case.listing .case-in { background: var(--paper); padding: 0; box-shadow: 0 0 0 1px rgba(var(--shadow-ink), 0.45), 0 0 0 2px rgba(255, 236, 205, 0.22); }
+  .case.listing .case-in::before, .case.listing .case-in::after { display: none; }
+  .case.listing .grid { padding-top: 0; }
+  .list-head, .grid.list .card { display: grid; grid-template-columns: 48px minmax(0, 1fr) repeat(5, minmax(56px, 84px)); align-items: center; gap: 10px 12px; padding: 6px 16px; }
+  .list-head { position: sticky; top: 0; z-index: 3; min-height: 40px; background: var(--paper); border-bottom: 1px solid rgba(60, 45, 30, 0.28); font: 600 0.6875rem/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .list-head[hidden] { display: none; }
+  .list-head .lh { text-align: right; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; min-height: 40px; }
+  .list-head .lh.name { text-align: left; grid-column: 1 / 3; }
+  .list-head .lh[aria-sort] { color: var(--text); }
+  .list-head .lh[aria-sort="descending"]::after { content: ' ▾'; }
+  .list-head .lh[aria-sort="ascending"]::after { content: ' ▴'; }
+  .list-head .lh:hover { color: var(--text); }
+  .list-head .lh.plain { cursor: default; }
   .grid.list .shelf-row { display: contents; }
   .grid.list .card.filler { display: none; }
-  .grid.list .card { flex-direction: row; align-items: center; gap: 16px; padding: 10px 22px; width: 100%; margin: 0;
-    background-image: var(--wood-h), linear-gradient(180deg, var(--maple-fascia), var(--maple-fascia-dark)); background-blend-mode: soft-light, normal; background-size: 512px 512px, auto;
-    box-shadow: inset 0 2px 0 rgba(255, 240, 215, 0.45), inset 0 -3px 0 rgba(var(--shadow-ink), 0.35); }
-  .grid.list .card + .card { margin-top: 10px; }
-  .grid.list .ball-wrap { width: 54px; height: 54px; margin: 0; flex: none; }
+  .grid.list .card { min-height: 56px; width: 100%; margin: 0; border-bottom: 1px solid var(--line); background: none; box-shadow: none; }
+  .grid.list .card:hover { background: var(--field); }
+  .grid.list .card:focus-visible { box-shadow: inset 0 0 0 2px var(--hot); }
+  .grid.list .card:focus-visible .ball, .grid.list .card:hover .ball { transform: none; }
+  .grid.list .ball-wrap { width: 40px; height: 40px; margin: 0; }
   .grid.list .ball-wrap::after, .grid.list .ball-wrap::before { display: none; }
   .grid.list .floor { display: none; }
-  .grid.list .plaque { width: auto; margin: 0; padding: 0; min-height: 0; flex: 1 1 auto; background: none; box-shadow: none; align-items: flex-start; text-align: left; }
-  .grid.list .plaque-l { justify-content: flex-start; }
+  .grid.list .plaque { width: auto; margin: 0; padding: 0; min-height: 0; flex: none; background: none; box-shadow: none; align-items: flex-start; justify-content: center; text-align: left; min-width: 0; }
   .grid.list .plaque::after { display: none; }
-  .grid.list .card:focus-visible { box-shadow: inset 0 2px 0 rgba(255, 240, 215, 0.45), inset 0 -3px 0 rgba(var(--shadow-ink), 0.35), inset 0 0 0 2px var(--hot); }
+  .grid.list .plaque-l { justify-content: flex-start; row-gap: 2px; }
+  .grid.list .m-nm { display: inline-flex; gap: 8px; }
+  .grid.list .m-num { margin: 0; }
+  .grid.list .m-name { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .grid.list .m-stats { display: none; }
+  .grid.list .m-reign, .grid.list .m-pick { flex-basis: auto; margin-left: 0; }
+  .grid.list .m-cols { display: contents; }
+  .m-c { text-align: right; font: 700 1rem var(--serif); font-variant-numeric: tabular-nums; color: var(--text); }
+  .m-c.dim { color: var(--muted); font-weight: 400; }
+  .m-c .sk { display: inline-block; width: 2em; height: 0.75em; border-radius: 4px; background: rgba(58, 40, 23, 0.14); vertical-align: middle; animation: shimmer 1.4s ease-in-out infinite; }
+  @media (max-width: 640px) {
+    .list-head, .grid.list .card { grid-template-columns: 40px minmax(0, 1fr) 52px 52px; gap: 8px 10px; padding: 6px 10px; }
+    .list-head .lh.races, .list-head .lh.rate, .list-head .lh.podiums, .grid.list .c-races, .grid.list .c-rate, .grid.list .c-podiums { display: none; }
+    .grid.list .ball-wrap { width: 34px; height: 34px; }
+    .grid.list .m-name { font-size: 0.9375rem; }
+    .grid.list .m-reign, .grid.list .m-pick { flex-basis: 100%; justify-content: flex-start; }
+  }
 
   /* ---------- detail: a wooden display box ---------- */
   .veil { position: fixed; inset: 0; z-index: 20; background: rgba(38, 26, 14, 0.38); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
@@ -284,6 +286,7 @@
   .box-card h2 { margin: 2px 0 6px; font: 700 clamp(2rem, 6vw, 3rem)/1.05 var(--serif); letter-spacing: -0.03em; }
   .d-owner { font: 400 clamp(0.9375rem, 2.5vw, 1.125rem)/1.35 var(--serif); color: var(--muted); margin: 0 0 20px; }
   .d-owner a { color: var(--text); font-weight: 700; }
+  .d-note { margin: 14px 0 0; font-size: 0.8125rem; line-height: 1.45; color: var(--muted); }
   .statgrid { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0 0 18px; }
   .stat { padding: 6px 4px; border-left: 1px solid var(--line); }
   .stat:first-child { border-left: 0; }
@@ -299,13 +302,6 @@
   @media (max-width: 1000px) { :root { --cols: 4; } }
   @media (max-width: 760px) {
     :root { --cols: 3; --frame-w: 14px; --side-w: 8px; --floor-h: 26px; --fascia-h: 38px; }
-    /* A tighter masthead: the cabinet should start within the first screen. */
-    .top { padding: 10px 16px 0; }
-    .tagline { display: none; }
-    .hero { padding: 10px 0 6px; }
-    h1 { font-size: clamp(1.9rem, 8.4vw, 2.6rem); letter-spacing: -0.03em; }
-    .sub { margin-top: 4px; font-size: 1rem; }
-    .wrap { padding: 0 16px 50px; }
     /* Toolbar as a grid: search across the top, then one row of sort ·
        count · view toggles that can never wrap — the sort box sits in a
        minmax(0, 1fr) column, so it gives way (never the row) on the
@@ -331,9 +327,6 @@
   }
   @media (max-width: 480px) {
     :root { --cols: 2; --floor-h: 22px; --fascia-h: 40px; }
-    .bar { gap: 12px; }
-    .bar .sep { display: none; }
-    .brand-logo { height: 28px; }
     /* Two bays per shelf: name on the first line (long names wrap), wins on
        the second, labels below — all top-aligned so neighbours line up. */
     .plaque { justify-content: flex-start; padding: 7px 6px 8px; }
@@ -343,7 +336,6 @@
     .m-name { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.2; }
     .m-stats::before { content: none; }
     .m-stats, .m-reign, .m-pick { flex-basis: 100%; justify-content: center; text-align: center; margin-left: 0; }
-    .grid.list .card { padding: 8px 12px; gap: 12px; }
   }
   @media (max-width: 360px) {
     .toolbar { column-gap: 6px; }
@@ -355,22 +347,27 @@
 </head>
 <body>
 
-<header class="top">
-  <div class="top-inner">
-    <div class="bar">
+<header class="site-top">
+  <div class="site-top-inner">
+    <div class="site-bar">
       <a class="brand" href="/" aria-label="Marble Run — home"><img src="/logo.png" alt="Marble Run" class="brand-logo" onerror="this.hidden=true"><span class="wordmark" aria-hidden="true">MARBLERUN.FUN</span></a>
-      <span class="sep" aria-hidden="true"></span>
-      <span class="crumbs"><a href="/">← Back to the races</a></span>
-      <span class="tagline">The marble racing universe by Bryan Brinkman</span>
+      <nav class="site-nav" aria-label="Site">
+        <a href="/" class="back">← <span class="long">Back to the races</span><span class="short">Races</span></a>
+        <span class="sep" aria-hidden="true"></span>
+        <a href="/gallery" aria-current="page">Gallery</a>
+        <a href="/champions">Champions</a>
+        <a href="/print"><span class="long">Print a track</span><span class="short">Print</span></a>
+      </nav>
+      <span class="site-tagline">The marble racing universe by Bryan Brinkman</span>
     </div>
-    <div class="hero">
+    <div class="site-hero">
       <h1>The Lost Marble Collection</h1>
       <p class="sub" id="subLine">100 marbles. Every one has a story.</p>
     </div>
   </div>
 </header>
 
-<main class="wrap">
+<main class="site-wrap">
   <div class="toolbar">
     <label class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
@@ -395,6 +392,14 @@
   <p class="notice" id="notice" hidden></p>
   <section class="case" aria-label="The marble collection">
     <div class="case-in">
+      <div class="list-head" id="listHead" hidden aria-label="Career columns">
+        <button class="lh name" type="button" data-sort="num">Marble</button>
+        <button class="lh races" type="button" data-sort="races">Races</button>
+        <button class="lh wins" type="button" data-sort="wins">Wins</button>
+        <span class="lh rate plain" aria-label="Win rate">Win rate</span>
+        <button class="lh podiums" type="button" data-sort="podiums">Podiums</button>
+        <button class="lh titles" type="button" data-sort="titles">Titles</button>
+      </div>
       <div class="grid" id="grid" role="list"><!--SSR:GRID--></div>
       <div class="empty" id="empty" hidden>No marbles match that search.</div>
     </div>
@@ -419,6 +424,7 @@
       <div class="d-actions">
         <a class="cheer" id="dCheer" href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.3-9.2C1.5 8.2 3.6 5 6.8 5c1.9 0 3.4 1 4.2 2.4h2C13.8 6 15.3 5 17.2 5c3.2 0 5.3 3.2 4.1 6.3-1.8 4.6-9.3 9.2-9.3 9.2z"/></svg><span>Cheer for this marble</span></a>
       </div>
+      <p class="d-note" id="dNote">Cheering makes this your pick on this device — the marble you follow through the races. It doesn’t claim the marble: owner credits are set by the site.</p>
     </div>
   </div>
 </div>
@@ -520,7 +526,7 @@
         : careersState === 'error'
           ? 'Career unavailable'
           : c.races ? `<b>${c.wins}</b> ${c.wins === 1 ? 'win' : 'wins'}` : 'No races yet';
-      card.innerHTML = cardInner(id, ballStyle(id, skinOf(id)), stats, careersState === 'ok' ? c.titles : 0, id === reigningId);
+      card.innerHTML = cardInner(id, ballStyle(id, skinOf(id)), stats, careersState === 'ok' ? c.titles : 0, id === reigningId, careersState === 'ok' ? c : null);
       frag.appendChild(card);
     }
     grid.replaceChildren(frag);
@@ -531,7 +537,7 @@
   }
   // The same markup the server renders (src/ssr.js): the marble in the
   // niche, the floor it rests on, and the fascia plaque.
-  function cardInner(id, style, stats, titles, reigning) {
+  function cardInner(id, style, stats, titles, reigning, career) {
     return `<div class="ball-wrap"><div class="ball${skinOf(id) && skinOf(id).img ? ' art' : ''}" style="${style}"></div></div>` +
       `<div class="floor" aria-hidden="true"></div>` +
       `<div class="plaque"><span class="plaque-l">` +
@@ -540,7 +546,16 @@
       `<span class="m-stats">${stats}</span>` +
       (titles ? `<span class="m-titles">🏆 ${titles} ${titles === 1 ? 'title' : 'titles'}</span>` : '') +
       (reigning ? REIGN_HTML : '') +
-      `</span></div>`;
+      `</span></div>` + careerCols(career);
+  }
+  // The list view's columns (same figures the detail box shows, same rounding
+  // for the win rate). Null career = still loading.
+  function careerCols(c) {
+    const cell = (cls, v, dim) => `<span class="m-c ${cls}${dim ? ' dim' : ''}">${v}</span>`;
+    if (!c) return `<span class="m-cols">${['c-races', 'c-wins', 'c-rate', 'c-podiums', 'c-titles'].map((k) => cell(k, '<span class="sk"></span>')).join('')}</span>`;
+    const rate = c.races ? Math.round((c.wins / c.races) * 100) + '%' : '—';
+    return `<span class="m-cols" aria-label="${c.races} races, ${c.wins} wins, win rate ${rate}, ${c.podiums} podiums, ${c.titles} titles">` +
+      cell('c-races', c.races, !c.races) + cell('c-wins', c.wins, !c.wins) + cell('c-rate', rate, !c.races) + cell('c-podiums', c.podiums, !c.podiums) + cell('c-titles', c.titles, !c.titles) + `</span>`;
   }
   const REIGN_HTML = '<span class="m-reign" title="Reigning champion"><span class="sr-only">Reigning </span>Champion</span>';
   const PICK_HTML = '<span class="m-pick" title="The marble you cheer for"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-7.8-4.8-9.7-9.6C.9 8.1 3.1 4.8 6.5 4.8c2 0 3.6 1 4.5 2.5H13c.9-1.5 2.5-2.5 4.5-2.5 3.4 0 5.6 3.3 4.2 6.6C19.8 16.2 12 21 12 21z"/></svg>Your pick</span>';
@@ -604,13 +619,31 @@
   // ---- view: shelves or list (remembered on this device) -------------------
   const viewGrid = document.getElementById('viewGrid');
   const viewList = document.getElementById('viewList');
+  const listHead = document.getElementById('listHead');
   function setView(v) {
     const list = v === 'list';
     grid.classList.toggle('list', list);
+    document.querySelector('.case').classList.toggle('listing', list);
+    listHead.hidden = !list;
     viewGrid.setAttribute('aria-pressed', list ? 'false' : 'true');
     viewList.setAttribute('aria-pressed', list ? 'true' : 'false');
+    syncSortHead();
     try { localStorage.setItem('galleryView', list ? 'list' : 'grid'); } catch {}
   }
+  // Column headings sort too (the same keys as the Sort by menu).
+  function syncSortHead() {
+    for (const b of listHead.querySelectorAll('[data-sort]')) {
+      if (b.dataset.sort === sortSel.value) b.setAttribute('aria-sort', sortSel.value === 'num' ? 'ascending' : 'descending');
+      else b.removeAttribute('aria-sort');
+    }
+  }
+  listHead.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sort]');
+    if (!b) return;
+    sortSel.value = b.dataset.sort;
+    syncSortHead();
+    render();
+  });
   viewGrid.addEventListener('click', () => setView('grid'));
   viewList.addEventListener('click', () => setView('list'));
   try { if (localStorage.getItem('galleryView') === 'list') setView('list'); } catch {}
@@ -629,11 +662,17 @@
     dBall.classList.toggle('art', !!(skinOf(id) && skinOf(id).img));
     document.getElementById('dNum').textContent = '#' + pad(id);
     document.getElementById('dName').textContent = nameFor(id);
+    // Ownership here is a credit in the marble manifest (a name, optionally a
+    // link), set by the site — there is no claiming flow, so the copy never
+    // invites one. Cheering is a separate thing: your pick on this device.
     document.getElementById('dOwner').innerHTML = owner
-      ? ('Owned by ' + (owner.link
+      ? ('Owner credit: ' + (owner.link
           ? `<a href="${esc(owner.link)}" target="_blank" rel="noopener">${esc(owner.name)}</a>`
           : `<b>${esc(owner.name)}</b>`))
-      : 'Unclaimed — this marble is looking for an owner';
+      : 'No owner credited.';
+    document.getElementById('dNote').textContent = pickId() === id
+      ? 'This is your pick on this device — the marble you follow through the races. Cheering doesn’t claim a marble: owner credits are set by the site.'
+      : 'Cheering makes this your pick on this device — the marble you follow through the races. It doesn’t claim the marble: owner credits are set by the site.';
     const winPct = c.races ? Math.round((c.wins / c.races) * 100) : 0;
     const v = (n) => (careersState === 'ok' ? Number(n).toLocaleString() : '…');
     document.getElementById('dStats').innerHTML =
@@ -686,7 +725,7 @@
   });
 
   q.addEventListener('input', render);
-  sortSel.addEventListener('change', render);
+  sortSel.addEventListener('change', () => { syncSortHead(); render(); });
 
   // ---- load ----------------------------------------------------------------
   // The server may have rendered the grid with real careers already (SSR);

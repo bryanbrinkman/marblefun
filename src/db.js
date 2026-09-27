@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,
   master_seed        INTEGER NOT NULL,
   created_at         INTEGER NOT NULL,
-  status             TEXT NOT NULL DEFAULT 'running',   -- running | complete
+  status             TEXT NOT NULL DEFAULT 'running',   -- running | complete | abandoned (cut short by a restart)
   champion_marble_id INTEGER
 );
 
@@ -295,21 +295,92 @@ class DB {
       }));
   }
 
-  // Rich champion history for the /champions page: every completed tournament
+  // A tournament that was still 'running' when the server came back up was
+  // cut short (a deploy or restart; the scheduler never resumes one) — it can
+  // never be completed, so mark it as such instead of leaving it 'running'
+  // forever. Its finished races stay on the record; it just has no champion.
+  // Returns how many were marked.
+  abandonStale(now = Date.now()) {
+    const info = this.db
+      .prepare(`UPDATE tournaments SET status='abandoned', completed_at=? WHERE status='running'`)
+      .run(now);
+    return Number(info.changes);
+  }
+
+  // How much of the archive exists: completed tournaments (the ones with a
+  // champion), tournaments cut short, and the id range they span. Title
+  // counts and archive headings are both derived from this same table.
+  archiveCoverage() {
+    const c = this.db
+      .prepare(
+        `SELECT SUM(CASE WHEN status='complete' AND champion_marble_id IS NOT NULL THEN 1 ELSE 0 END) AS completed,
+                SUM(CASE WHEN status='abandoned' THEN 1 ELSE 0 END) AS abandoned,
+                SUM(CASE WHEN status='running' THEN 1 ELSE 0 END) AS running,
+                MIN(id) AS oldest_id, MAX(id) AS newest_id
+           FROM tournaments`
+      )
+      .get();
+    return { completed: c.completed || 0, abandoned: c.abandoned || 0, running: c.running || 0, oldestId: c.oldest_id || null, newestId: c.newest_id || null };
+  }
+
+  // Tournaments in [fromId, toId] that have no champion: cut short, or the
+  // one running now. Lets the archive say why a number is missing instead of
+  // silently skipping it. Newest first.
+  tournamentGaps(fromId, toId) {
+    return this.db
+      .prepare(
+        `SELECT t.id, t.status, t.created_at, t.completed_at,
+                (SELECT COUNT(*) FROM races r WHERE r.tournament_id = t.id AND r.status = 'done') AS races_done
+           FROM tournaments t
+          WHERE t.id BETWEEN ? AND ? AND NOT (t.status = 'complete' AND t.champion_marble_id IS NOT NULL)
+          ORDER BY t.id DESC`
+      )
+      .all(fromId, toId)
+      .map((g) => ({ tournamentId: g.id, status: g.status, createdAt: g.created_at, endedAt: g.completed_at || null, racesDone: g.races_done }));
+  }
+
+  // Rich champion history for the /champions page: completed tournaments
   // with the champion's road through the bracket (heat → semi → final, with
-  // rank and time in each) and the final's full finishing order. Newest first.
-  championHistory(limit = 100) {
+  // rank and time in each) and the final's full finishing order. Newest
+  // first. Each row carries titleNumber — the champion's cumulative title
+  // count AS OF that tournament, counted over the whole table (never over
+  // the page loaded), and lifetimeTitles, the same marble's total today.
+  //   limit      page size
+  //   before     only tournaments with id < before (cursor for "load more")
+  //   id         one tournament
+  //   marbleIds  only tournaments won by these marbles
+  //   since/until  completed between these times (ms)
+  // A plain number argument is the legacy `limit`.
+  championHistory(opts = {}) {
+    if (typeof opts === 'number') opts = { limit: opts };
+    const { limit = 100, before = null, id = null, marbleIds = null, since = null, until = null } = opts;
+    const where = [`t.status='complete'`, `t.champion_marble_id IS NOT NULL`];
+    const args = [];
+    if (before != null) { where.push(`t.id < ?`); args.push(before); }
+    if (id != null) { where.push(`t.id = ?`); args.push(id); }
+    if (Array.isArray(marbleIds) && marbleIds.length) {
+      where.push(`t.champion_marble_id IN (${marbleIds.map(() => '?').join(',')})`);
+      args.push(...marbleIds);
+    }
+    // completed_at is NULL on the oldest rows; created_at stands in for them.
+    if (since != null) { where.push(`COALESCE(t.completed_at, t.created_at) >= ?`); args.push(since); }
+    if (until != null) { where.push(`COALESCE(t.completed_at, t.created_at) <= ?`); args.push(until); }
+    args.push(limit);
     const tours = this.db
       .prepare(
         `SELECT t.id, t.master_seed, t.master_seed_hex, t.commit_hash, t.commit_salt, t.created_at, t.completed_at, t.champion_marble_id,
-                COALESCE(m.name, 'Marble ' || substr('00' || t.champion_marble_id, -2)) AS champion_name
+                COALESCE(m.name, 'Marble ' || substr('00' || t.champion_marble_id, -2)) AS champion_name,
+                (SELECT COUNT(*) FROM tournaments t2
+                  WHERE t2.status='complete' AND t2.champion_marble_id = t.champion_marble_id AND t2.id <= t.id) AS title_number,
+                (SELECT COUNT(*) FROM tournaments t2
+                  WHERE t2.status='complete' AND t2.champion_marble_id = t.champion_marble_id) AS lifetime_titles
            FROM tournaments t
            LEFT JOIN marbles m ON m.tournament_id = t.id AND m.marble_id = t.champion_marble_id
-          WHERE t.status='complete' AND t.champion_marble_id IS NOT NULL
+          WHERE ${where.join(' AND ')}
           ORDER BY t.id DESC
           LIMIT ?`
       )
-      .all(limit);
+      .all(...args);
     const pathStmt = this.db.prepare(
       `SELECT r.race_key, r.round_key, r.round_idx, r.index_in_round, r.track_seed, r.race_seed,
               r.public_contribution, r.revealed_at, res.rank, res.time_sec
@@ -349,6 +420,8 @@ class DB {
         // Older rows predate completed_at — the final's reveal is the crowning.
         completedAt: t.completed_at || (finalRow && finalRow.revealedAt) || null,
         champion: { id: t.champion_marble_id, name: nameFor(t.champion_marble_id), nameAtTheTime: nameThen(t.champion_marble_id, t.champion_name) },
+        titleNumber: t.title_number,
+        lifetimeTitles: t.lifetime_titles,
         path,
         final: finalStmt.all(t.id).map((x) => ({
           rank: x.rank,

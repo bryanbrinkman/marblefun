@@ -130,6 +130,12 @@ body.hero-open .stage-state { padding-top: 300px; }
    the stage keeps only the explanation and the retry. */
 .ss-failed.compact { width: min(380px, 100%); }
 .ss-failed.compact .ss-fallback { display: none; }
+.ss-failed.compact .ss-fallback.replaying { display: block; } /* a replay's recorded result stays visible with the drawer open */
+/* While a recorded replay is on the panel, the panel is the replay: the
+   generic failure text and its retry step aside (the replay has its own). */
+.ss-failed.replaying .ss-msg, .ss-failed.replaying .ss-actions { display: none; }
+.ss-failed.replaying { padding-top: 44px; }
+.ss-replay-acts { margin-top: 10px; }
 
 /* ---------- top bar ---------- */
 .topbar {
@@ -432,6 +438,10 @@ body.hero-open .prerace { display: none; }
 .rr-x[open] > summary.rr .rr-l::before { transform: rotate(90deg); }
 .rr-x > summary.rr:hover { background: var(--panel-3); border-radius: var(--radius-s); }
 .rr-body { display: flex; flex-wrap: wrap; gap: 5px; padding: 2px 8px 10px; }
+/* A finished race opens to its finishing order (the favourite marked in it). */
+.rr-x.done > summary.rr .rr-w { color: var(--text); }
+.rr-body.list { display: block; padding: 0 6px 8px; }
+.rr-body.list .row-list { gap: 3px; }
 .mrow.compact { min-height: 40px; grid-template-columns: 0 auto minmax(0, 1fr) auto; gap: 0 8px; }
 .mrow.out .mrow-name { color: var(--muted); }
 .mrow-status.gold { color: var(--gold); }

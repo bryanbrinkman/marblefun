@@ -4,179 +4,189 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Champions — Marble Run</title>
-<meta name="description" content="Every Marble Run tournament champion: the road through qualifying, the semifinals and the final, title counts, repeat winners and streaks.">
+<meta name="description" content="Every completed Marble Run tournament's champion: the road through qualifying, the semifinals and the final, title counts, repeat winners and streaks.">
 <link rel="canonical" href="https://marblerun.fun/champions">
-<meta name="theme-color" content="#0a0d14">
+<meta name="theme-color" content="#f6f1ea">
 <meta property="og:site_name" content="Marble Run">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Champions — Marble Run">
-<meta property="og:description" content="Every tournament champion, the road each one took to the crown, and the all-time title table.">
+<meta property="og:description" content="Every completed tournament's champion, the road each one took to the crown, and the all-time title table.">
 <meta property="og:url" content="https://marblerun.fun/champions">
 <meta property="og:image" content="https://marblerun.fun/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Champions — Marble Run">
-<meta name="twitter:description" content="Every tournament champion, the road each one took to the crown, and the all-time title table.">
+<meta name="twitter:description" content="Every completed tournament's champion, the road each one took to the crown, and the all-time title table.">
 <meta name="twitter:image" content="https://marblerun.fun/og.png">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/site.css">
 <style>
-  :root {
-    --skin-zoom: 1.34; /* artwork margin → sphere fills the circle (keep in sync with viewer.css) */
-    --bg: #0a0d14; --panel: rgba(20, 26, 40, 0.72); --panel2: rgba(27, 34, 51, 0.8);
-    --line: rgba(120, 140, 175, 0.22); --line2: #33405c; --text: #eaf0f8; --muted: #97a4ba;
-    --accent: #ffcf5c; --accent2: #ff9d3c; --live: #35d07f;
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--text); font: 0.875rem/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-  body {
-    background:
-      radial-gradient(70% 40% at 50% 0%, rgba(255, 207, 92, 0.12), transparent 60%),
-      radial-gradient(40% 30% at 90% 30%, rgba(91, 192, 222, 0.08), transparent 60%),
-      var(--bg);
-    min-height: 100vh;
-  }
-  a { color: inherit; }
-  .wrap { max-width: 980px; margin: 0 auto; padding: 18px 18px calc(60px + env(safe-area-inset-bottom, 0px)); }
-  .crumbs { font-size: 12px; margin-bottom: 14px; display: flex; gap: 14px; flex-wrap: wrap; }
-  .crumbs a { text-decoration: none; color: var(--muted); font-weight: 700; }
-  .crumbs a:hover { color: var(--accent); }
+  /* Marbles read as the same lit spheres as the gallery cabinet. */
+  .ball { --c1: #f3c14b; --c2: #6e4d12; border-radius: 50%; position: relative; flex: none; isolation: isolate; overflow: hidden;
+    background-size: calc(100% * var(--skin-zoom, 1)); background-position: center; background-repeat: no-repeat;
+    background-image: radial-gradient(circle at 50% 42%, var(--c1) 0%, var(--c2) 100%); }
+  .ball::before { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; mix-blend-mode: multiply;
+    background: radial-gradient(circle at 36% 32%, #fff 0%, #fff 36%, #f5f3f0 52%, #dedad5 68%, #bdb7b0 84%, #928b83 100%); }
+  .ball::after { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; mix-blend-mode: screen;
+    background: radial-gradient(circle at 30% 26%, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.17) 22%, rgba(255,255,255,0.05) 44%, rgba(255,255,255,0) 60%); }
 
-  /* ---- masthead: the current holder, big ---- */
-  .mast { text-align: center; padding: 10px 0 6px; }
-  .mast .eyebrow { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; color: var(--muted); }
-  .mast h1 { margin: 6px 0 0; font-size: clamp(28px, 5vw, 44px); font-weight: 900; letter-spacing: 0; line-height: 1.05; }
-  .mast h1 span { background: linear-gradient(180deg, #fff, #ffe39a 55%, var(--accent2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-  .holder {
-    margin: 22px auto 0; max-width: 620px; display: flex; align-items: center; gap: 18px; text-align: left;
-    padding: 16px 18px; border-radius: 18px; border: 1px solid rgba(255, 207, 92, 0.45);
-    background: linear-gradient(165deg, rgba(58, 48, 18, 0.7), rgba(20, 26, 40, 0.75));
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 207, 92, 0.15);
-    text-decoration: none;
-  }
-  .holder:hover { border-color: var(--accent); }
-  .holder .ball { width: 84px; height: 84px; flex: none; }
-  .holder .hk { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; color: var(--accent); }
-  .holder .hn { font-size: clamp(22px, 4.5vw, 34px); font-weight: 900; line-height: 1.1; letter-spacing: 0.01em; }
-  .holder .hn small { color: var(--accent); font-size: 0.72em; margin-right: 8px; }
-  .holder .hs { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
-  .holder.none { justify-content: center; color: var(--muted); font-weight: 700; border-color: var(--line); background: var(--panel); }
+  /* ---- the reigning champion: one framed card, the only "cabinet" on the page ---- */
+  .holder { margin: 6px auto 0; max-width: 640px; display: flex; align-items: center; gap: 20px; text-align: left; text-decoration: none;
+    padding: 18px 22px; border-radius: 14px; background: var(--paper); border: 1px solid var(--line);
+    box-shadow: inset 0 3px 0 var(--accent), 0 18px 40px -26px rgba(46, 26, 8, 0.5); }
+  .holder:hover { border-color: var(--text); }
+  .holder .ball { width: 88px; height: 88px; }
+  .holder .hk { font: 700 0.6875rem/1 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; color: #6d4a00; display: inline-flex; align-items: center; gap: 6px; }
+  .holder .hk::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px rgba(46, 26, 8, 0.35); }
+  .holder .hn { margin-top: 4px; font: 700 clamp(1.5rem, 4.5vw, 2.125rem)/1.1 var(--serif); letter-spacing: -0.02em; }
+  .holder .hn small { color: var(--muted); font-size: 0.6em; margin-right: 8px; font-weight: 700; }
+  .holder .hs { color: var(--muted); font-family: var(--serif); margin-top: 4px; }
+  .holder.none { justify-content: center; color: var(--muted); font-family: var(--serif); box-shadow: none; }
 
-  .ball {
-    --c1: #ffcf5c; --c2: #8a6a1c; border-radius: 50%; position: relative; flex: none;
-    /* Artwork is zoomed so the sphere's edge meets the circle (see --skin-zoom). */
-    background-size: calc(100% * var(--skin-zoom, 1)); background-position: center;
-    background-image:
-      radial-gradient(circle at 33% 27%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.4) 12%, rgba(255,255,255,0) 32%),
-      radial-gradient(circle at 50% 42%, var(--c1) 0%, var(--c2) 100%);
-    box-shadow: inset -6px -10px 18px rgba(0, 0, 0, 0.4), 0 8px 22px rgba(0, 0, 0, 0.5);
-  }
+  /* ---- all-time numbers: a row of figures, hairlines between ---- */
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); margin: 30px 0 0; }
+  .tile { padding: 8px 6px; border-left: 1px solid var(--line); text-align: center; }
+  .tile:first-child { border-left: 0; }
+  .tile b { display: block; font: 700 clamp(1.5rem, 5vw, 2.25rem)/1.1 var(--serif); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .tile b.gold { color: #6d4a00; }
+  .tile i { display: block; margin-top: 4px; font: 600 0.6875rem/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); font-style: normal; }
+  .tile small { display: block; margin-top: 5px; color: var(--muted); font: 400 0.8125rem/1.3 var(--serif); }
 
-  /* ---- stat tiles ---- */
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 26px 0 8px; }
-  .tile { padding: 14px 14px 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); text-align: center; }
-  .tile b { display: block; font-size: 26px; font-weight: 900; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; }
-  .tile b.gold { color: var(--accent); }
-  .tile i { display: block; font-style: normal; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin-top: 6px; font-weight: 800; }
-  .tile small { display: block; margin-top: 4px; color: var(--muted); font-size: 11.5px; }
+  /* ---- title table ---- */
+  .table { display: flex; flex-direction: column; }
+  .trow { display: grid; grid-template-columns: 34px 40px 1fr auto; align-items: center; gap: 12px; padding: 8px 6px; border-bottom: 1px solid var(--line); text-decoration: none; }
+  .trow:hover { background: var(--paper); }
+  .trow .rk { font: 700 0.9375rem var(--serif); color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; }
+  .trow:first-child .rk { color: #6d4a00; }
+  .trow .ball { width: 36px; height: 36px; }
+  .trow .nm { font: 700 1.0625rem var(--serif); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trow .nm small { color: var(--muted); font-size: 0.8125rem; margin-right: 6px; }
+  .trow .tt { font: 700 0.9375rem var(--serif); color: #6d4a00; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-  /* ---- sections ---- */
-  h2 { font-size: 13px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 34px 0 12px; display: flex; align-items: center; gap: 12px; }
-  h2::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+  /* ---- archive toolbar ---- */
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; }
+  .search { position: relative; flex: 1 1 260px; max-width: 420px; }
+  .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--muted); pointer-events: none; }
+  .search input { width: 100%; padding-left: 44px; }
+  .toolbar .tno { width: 150px; }
+  .count { font-family: var(--serif); color: var(--muted); margin: 0 0 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 24px; }
+  .count b { color: var(--text); font-weight: 700; }
+  .count .btn.quiet { min-height: 32px; padding: 2px 10px; font-size: 0.875rem; }
 
-  /* title table */
-  .table { display: flex; flex-direction: column; gap: 6px; }
-  .trow {
-    display: grid; grid-template-columns: 34px 44px 1fr auto; align-items: center; gap: 12px;
-    padding: 9px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); text-decoration: none;
-  }
-  .trow:hover { border-color: var(--accent); }
-  .trow .rk { font-weight: 900; color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; }
-  .trow:first-child .rk { color: var(--accent); }
-  .trow .ball { width: 34px; height: 34px; }
-  .trow .nm { font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .trow .nm small { color: var(--muted); font-weight: 700; margin-right: 6px; }
-  .trow .tt { display: flex; align-items: center; gap: 4px; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .cups { letter-spacing: -2px; }
-
-  /* timeline */
-  .timeline { display: flex; flex-direction: column; gap: 12px; }
-  .champ {
-    position: relative; display: grid; grid-template-columns: 96px 1fr; gap: 16px; align-items: start;
-    padding: 16px; border-radius: 18px; background: var(--panel); border: 1px solid var(--line);
-  }
-  .champ:first-child { border-color: rgba(255, 207, 92, 0.45); background: linear-gradient(165deg, rgba(58, 48, 18, 0.45), var(--panel)); }
+  /* ---- timeline ---- */
+  .timeline { display: flex; flex-direction: column; gap: 10px; }
+  .champ { position: relative; display: grid; grid-template-columns: 96px 1fr; gap: 16px; align-items: start; padding: 16px 18px; border-radius: 14px; background: var(--paper); border: 1px solid var(--line); }
   .champ .left { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
   .champ .ball { width: 72px; height: 72px; }
-  .champ .tid { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; color: var(--muted); }
-  .champ .tid b { display: block; font-size: 18px; color: #fff; letter-spacing: 0; }
+  .champ .tid { font: 600 0.6875rem/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .champ .tid b { display: block; margin-top: 3px; font: 700 1.125rem var(--serif); color: var(--text); letter-spacing: 0; }
   .champ .head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .champ .name { font-size: clamp(20px, 3.6vw, 28px); font-weight: 900; text-decoration: none; letter-spacing: 0.01em; }
-  .champ .name:hover { color: var(--accent); }
-  .champ .name small { color: var(--accent); margin-right: 8px; }
-  .champ .when { color: var(--muted); font-size: 12px; font-weight: 700; }
-  .champ .badge.then { color: var(--muted); background: var(--panel2); border-color: var(--line); text-transform: none; font-weight: 700; }
-  .champ .badge { font-size: 11px; font-weight: 800; letter-spacing: 0.02em; padding: 3px 8px; border-radius: 999px; background: rgba(255, 207, 92, 0.14); border: 1px solid rgba(255, 207, 92, 0.4); color: var(--accent); }
-  .road { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-  .step { display: flex; flex-direction: column; min-width: 86px; padding: 7px 10px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); }
-  .step i { font-style: normal; font-size: 10px; letter-spacing: 0.04em; color: var(--muted); font-weight: 800; }
-  .step b { font-size: 15px; font-weight: 900; color: var(--accent); line-height: 1.25; }
-  .step small { font-size: 10.5px; color: var(--muted); }
+  .champ .name { font: 700 clamp(1.25rem, 3.4vw, 1.75rem)/1.1 var(--serif); text-decoration: none; letter-spacing: -0.02em; }
+  .champ .name:hover { text-decoration: underline; }
+  .champ .name small { color: var(--muted); font-size: 0.65em; margin-right: 8px; }
+  .champ .when { color: var(--muted); font: 400 0.9375rem var(--serif); }
+  .badge { font: 700 0.6875rem/1 var(--sans); letter-spacing: 0.06em; text-transform: uppercase; padding: 5px 8px; border-radius: 999px; background: rgba(243, 193, 75, 0.22); border: 1px solid rgba(109, 74, 0, 0.25); color: #6d4a00; white-space: nowrap; }
+  .badge.then { color: var(--muted); background: var(--field); border-color: var(--line); text-transform: none; letter-spacing: 0; font-weight: 600; }
+  .badge.wild { color: #1f5e3a; background: rgba(76, 175, 120, 0.16); border-color: rgba(31, 94, 58, 0.25); }
+  .road { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .step { display: flex; flex-direction: column; min-width: 86px; padding: 7px 10px; border-radius: 10px; background: var(--field); }
+  .step i { font: 600 0.625rem/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-style: normal; }
+  .step b { font: 700 1rem/1.3 var(--serif); color: var(--text); }
+  .step small { font-size: 0.6875rem; color: var(--muted); }
   .step small:empty { display: none; }
-  .step.wild b { color: var(--live); }
-  .arrow { color: var(--line2); font-weight: 900; font-size: 18px; }
+  .step.wild b { color: #1f5e3a; }
+  .arrow { color: var(--muted); font-weight: 700; }
   .final { margin-top: 12px; }
-  .final .fh { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 6px; }
-  .frow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 3px 0; }
-  .frow .pos { width: 14px; color: var(--muted); font-weight: 800; font-variant-numeric: tabular-nums; }
-  .frow .sw { width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(255,255,255,.35); flex: none; }
+  .final .fh { font: 600 0.6875rem/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .frow { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; padding: 3px 0; font-family: var(--serif); }
+  .frow .pos { width: 16px; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .frow .sw { width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.25); flex: none; }
   .frow a { text-decoration: none; font-weight: 700; }
-  .frow a:hover { color: var(--accent); }
-  .frow .t { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .frow.win a { color: var(--accent); font-weight: 900; }
-  .seed { margin-top: 10px; font: 11px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); word-break: break-all; }
-  /* The road, the final and the seed stay folded until asked for. */
-  .more { margin-top: 8px; }
-  .more summary { cursor: pointer; font-size: 12px; font-weight: 800; color: var(--muted); padding: 8px 0; min-height: 36px; display: flex; align-items: center; }
-  .more summary:hover, .more[open] summary { color: var(--accent); }
-  .empty.err { color: #ff8a7a; }
-  .empty { text-align: center; color: var(--muted); padding: 40px 10px; font-weight: 700; }
-  .empty a { color: var(--accent); }
-  .foot { margin-top: 40px; text-align: center; color: var(--muted); font-size: 12px; }
-  .foot a { color: var(--accent); text-decoration: none; font-weight: 800; }
+  .frow a:hover { text-decoration: underline; }
+  .frow .t { margin-left: auto; color: var(--muted); }
+  .frow.win a { color: #6d4a00; }
+  .frow.pick a::after { content: 'your pick'; margin-left: 8px; font: 700 0.6875rem/1 var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--hot); }
+  .more, .tech { margin-top: 6px; }
+  .more summary, .tech summary { cursor: pointer; font: 700 0.9375rem var(--serif); color: var(--muted); padding: 8px 0; min-height: 40px; display: flex; align-items: center; list-style: none; }
+  .more summary::-webkit-details-marker, .tech summary::-webkit-details-marker { display: none; }
+  .more summary::before, .tech summary::before { content: '▸'; display: inline-block; margin-right: 8px; transition: transform 0.15s; }
+  .more[open] summary::before, .tech[open] summary::before { transform: rotate(90deg); }
+  .more summary:hover, .more[open] summary, .tech summary:hover, .tech[open] summary { color: var(--text); }
+  .tech .seed { font: 0.75rem/1.5 ui-monospace, Menlo, Consolas, monospace; color: var(--muted); word-break: break-all; padding: 0 0 6px; }
+  .tech .seed b { color: var(--text); font-weight: 600; }
+  /* Numbers with no champion: cut short by a restart, or running right now. */
+  .gap { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-radius: 12px; border: 1px dashed rgba(60, 45, 30, 0.3); color: var(--muted); font-family: var(--serif); }
+  .gap b { color: var(--text); font-weight: 700; white-space: nowrap; }
+  .gap.live { border-style: solid; border-color: rgba(31, 94, 58, 0.35); color: #1f5e3a; }
+  .gap.live b { color: #1f5e3a; }
+  .gap a { color: var(--text); font-weight: 700; }
+  .more-wrap { display: flex; justify-content: center; margin: 16px 0 0; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 10px; font-family: var(--serif); font-size: 1.0625rem; }
+  .empty.err { color: #b33a22; }
+  .empty a { color: var(--text); font-weight: 700; }
 
-  @media (max-width: 560px) {
-    .wrap { padding: 14px 12px calc(50px + env(safe-area-inset-bottom, 0px)); }
-    .champ { grid-template-columns: 1fr; gap: 10px; }
+  @media (max-width: 760px) {
+    .tiles { grid-template-columns: repeat(2, 1fr); row-gap: 14px; }
+    .tile:nth-child(3) { border-left: 0; }
+    .champ { grid-template-columns: 1fr; gap: 10px; padding: 14px; }
     .champ .left { flex-direction: row; justify-content: flex-start; text-align: left; }
     .champ .ball { width: 56px; height: 56px; }
-    .champ .tid b { display: inline; margin-left: 6px; font-size: 15px; }
-    .holder { gap: 12px; padding: 14px; }
+    .champ .tid b { display: inline; margin-left: 6px; font-size: 1rem; }
+    .holder { gap: 14px; padding: 14px 16px; }
     .holder .ball { width: 64px; height: 64px; }
-    .trow { grid-template-columns: 26px 34px 1fr auto; gap: 8px; padding: 8px 10px; }
+    .trow { grid-template-columns: 26px 34px 1fr auto; gap: 8px; }
     .step { min-width: 74px; padding: 6px 8px; }
+    .search { flex-basis: 100%; max-width: none; }
+    .toolbar .tno { width: 140px; }
   }
 </style>
 </head>
 <body>
-<main class="wrap">
-  <nav class="crumbs" aria-label="Breadcrumb">
-    <a href="/">← Back to the races</a>
-    <a href="/gallery">🔮 Marble gallery</a>
-  </nav>
+<header class="site-top">
+  <div class="site-top-inner">
+    <div class="site-bar">
+      <a class="brand" href="/" aria-label="Marble Run — home"><img src="/logo.png" alt="Marble Run" class="brand-logo" onerror="this.hidden=true"><span class="wordmark" aria-hidden="true">MARBLERUN.FUN</span></a>
+      <nav class="site-nav" aria-label="Site">
+        <a href="/" class="back">← <span class="long">Back to the races</span><span class="short">Races</span></a>
+        <span class="sep" aria-hidden="true"></span>
+        <a href="/gallery">Gallery</a>
+        <a href="/champions" aria-current="page">Champions</a>
+        <a href="/print"><span class="long">Print a track</span><span class="short">Print</span></a>
+      </nav>
+      <span class="site-tagline">The marble racing universe by Bryan Brinkman</span>
+    </div>
+    <div class="site-hero">
+      <h1>The Hall of Champions</h1>
+      <p class="sub">Every completed tournament’s champion, and the road each one took.</p>
+    </div>
+  </div>
+</header>
 
-  <header class="mast">
-    <div class="eyebrow">Marble Run · Hall of Champions</div>
-    <h1><span>Every champion, every road</span></h1>
-    <a class="holder none" id="holder" href="/champions"><!--SSR:HOLDER-->Loading the record books…<!--/SSR:HOLDER--></a>
-  </header>
+<main class="site-wrap">
+  <a class="holder none" id="holder" href="/champions"><!--SSR:HOLDER-->Loading the record books…<!--/SSR:HOLDER--></a>
 
   <section class="tiles" id="tiles" aria-label="All-time numbers"><!--SSR:TILES--></section>
 
-  <h2>Title table</h2>
+  <h2 class="site-h2">Title table <small>lifetime titles</small></h2>
   <div class="table" id="titles"><!--SSR:TITLES--></div>
 
-  <h2>Tournament by tournament</h2>
+  <h2 class="site-h2" id="archiveHead">Tournament by tournament <small>newest first</small></h2>
+  <div class="toolbar">
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input class="field" id="q" type="search" placeholder="Champion name or number…" aria-label="Search champions by marble name or number" autocomplete="off">
+    </label>
+    <select class="field" id="since" aria-label="Time span">
+      <option value="">All time</option>
+      <option value="7d">Last 7 days</option>
+      <option value="30d">Last 30 days</option>
+      <option value="90d">Last 90 days</option>
+    </select>
+    <input class="field tno" id="tno" type="number" min="1" step="1" placeholder="Tournament #" aria-label="Tournament number">
+  </div>
+  <p class="count" id="count"><!--SSR:COUNT--></p>
   <div class="timeline" id="timeline"><!--SSR:TIMELINE--></div>
+  <div class="more-wrap"><button class="btn" id="loadMore" type="button" hidden>Load more</button></div>
 
   <p class="foot">Every race is deterministic and replayable from its seeds — see the <a href="/api">public API</a> to verify any result yourself.</p>
 </main>
@@ -191,6 +201,8 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   const ordinal = (n) => { const t = n % 100; return n + (t >= 11 && t <= 13 ? 'th' : { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th'); };
   const fmtDate = (ms) => (ms ? new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
+  const fmtN = (n) => Number(n || 0).toLocaleString();
+  const PAGE = 40;
 
   // Same per-id palette the gallery uses, so a marble looks the same everywhere.
   const HUES = [[272,68,60],[44,90,58],[248,70,62],[16,88,56],[226,55,42],[350,78,52],[192,65,74],[203,95,55],[135,62,50],[280,14,36]];
@@ -208,7 +220,13 @@
     return `--c1:${c};--c2:color-mix(in srgb, ${c} 45%, #000)`;
   }
   const roundLabel = (p) => (p.roundKey === 'final' ? 'FINAL' : p.roundKey === 'semis' ? `SEMI ${p.indexInRound + 1}` : `HEAT ${p.indexInRound + 1}`);
+  // The visitor's pick (shared with the home page and the gallery) is marked
+  // in each final's finishing order.
+  function pickId() {
+    try { const n = parseInt(localStorage.getItem('marbleFollow'), 10); return Number.isInteger(n) && n >= 1 && n <= 100 ? n : null; } catch { return null; }
+  }
 
+  // ---- reigning champion, all-time numbers, title table --------------------
   function renderHolder(hof, history) {
     const h = $('holder');
     const cur = hof && hof.currentChampion;
@@ -225,24 +243,23 @@
     h.href = '/gallery#' + cur.id;
     h.innerHTML =
       `<span class="ball" style="${ballStyle(cur.id, color)}"></span>` +
-      `<span><span class="hk">🏆 Reigning champion</span>` +
+      `<span><span class="hk">Reigning champion</span>` +
       `<div class="hn"><small>#${pad(cur.id)}</small>${esc(nameFor(cur.id))}</div>` +
-      `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''}${titles > 1 ? ` · ${titles}× champion` : ''}</div></span>`;
+      `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''} · ${titles === 1 ? 'first title' : `${ordinal(titles)} title`}</div></span>`;
   }
-
-  function renderTiles(hof) {
+  function renderTiles(hof, cov) {
     const t = $('tiles');
     if (!hof) { t.innerHTML = ''; return; }
     const top = hof.mostTitles[0];
+    const cut = cov && cov.abandoned ? `${fmtN(cov.abandoned)} cut short` : '';
     const tiles = [
-      { b: hof.tournamentsCompleted, i: 'Tournaments', s: `${hof.racesRun} races run` },
+      { b: fmtN(hof.tournamentsCompleted), i: 'Tournaments completed', s: `${fmtN(hof.racesRun)} races run${cut ? ' · ' + cut : ''}` },
       { b: hof.distinctChampions, i: 'Different champions', s: hof.repeatChampions.length ? `${hof.repeatChampions.length} repeat winner${hof.repeatChampions.length > 1 ? 's' : ''}` : 'no repeat winners yet' },
-      { b: top ? `${top.titles}×` : '—', i: 'Most titles', s: top ? `#${pad(top.id)} ${esc(nameFor(top.id))}` : 'nobody yet', gold: true },
+      { b: top ? `${top.titles}` : '—', i: 'Most titles', s: top ? `#${pad(top.id)} ${esc(nameFor(top.id))}` : 'nobody yet', gold: true },
       { b: hof.longestStreak ? `${hof.longestStreak.len}` : '1', i: 'Longest streak', s: hof.longestStreak ? `#${pad(hof.longestStreak.id)} ${esc(nameFor(hof.longestStreak.id))} back-to-back` : 'no back-to-back champions yet' },
     ];
     t.innerHTML = tiles.map((x) => `<div class="tile"><b class="${x.gold ? 'gold' : ''}">${x.b}</b><i>${x.i}</i><small>${x.s}</small></div>`).join('');
   }
-
   function renderTitles(hof) {
     const wrap = $('titles');
     const rows = hof ? hof.mostTitles : [];
@@ -252,82 +269,202 @@
         `<a class="trow" href="/gallery#${m.id}"><span class="rk">${i + 1}</span>` +
         `<span class="ball" style="${ballStyle(m.id)}"></span>` +
         `<span class="nm"><small>#${pad(m.id)}</small>${esc(nameFor(m.id))}</span>` +
-        `<span class="tt"><span class="cups" aria-hidden="true">🏆</span>${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
+        `<span class="tt">${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
       )
       .join('');
   }
 
-  function renderTimeline(history, hof) {
-    const wrap = $('timeline');
-    if (!history.length) {
-      wrap.innerHTML = '<div class="empty">No tournament has finished yet. <a href="/">Watch the one running now →</a></div>';
-      return;
-    }
-    const titleCount = new Map();
-    // Count titles in chronological order so each card shows "2nd title" etc.
-    history.slice().reverse().forEach((t) => {
-      const n = (titleCount.get(t.champion.id) || 0) + 1;
-      titleCount.set(t.champion.id, n);
-      t._nth = n;
-    });
-    wrap.innerHTML = history
-      .map((t) => {
-        const color = t.final && t.final[0] ? t.final[0].color : null;
-        const isWild = t.path.some((p) => p.roundKey === 'semis' && p.rank === 2);
-        const road = t.path
-          .map((p) => `<span class="step${p.roundKey === 'semis' && p.rank === 2 ? ' wild' : ''}"><i>${roundLabel(p)}</i><b>${p.rank ? ordinal(p.rank) : '—'}</b><small>${p.timeSec == null ? 'DNF' : ''}</small></span>`)
-          .join('<span class="arrow" aria-hidden="true">›</span>');
-        const finalRows = (t.final || [])
-          .map((f) => `<div class="frow${f.rank === 1 ? ' win' : ''}"><span class="pos">${f.rank}</span><span class="sw" style="background:${esc(f.color)}"></span><a href="/gallery#${f.marbleId}">#${pad(f.marbleId)} ${esc(nameFor(f.marbleId))}</a><span class="t">${f.timeSec == null ? 'DNF' : ''}</span></div>`)
-          .join('');
-        return (
-          `<article class="champ">` +
-          `<div class="left"><span class="ball" style="${ballStyle(t.champion.id, color)}"></span><div class="tid">TOURNAMENT<b>${t.tournamentId}</b></div></div>` +
-          `<div>` +
-          `<div class="head"><a class="name" href="/gallery#${t.champion.id}"><small>#${pad(t.champion.id)}</small>${esc(nameFor(t.champion.id))}</a>` +
-          (t._nth > 1 ? `<span class="badge">${ordinal(t._nth).toUpperCase()} TITLE</span>` : '') +
-          (t.champion.nameAtTheTime ? `<span class="badge then" title="The name this marble raced under at the time">then “${esc(t.champion.nameAtTheTime)}”</span>` : '') +
-          (isWild ? `<span class="badge">WILDCARD RUN</span>` : '') +
-          `<span class="when">${fmtDate(t.completedAt)}</span></div>` +
-          `<details class="more"><summary>Road to the title</summary>` +
-          `<div class="road">${road || '<span class="step"><i>ROAD</i><b>—</b></span>'}</div>` +
-          (finalRows ? `<div class="final"><div class="fh">THE FINAL</div>${finalRows}</div>` : '') +
-          `<div class="seed">master seed ${t.masterSeed} · ${t.racesRun} races</div>` +
-          `</details>` +
-          `</div></article>`
-        );
-      })
-      .join('');
+  // ---- the archive -------------------------------------------------------------
+  // Filters live in the URL (?q=…&since=30d&t=1376), so opening a marble and
+  // coming back lands on the same view.
+  const state = { q: '', since: '', t: '', rows: [], gaps: [], coverage: null, hasMore: false, loading: false, error: false };
+  const SPANS = { '7d': 7, '30d': 30, '90d': 90 };
+  function readUrl() {
+    const p = new URLSearchParams(location.search);
+    state.q = p.get('q') || '';
+    state.since = SPANS[p.get('since')] ? p.get('since') : '';
+    state.t = /^\d+$/.test(p.get('t') || '') ? p.get('t') : '';
+    $('q').value = state.q; $('since').value = state.since; $('tno').value = state.t;
+  }
+  function writeUrl() {
+    const p = new URLSearchParams();
+    if (state.q) p.set('q', state.q);
+    if (state.since) p.set('since', state.since);
+    if (state.t) p.set('t', state.t);
+    const qs = p.toString();
+    try { history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '')); } catch {}
+  }
+  const filtered = () => !!(state.q || state.since || state.t);
+  // A query names marbles: "#12" / "12" → that number, otherwise every marble
+  // whose name contains the text. null = no name filter; [] = nothing matches.
+  function marbleIdsFor(q) {
+    const s = q.trim().toLowerCase();
+    if (!s) return null;
+    const m = /^#?(\d{1,3})$/.exec(s);
+    if (m) { const n = parseInt(m[1], 10); return n >= 1 && n <= 100 ? [n] : []; }
+    const ids = [];
+    for (let i = 1; i <= 100; i++) if (nameFor(i).toLowerCase().includes(s)) ids.push(i);
+    return ids;
+  }
+  function queryUrl(before) {
+    const p = new URLSearchParams();
+    p.set('limit', String(PAGE));
+    const ids = marbleIdsFor(state.q);
+    if (ids) p.set('marble', ids.join(','));
+    if (state.since) p.set('since', String(Date.now() - SPANS[state.since] * 86400e3));
+    if (state.t) p.set('id', state.t);
+    if (before != null) p.set('before', String(before));
+    return '/api/champions?' + p.toString();
+  }
+  let _req = 0;
+  async function loadArchive({ append = false } = {}) {
+    const ids = marbleIdsFor(state.q);
+    if (ids && !ids.length) { state.rows = []; state.gaps = []; state.hasMore = false; state.error = false; renderArchive(); return; }
+    const my = ++_req;
+    state.loading = true;
+    renderCount();
+    const before = append && state.rows.length ? state.rows[state.rows.length - 1].tournamentId : null;
+    let c = null;
+    try { c = await fetch(queryUrl(before), { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)); } catch { c = null; }
+    if (my !== _req) return; // a newer query superseded this one
+    state.loading = false;
+    if (!c) { state.error = true; if (!append) { state.rows = []; state.gaps = []; } renderArchive(); return; }
+    state.error = false;
+    state.coverage = c.coverage || state.coverage;
+    state.hasMore = !!c.hasMore;
+    const rows = c.history || [];
+    const gaps = c.gaps || [];
+    if (append) { state.rows = state.rows.concat(rows); state.gaps = state.gaps.concat(gaps); }
+    else { state.rows = rows; state.gaps = gaps; }
+    renderArchive();
   }
 
+  function renderCount() {
+    const el = $('count');
+    const cov = state.coverage;
+    const n = state.rows.length;
+    let text;
+    if (state.loading && !n) text = 'Loading…';
+    else if (filtered()) {
+      const what = state.t ? `Tournament ${esc(state.t)}` : state.q ? `won by “${esc(state.q.trim())}”` : '';
+      const span = state.since ? ` in the last ${SPANS[state.since]} days` : '';
+      text = n ? `<b>${fmtN(n)}${state.hasMore ? '+' : ''}</b> completed tournament${n === 1 ? '' : 's'} ${what}${span}` : `No completed tournament ${what}${span}`;
+    } else if (cov) {
+      const cut = cov.abandoned ? ` · <b>${fmtN(cov.abandoned)}</b> cut short by restarts (no champion)` : '';
+      text = state.hasMore
+        ? `Showing the latest <b>${fmtN(n)}</b> of <b>${fmtN(cov.completed)}</b> completed tournaments${cut}`
+        : `All <b>${fmtN(cov.completed)}</b> completed tournaments${cut}`;
+    } else text = n ? `${fmtN(n)} tournaments` : '';
+    el.innerHTML = text + (filtered() ? ' <button class="btn quiet" id="reset" type="button">Reset</button>' : '');
+    const r = $('reset');
+    if (r) r.addEventListener('click', () => { state.q = ''; state.since = ''; state.t = ''; $('q').value = ''; $('since').value = ''; $('tno').value = ''; writeUrl(); loadArchive(); });
+  }
+
+  function champCard(t) {
+    const color = t.final && t.final[0] ? t.final[0].color : null;
+    const isWild = t.path.some((p) => p.roundKey === 'semis' && p.rank === 2);
+    const n = t.titleNumber || 1;
+    const pick = pickId();
+    const road = t.path
+      .map((p) => `<span class="step${p.roundKey === 'semis' && p.rank === 2 ? ' wild' : ''}"><i>${roundLabel(p)}</i><b>${p.rank ? ordinal(p.rank) : '—'}</b><small>${p.timeSec == null ? 'DNF' : ''}</small></span>`)
+      .join('<span class="arrow" aria-hidden="true">›</span>');
+    const finalRows = (t.final || [])
+      .map((f) => `<div class="frow${f.rank === 1 ? ' win' : ''}${f.marbleId === pick ? ' pick' : ''}"><span class="pos">${f.rank}</span><span class="sw" style="background:${esc(f.color)}"></span><a href="/gallery#${f.marbleId}">#${pad(f.marbleId)} ${esc(nameFor(f.marbleId))}</a><span class="t">${f.timeSec == null ? 'DNF' : ''}</span></div>`)
+      .join('');
+    const lifetime = t.lifetimeTitles && t.lifetimeTitles !== n ? ` <small>(${t.lifetimeTitles} today)</small>` : '';
+    return (
+      `<article class="champ" id="t${t.tournamentId}">` +
+      `<div class="left"><span class="ball" style="${ballStyle(t.champion.id, color)}"></span><div class="tid">Tournament<b>${t.tournamentId}</b></div></div>` +
+      `<div>` +
+      `<div class="head"><a class="name" href="/gallery#${t.champion.id}"><small>#${pad(t.champion.id)}</small>${esc(nameFor(t.champion.id))}</a>` +
+      `<span class="badge" title="${n === 1 ? 'First title' : `Title number ${n} for this marble as of this tournament`}">${n === 1 ? 'First title' : ordinal(n) + ' title'}${lifetime}</span>` +
+      (t.champion.nameAtTheTime ? `<span class="badge then" title="The name this marble raced under at the time">then “${esc(t.champion.nameAtTheTime)}”</span>` : '') +
+      (isWild ? `<span class="badge wild">Wildcard run</span>` : '') +
+      `<span class="when">${fmtDate(t.completedAt)}</span></div>` +
+      `<details class="more"><summary>Road to the title</summary>` +
+      `<div class="road">${road || '<span class="step"><i>ROAD</i><b>—</b></span>'}</div>` +
+      (finalRows ? `<div class="final"><div class="fh">The final</div>${finalRows}</div>` : '') +
+      `</details>` +
+      `<details class="tech"><summary>Technical details</summary><div class="seed">` +
+      `<b>master seed</b> ${esc(t.masterSeed)}${t.masterSeedHex ? `<br><b>256-bit seed</b> ${esc(t.masterSeedHex)}` : ''}${t.commit ? `<br><b>commitment</b> ${esc(t.commit)}` : ''}` +
+      `<br><b>races run</b> ${t.racesRun}` +
+      `</div></details>` +
+      `</div></article>`
+    );
+  }
+  // Consecutive tournament numbers with no champion are folded into one row.
+  function gapRows(gaps) {
+    const out = [];
+    const sorted = gaps.slice().sort((a, b) => b.tournamentId - a.tournamentId);
+    for (const g of sorted) {
+      const last = out[out.length - 1];
+      if (last && last.status === g.status && last.lo === g.tournamentId + 1) { last.lo = g.tournamentId; last.n++; last.races += g.racesDone; }
+      else out.push({ status: g.status, hi: g.tournamentId, lo: g.tournamentId, n: 1, races: g.racesDone, at: g.createdAt });
+    }
+    return out;
+  }
+  function gapHtml(g) {
+    const range = g.n === 1 ? `Tournament ${g.hi}` : `Tournaments ${g.hi}–${g.lo}`;
+    if (g.status === 'running') return `<div class="gap live" data-gap="${g.hi}"><b>${range}</b><span>in progress right now — <a href="/">watch it live</a></span></div>`;
+    return `<div class="gap" data-gap="${g.hi}"><b>${range}</b><span>${g.n === 1 ? 'was' : `${g.n} tournaments were`} cut short by a server restart — no champion was crowned${g.races ? ` (${fmtN(g.races)} race${g.races === 1 ? '' : 's'} had run)` : ''}</span></div>`;
+  }
+  function renderArchive() {
+    renderCount();
+    const wrap = $('timeline');
+    const btn = $('loadMore');
+    if (state.error && !state.rows.length) {
+      wrap.innerHTML = '<div class="empty err">Tournament history unavailable right now. <a href="/">Back to the races →</a></div>';
+      btn.hidden = true; return;
+    }
+    if (!state.rows.length && !state.gaps.length) {
+      wrap.innerHTML = filtered()
+        ? `<div class="empty">Nothing matches. Try another name, a different span, or <a href="/champions">clear the filters</a>.</div>`
+        : '<div class="empty">No tournament has finished yet. <a href="/">Watch the one running now →</a></div>';
+      btn.hidden = true; return;
+    }
+    // Interleave champions and gap rows in tournament order (newest first).
+    const items = state.rows.map((t) => ({ id: t.tournamentId, html: champCard(t) }))
+      .concat(gapRows(state.gaps).map((g) => ({ id: g.hi, html: gapHtml(g) })));
+    items.sort((a, b) => b.id - a.id);
+    wrap.innerHTML = items.map((x) => x.html).join('');
+    btn.hidden = !state.hasMore;
+    btn.disabled = state.loading;
+    btn.textContent = state.loading ? 'Loading…' : 'Load more';
+  }
+
+  // ---- wiring ------------------------------------------------------------------
+  let _deb = 0;
+  $('q').addEventListener('input', () => { state.q = $('q').value; clearTimeout(_deb); _deb = setTimeout(() => { writeUrl(); loadArchive(); }, 250); });
+  $('since').addEventListener('change', () => { state.since = $('since').value; writeUrl(); loadArchive(); });
+  $('tno').addEventListener('input', () => { state.t = /^\d+$/.test($('tno').value) ? $('tno').value : ''; clearTimeout(_deb); _deb = setTimeout(() => { writeUrl(); loadArchive(); }, 250); });
+  $('loadMore').addEventListener('click', () => { if (!state.loading && state.hasMore) { state.loading = true; renderArchive(); loadArchive({ append: true }); } });
+
   async function load() {
-    const [c, h, m] = await Promise.all([
-      fetch('/api/champions?limit=200', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    readUrl();
+    const [h, m] = await Promise.all([
       fetch('/api/hall-of-fame', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch('/marbles/manifest.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
     manifest = m && typeof m === 'object' ? m : null;
-    // Nothing loaded: keep whatever the server rendered (SSR) and, if the page
-    // is still on its placeholder, say the history is unavailable — never
-    // "no champions yet" for data that simply didn't arrive.
-    if (!c && !h) {
+    const archive = loadArchive();
+    if (!h) {
+      // Keep whatever the server rendered; only a page still on its
+      // placeholder says the archive is unavailable — never "no champions
+      // yet" for data that simply didn't arrive.
       const holder = $('holder');
       if (holder && /Loading the record\s+books/.test(holder.textContent)) {
         holder.className = 'holder none';
         holder.textContent = 'The champions archive couldn’t be loaded right now.';
         holder.href = '/';
         $('titles').innerHTML = '<div class="empty err">Title table unavailable right now.</div>';
-        $('timeline').innerHTML = '<div class="empty err">Tournament history unavailable right now. <a href="/">Back to the races →</a></div>';
       }
+      await archive;
       return;
     }
-    const history = (c && c.history) || [];
-    // Older servers only send the flat rows — build minimal history from them.
-    if (!history.length && c && c.champions && c.champions.length) {
-      for (const r of c.champions) history.push({ tournamentId: r.tournament_id, masterSeed: r.master_seed, completedAt: r.completed_at || r.created_at, champion: { id: r.champion_marble_id, name: r.champion_name || nameFor(r.champion_marble_id) }, path: [], final: [], racesRun: 25 });
-    }
-    if (h) { renderHolder(h, history); renderTiles(h); renderTitles(h); }
-    if (c) renderTimeline(history, h);
+    await archive;
+    renderHolder(h, state.rows);
+    renderTiles(h, state.coverage);
+    renderTitles(h);
   }
   load();
 })();
