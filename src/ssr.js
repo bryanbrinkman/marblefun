@@ -40,8 +40,22 @@ function galleryHue(id) {
   const ll = Math.max(26, Math.min(82, l + ((v * 7) % 13) - 6));
   return `hsl(${hh.toFixed(1)}, ${s}%, ${ll}%)`;
 }
+// Artwork as a background, with the larger thumbnail where the server has one
+// (mirrors gallery.html's ballStyle). A card shows the artwork at ≤ ~230 css
+// px, so the 512px thumbnail is a 2× asset there and the 1024px one is only
+// worth fetching on 3×+ screens; the detail box (`dense`) shows it at ~320 css
+// px and takes the 1024px one from 2× up.
+function artBackground(skin, dense) {
+  const u = (s) => `url('${esc(String(s).replace(/'/g, '%27'))}')`;
+  let css = `background-image:${u(skin.img)}`;
+  if (skin.img2x) {
+    const set = dense ? `${u(skin.img)} 1x,${u(skin.img2x)} 2x` : `${u(skin.img)} 2x,${u(skin.img2x)} 4x`;
+    css += `;background-image:-webkit-image-set(${set});background-image:image-set(${set})`;
+  }
+  return css;
+}
 function galleryBall(id, skin) {
-  if (skin && skin.img) return `background-image:url('${esc(String(skin.img).replace(/'/g, '%27'))}')`;
+  if (skin && skin.img) return artBackground(skin, false);
   return (
     `background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.92), rgba(255,255,255,0) 34%),` +
     `radial-gradient(circle at 50% 45%, ${galleryHue(id)} 0%, #131a2a 135%)`

@@ -62,7 +62,12 @@
   .top { padding: 18px 24px 0; }
   .top-inner { max-width: 1240px; margin: 0 auto; }
   .bar { display: flex; align-items: center; gap: 18px; row-gap: 6px; flex-wrap: wrap; font-size: 0.8125rem; color: var(--muted); }
-  .wordmark { font: 800 0.875rem/1 var(--sans); letter-spacing: 0.18em; color: var(--text); text-decoration: none; }
+  /* The Marble Run logo from the home page; the wordmark stands in if it fails to load. */
+  .brand { display: flex; align-items: center; flex: none; text-decoration: none; color: var(--text); min-height: 40px; }
+  .brand-logo { height: 36px; width: auto; display: block; }
+  .wordmark { display: none; font: 800 0.875rem/1 var(--sans); letter-spacing: 0.18em; color: var(--text); text-decoration: none; }
+  .brand-logo[hidden] { display: none; }
+  .brand-logo[hidden] + .wordmark { display: inline; }
   .bar .sep { width: 1px; height: 18px; background: var(--line); }
   .crumbs a { text-decoration: none; color: var(--muted); font-family: var(--serif); font-size: 0.9375rem; white-space: nowrap; }
   .crumbs a:hover { color: var(--text); }
@@ -156,14 +161,15 @@
   }
   /* Sphere lighting over the artwork, clipped by the silhouette (the zoom
      already puts the sphere's edge on the circle). ::before multiplies a
-     shade that leaves the upper left untouched and curves the surface away
-     into a soft lower-right terminator, so the artwork's own colours stay;
-     ::after screens in one broad, soft key light from the upper left. No
-     hard specular spot, no dark outline. */
+     neutral shade that leaves the upper two thirds untouched and curves the
+     surface away into a gentle lower-right falloff — grey, not brown, so a
+     white marble stays white and the artwork's colours stay vivid; ::after
+     screens in one broad, restrained key light from the upper left. No hard
+     specular spot, no dark outline. */
   .ball::before { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; mix-blend-mode: multiply;
-    background: radial-gradient(circle at 36% 32%, #ffffff 0%, #ffffff 30%, #f1eae1 48%, #d8cab8 66%, #ad9a84 84%, #7f6b58 100%); }
+    background: radial-gradient(circle at 36% 32%, #ffffff 0%, #ffffff 36%, #f5f3f0 52%, #dedad5 68%, #bdb7b0 84%, #928b83 100%); }
   .ball::after { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; mix-blend-mode: screen;
-    background: radial-gradient(circle at 29% 25%, rgba(255,255,255,0.40) 0%, rgba(255,255,255,0.18) 20%, rgba(255,255,255,0.05) 40%, rgba(255,255,255,0) 56%); }
+    background: radial-gradient(circle at 30% 26%, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.17) 22%, rgba(255,255,255,0.05) 44%, rgba(255,255,255,0) 60%); }
   /* Plain gradient balls (no artwork) keep a little extra rim so they read as glass. */
   .ball:not(.art) { box-shadow: inset -8px -12px 22px rgba(0,0,0,0.22), inset 4px 6px 12px rgba(255,255,255,0.18); }
   /* Shadows on the floor, anchored to the sphere: a tight dark contact
@@ -171,8 +177,8 @@
      forward by the light from the upper left. Both sit below the ball. */
   .ball-wrap::after { content: ''; position: absolute; z-index: 0; left: 20%; right: 16%; bottom: -4px; height: 10px; border-radius: 50%; pointer-events: none;
     background: radial-gradient(ellipse at 50% 50%, rgba(var(--shadow-ink), 0.6), rgba(var(--shadow-ink), 0.34) 40%, rgba(var(--shadow-ink), 0) 70%); }
-  .ball-wrap::before { content: ''; position: absolute; z-index: 0; left: 34%; right: -34%; bottom: -11px; height: 18px; border-radius: 50%; pointer-events: none; filter: blur(4px); transform: skewX(-22deg);
-    background: radial-gradient(ellipse at 40% 50%, rgba(var(--shadow-ink), 0.3), rgba(var(--shadow-ink), 0.14) 45%, rgba(var(--shadow-ink), 0) 72%); }
+  .ball-wrap::before { content: ''; position: absolute; z-index: 0; left: 36%; right: -44%; bottom: -11px; height: 18px; border-radius: 50%; pointer-events: none; filter: blur(5px); transform: skewX(-22deg);
+    background: radial-gradient(ellipse at 38% 50%, rgba(var(--shadow-ink), 0.28), rgba(var(--shadow-ink), 0.12) 45%, rgba(var(--shadow-ink), 0) 74%); }
   /* The floor: an upward-facing board seen from slightly above — a dark seam
      where it meets the back panel, brightening toward the rounded front
      edge, grain running along the shelf. */
@@ -257,7 +263,7 @@
   .box-top::after { right: 0; background-image: var(--wood-v), linear-gradient(90deg, var(--oak-back-deep), var(--oak-side)); filter: brightness(0.86); box-shadow: inset 1px 0 0 rgba(var(--shadow-ink), 0.35); }
   .box-top .ball-wrap { --ball: clamp(150px, 34vw, 240px); width: var(--ball); height: var(--ball); margin-bottom: calc(var(--floor-h) * (1 - var(--sit))); }
   .box-top .ball-wrap::after { height: 16px; bottom: -7px; }
-  .box-top .ball-wrap::before { height: 30px; bottom: -16px; filter: blur(7px); }
+  .box-top .ball-wrap::before { height: 30px; bottom: -16px; right: -50%; filter: blur(8px); }
   .box-floor { position: absolute; left: var(--side-w); right: var(--side-w); bottom: 0; height: var(--floor-h); z-index: 1;
     background-image: linear-gradient(180deg, rgba(var(--shadow-ink), 0.55) 0, rgba(var(--shadow-ink), 0.32) 2px, rgba(var(--shadow-ink), 0.16) 30%, rgba(var(--shadow-ink), 0) 70%, rgba(255, 240, 215, 0.22) 100%),
       var(--wood-h), linear-gradient(180deg, var(--maple-floor-back), var(--maple-floor));
@@ -279,12 +285,10 @@
   .stat i { display: block; margin-top: 4px; font: 600 0.6875rem/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
   .d-line { font: 400 clamp(0.9375rem, 2.5vw, 1.125rem)/1.35 var(--serif); color: #4f463d; margin: 0 0 22px; }
   .d-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .cheer, .share2 { display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 12px 22px; border-radius: 14px; font: 700 1.125rem var(--serif); cursor: pointer; text-decoration: none; }
-  .cheer { background: var(--accent); color: var(--accent-ink); border: 1px solid rgba(0,0,0,0.06); flex: 1 1 260px; justify-content: center; }
+  .cheer { display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 12px 22px; border-radius: 14px; font: 700 1.125rem var(--serif); cursor: pointer; text-decoration: none;
+    background: var(--accent); color: var(--accent-ink); border: 1px solid rgba(0,0,0,0.06); flex: 1 1 260px; max-width: 360px; justify-content: center; }
   .cheer:hover { filter: brightness(1.04); }
-  .share2 { background: #fff; color: var(--text); border: 1px solid var(--line); }
-  .share2:hover { border-color: var(--text); }
-  .cheer svg, .share2 svg { width: 20px; height: 20px; flex: none; }
+  .cheer svg { width: 20px; height: 20px; flex: none; }
 
   @media (max-width: 1000px) { :root { --cols: 4; } }
   @media (max-width: 760px) {
@@ -306,6 +310,7 @@
     :root { --cols: 2; --floor-h: 22px; --fascia-h: 40px; }
     .bar { gap: 12px; }
     .bar .sep { display: none; }
+    .brand-logo { height: 28px; }
     .m-stats::before { content: none; }
     .m-stats { flex-basis: 100%; text-align: center; }
     .grid.list .card { padding: 8px 12px; gap: 12px; }
@@ -318,7 +323,7 @@
 <header class="top">
   <div class="top-inner">
     <div class="bar">
-      <a class="wordmark" href="/">MARBLERUN.FUN</a>
+      <a class="brand" href="/" aria-label="Marble Run — home"><img src="/logo.png" alt="Marble Run" class="brand-logo" onerror="this.hidden=true"><span class="wordmark" aria-hidden="true">MARBLERUN.FUN</span></a>
       <span class="sep" aria-hidden="true"></span>
       <span class="crumbs"><a href="/">← Back to the races</a></span>
       <span class="tagline">The marble racing universe by Bryan Brinkman</span>
@@ -378,7 +383,6 @@
       <p class="d-line" id="dLine"></p>
       <div class="d-actions">
         <a class="cheer" id="dCheer" href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.3-9.2C1.5 8.2 3.6 5 6.8 5c1.9 0 3.4 1 4.2 2.4h2C13.8 6 15.3 5 17.2 5c3.2 0 5.3 3.2 4.1 6.3-1.8 4.6-9.3 9.2-9.3 9.2z"/></svg><span>Cheer for this marble</span></a>
-        <button class="share2" id="dShare" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg><span id="dShareText">Share</span></button>
       </div>
     </div>
   </div>
@@ -408,9 +412,20 @@
     const ll = Math.max(26, Math.min(82, l + ((v * 7) % 13) - 6));
     return `hsl(${hh.toFixed(1)}, ${s}%, ${ll}%)`;
   }
-  function ballStyle(id, skin) {
+  // Artwork as a background, with the server's 1024px thumbnail (`img2x`)
+  // where 512px would be upscaled (mirrors src/ssr.js): a shelf card shows
+  // the artwork at ≤ ~230 css px, so the 512px file is a 2× asset there and
+  // the large one is only fetched by 3×+ screens; the detail box (`dense`)
+  // shows it at ~320 css px and takes the large one from 2× up.
+  function ballStyle(id, skin, dense) {
     if (skin && skin.img) {
-      return `background-image:url('${skin.img.replace(/'/g, '%27')}')`;
+      const u = (s) => `url('${String(s).replace(/'/g, '%27')}')`;
+      let css = `background-image:${u(skin.img)}`;
+      if (skin.img2x) {
+        const set = dense ? `${u(skin.img)} 1x,${u(skin.img2x)} 2x` : `${u(skin.img)} 2x,${u(skin.img2x)} 4x`;
+        css += `;background-image:-webkit-image-set(${set});background-image:image-set(${set})`;
+      }
+      return css;
     }
     return `background:` +
       `radial-gradient(circle at 32% 28%, rgba(255,255,255,.92), rgba(255,255,255,0) 34%),` +
@@ -554,7 +569,7 @@
     const c = carOf(id);
     const owner = ownerOf(id);
     const dBall = document.getElementById('dBall');
-    dBall.style.cssText = ballStyle(id, skinOf(id)) +
+    dBall.style.cssText = ballStyle(id, skinOf(id), true) +
       ';background-size:calc(100% * var(--skin-zoom, 1));background-position:center';
     dBall.classList.toggle('art', !!(skinOf(id) && skinOf(id).img));
     document.getElementById('dNum').textContent = '#' + pad(id);
@@ -582,21 +597,6 @@
     cheer.onclick = () => {
       try { localStorage.setItem('marbleFollow', String(id)); } catch {}
       // href="/" performs the navigation.
-    };
-    const share = document.getElementById('dShare');
-    const shareText = document.getElementById('dShareText');
-    shareText.textContent = 'Share';
-    share.onclick = async () => {
-      const url = location.origin + '/gallery#' + id;
-      const payload = { title: nameFor(id) + ' — MarbleRun.fun', url };
-      try {
-        if (navigator.share) { await navigator.share(payload); return; }
-      } catch { return; } // user dismissed the share sheet — not a failure
-      try {
-        await navigator.clipboard.writeText(url);
-        shareText.textContent = 'Copied';
-        setTimeout(() => { shareText.textContent = 'Share'; }, 1600);
-      } catch {}
     };
     // Deep-linkable: /gallery#42 opens this marble. replaceState avoids both
     // scroll-jumps and polluting history with every card click.

@@ -370,12 +370,13 @@ async function main() {
   // disk. The manifest points `img` at them so phones don't download and
   // decode a hundred 1200² JPEGs; the original stays available as `imgFull`.
   let thumbRender = null;
-  const thumbs = createThumbnailer({
-    dir: path.join(path.dirname(cfg.dbPath), 'thumbs'),
-    size: 512,
-    render: (url, size) => (thumbRender ? thumbRender(url, size) : Promise.reject(new Error('browser not ready'))),
-    log: (msg) => console.log('[' + msg.replace(/^thumbs: /, 'thumbs] ')),
-  });
+  const thumbRenderer = (url, size) => (thumbRender ? thumbRender(url, size) : Promise.reject(new Error('browser not ready')));
+  const thumbLog = (msg) => console.log('[' + msg.replace(/^thumbs: /, 'thumbs] '));
+  const thumbs = createThumbnailer({ dir: path.join(path.dirname(cfg.dbPath), 'thumbs'), size: 512, render: thumbRenderer, log: thumbLog });
+  // A second, 1024px set (`img2x`) for where 512px would be upscaled: the
+  // gallery's detail box shows the artwork at ~320 css px (640+ device px on
+  // a 2× screen), and shelf cards on 3× phones. Rendered after the small set.
+  const thumbs2x = createThumbnailer({ dir: path.join(path.dirname(cfg.dbPath), 'thumbs-1024'), size: 1024, render: thumbRenderer, log: thumbLog });
   function rawManifest() {
     try {
       return skins.manifest();
@@ -384,7 +385,11 @@ async function main() {
     }
   }
   function readManifest() {
-    return thumbs.apply(rawManifest());
+    const m = thumbs.apply(rawManifest());
+    for (const [id, v] of Object.entries(m)) {
+      if (v && typeof v === 'object' && v.imgFull && thumbs2x.has(id, v.imgFull)) m[id] = { ...v, img2x: `/marbles/thumb/${id}@2x.webp` };
+    }
+    return m;
   }
   function renderPage(file) {
     try {
@@ -545,13 +550,14 @@ async function main() {
     }
     // Marble avatar thumbnails (see src/thumbs.js). Until one is rendered,
     // send the client to the original artwork instead of failing.
-    const thumbMatch = req.method === 'GET' && /^\/marbles\/thumb\/(\d{1,3})\.webp$/.exec(url.pathname);
+    const thumbMatch = req.method === 'GET' && /^\/marbles\/thumb\/(\d{1,3})(@2x)?\.webp$/.exec(url.pathname);
     if (thumbMatch) {
       const id = String(parseInt(thumbMatch[1], 10));
+      const set = thumbMatch[2] ? thumbs2x : thumbs;
       const entry = rawManifest()[id];
       const src = entry && entry.img;
-      if (src && thumbs.has(id, src)) {
-        return fs.readFile(thumbs.file(id), (err, buf) => {
+      if (src && set.has(id, src)) {
+        return fs.readFile(set.file(id), (err, buf) => {
           if (err || !buf) {
             res.writeHead(302, { Location: src, 'Cache-Control': 'no-cache' });
             return res.end();
@@ -654,7 +660,7 @@ async function main() {
     const thumbPass = () => {
       const m = rawManifest();
       if (!Object.keys(m).length && thumbTries++ < 30) return setTimeout(thumbPass, 10000);
-      thumbs.ensureAll(m).catch((e) => console.error('[thumbs] pass failed:', e && e.message));
+      thumbs.ensureAll(m).then(() => thumbs2x.ensureAll(m)).catch((e) => console.error('[thumbs] pass failed:', e && e.message));
     };
     setTimeout(thumbPass, 3000);
     const thumbTimer = setInterval(thumbPass, Math.max(60000, cfg.skinsRefreshMs));

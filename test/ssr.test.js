@@ -23,9 +23,11 @@ console.log('SSR tests\n');
 check('gallery: 100 marble cards with names + careers in the initial HTML', () => {
   const html = renderGallery(read('gallery.html'), {
     careers: [{ id: 42, races: 30, wins: 9, podiums: 15, titles: 2 }],
-    manifest: { 7: { owner: 'Bryan' } },
+    manifest: { 7: { owner: 'Bryan' }, 42: { img: '/marbles/thumb/42.webp', imgFull: 'https://gw/042.jpg', img2x: '/marbles/thumb/42@2x.webp' }, 43: { img: 'https://gw/043.jpg' } },
     hof: { currentChampion: { id: 42, name: 'Royal Flush', tournamentId: 3 } },
   });
+  assert.ok(html.includes(`class="ball art" style="background-image:url('/marbles/thumb/42.webp');background-image:-webkit-image-set(url('/marbles/thumb/42.webp') 2x,url('/marbles/thumb/42@2x.webp') 4x);background-image:image-set(url('/marbles/thumb/42.webp') 2x,url('/marbles/thumb/42@2x.webp') 4x)"`), 'a card offers the 1024px thumbnail to dense screens, with the plain url as the fallback');
+  assert.ok(html.includes(`class="ball art" style="background-image:url('https://gw/043.jpg')"`), 'no image-set without a large thumbnail');
   assert.strictEqual((html.match(/class="card( claimed)? reigning"/g) || []).length, 1, 'only the reigning champion gets the gold mark');
   assert.ok(html.includes('Reigning champion'));
   assert.strictEqual((html.match(/class="card( claimed)?( reigning)?" role="listitem"/g) || []).length, 100);
