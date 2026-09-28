@@ -203,6 +203,7 @@ ws.onmessage = (e) =&gt; {
     "roundKey": "heats",           // heats = qualifying, semis = finals, final = championship
     "indexInRound": 7,
     "trackSeed": 1970251534,       // course = f(trackSeed) — present from announce
+    "courseGen": 2,                // course-generator version the course was built under (1 if absent)
     // once status is "running": "raceSeed", "publicContribution", "publicSource",
     // "clientSeeds", "beacon" — outcome = f(trackSeed, raceSeed)
     "scheduledStart": 1786000023456,
@@ -258,7 +259,7 @@ raceSeed            = sha256( masterSeed ‖ u32be(tournamentId) ‖ raceKey ‖
     statistics or audit a race after the fact:</p>
 <pre><code>{ "races": [ {
   "tournamentId": 41, "raceKey": "heats:6", "roundKey": "heats", "indexInRound": 6,
-  "trackSeed": 2094821771, "trackAttempt": 0, "raceSeed": 912004183,
+  "trackSeed": 2094821771, "trackAttempt": 0, "courseGen": 2, "raceSeed": 912004183,
   "publicContribution": "c0df65a2…", "publicSource": "beacon+clients",
   "clientSeeds": ["9f3a…", …], "beacon": { "source": "drand", "round": 4711234, "value": "e1b0…", "url": "https://api.drand.sh/public/latest" },
   "scheduledStart": 1785999900000, "startedAt": 1785999900012, "revealedAt": 1785999978450,
@@ -314,7 +315,8 @@ raceSeed            = sha256( masterSeed ‖ u32be(tournamentId) ‖ raceKey ‖
     match to within floating-point rounding (see "Determinism" below for exactly what we
     guarantee and in which environment):</p>
 <pre><code>// with public/marble_run.html loaded in a same-origin iframe or window
-marbleAPI.newCourse(race.trackSeed);           // from race_start / /api/history
+marbleAPI.newCourse(race.trackSeed, race.courseGen); // from race_start / /api/history (courseGen: the
+                                                   // course-generator version the race ran on; 1 if absent)
 const sim = marbleAPI.simulateRace(race.raceSeed);
 console.log(sim.results);                      // same order as race_result</code></pre>
     <p class="muted">This is what the server itself does — it has no other source of truth.</p>

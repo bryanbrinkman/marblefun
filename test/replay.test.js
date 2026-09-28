@@ -27,6 +27,7 @@ async function record(base) {
       tournamentId: r.tournamentId,
       raceKey: r.raceKey,
       trackSeed: r.trackSeed,
+      courseGen: r.courseGen || 1,
       raceSeed: r.raceSeed,
       results: r.results.map((x) => ({ rank: x.rank, lane: x.lane, timeSec: x.timeSec })),
     }));
@@ -46,7 +47,8 @@ async function replay() {
   let failed = 0;
   try {
     for (const r of fx.races) {
-      const got = await sim.simulate(r.raceSeed, { forTrackSeed: r.trackSeed });
+      // Races recorded before course generations existed are generation 1.
+      const got = await sim.simulate(r.raceSeed, { forTrackSeed: r.trackSeed, courseGen: r.courseGen || 1 });
       const expectFinishers = r.results.filter((x) => x.timeSec != null);
       const gotOrder = got.order.map((o) => o.lane).join(',');
       const expOrder = expectFinishers.map((o) => o.lane).join(',');

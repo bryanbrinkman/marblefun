@@ -2,6 +2,11 @@
 
 const { toMasterBuf, drawSeedFor, trackSeedFor } = require('./seeds');
 
+// Course generation the game builds new races under (marbleAPI.courseGenLatest).
+// Bumped with the game whenever the course generator's output for a track seed
+// changes; every race records the generation it ran on so old replays are exact.
+const COURSE_GEN = 2;
+
 // =========================================================
 // Tournament model — 100 marbles, brackets of 5
 // =========================================================
@@ -154,6 +159,7 @@ class Tournament {
       indexInRound,
       trackSeed,
       trackAttempt: 0,
+      courseGen: COURSE_GEN,
       raceSeed,
       roster, // slot -> marble
       result: null, // filled after the race runs
@@ -263,4 +269,4 @@ class Tournament {
   }
 }
 
-module.exports = { Tournament, COLOR_SLOTS, ROUNDS, MARBLE_COUNT, LANE };
+module.exports = { COURSE_GEN, Tournament, COLOR_SLOTS, ROUNDS, MARBLE_COUNT, LANE };

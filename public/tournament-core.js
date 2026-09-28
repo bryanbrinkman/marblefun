@@ -113,8 +113,10 @@
     _makeRace(roundIdx, indexInRound, participantIds) {
       const round = ROUNDS[roundIdx];
       const raceSeed = deriveSeed(this.masterSeed, 0x5a17, roundIdx + 1, indexInRound + 1);
-      // Each race runs on its own course.
+      // Each race runs on its own course, built under the current course
+      // generation (mirrors src/tournament.js COURSE_GEN).
       const trackSeed = deriveSeed(this.masterSeed, 0x7a2c, roundIdx + 1, indexInRound + 1);
+      const courseGen = 2;
       const roster = participantIds.map((mid, slot) => ({
         slot,
         marbleId: mid,
@@ -129,6 +131,7 @@
         roundTitle: round.title,
         indexInRound,
         trackSeed,
+        courseGen,
         raceSeed,
         roster,
         result: null,

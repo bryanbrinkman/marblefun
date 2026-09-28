@@ -22,7 +22,7 @@ function loadPlaywright() {
   }
 }
 
-async function createSimulator({ url, trackSeed, headless = true, readyTimeoutMs = 30000 }) {
+async function createSimulator({ url, trackSeed, courseGen = 1, headless = true, readyTimeoutMs = 30000 }) {
   const { chromium } = loadPlaywright();
   // --no-sandbox / --disable-dev-shm-usage are required to run Chromium as root
   // in a container with a tiny /dev/shm (else it won't start). No WebGL flags
@@ -87,42 +87,49 @@ async function createSimulator({ url, trackSeed, headless = true, readyTimeoutMs
     throw err;
   }
 
-  // Build the shared course once.
-  await page.evaluate((t) => window.marbleAPI.newCourse(t), trackSeed >>> 0);
+  // A course is (trackSeed, courseGen): the generation says which version of
+  // the course generator built it, so a race recorded under an older
+  // generation replays on exactly the course it ran on. Records from before
+  // generations existed are generation 1 — the default whenever a caller
+  // doesn't say.
+  const normGen = (g) => (g == null || !Number.isFinite(Number(g)) ? 1 : Math.max(1, Math.round(Number(g))));
 
+  // Build the shared course once.
   let currentTrack = trackSeed >>> 0;
+  let currentGen = normGen(courseGen);
+  await page.evaluate(([t, g]) => window.marbleAPI.newCourse(t, g), [currentTrack, currentGen]);
+
+  const sameCourse = (t, g) => t === undefined || ((t >>> 0) === currentTrack && normGen(g) === currentGen);
 
   return {
     consoleErrors,
 
     // Rebuild the course for a different track seed (each race has its own).
-    async setCourse(t) {
+    async setCourse(t, gen) {
       currentTrack = t >>> 0;
-      await page.evaluate((tt) => window.marbleAPI.newCourse(tt), currentTrack);
+      currentGen = normGen(gen);
+      await page.evaluate(([tt, g]) => window.marbleAPI.newCourse(tt, g), [currentTrack, currentGen]);
     },
 
     // Facts about a candidate course without racing it — cheap (a course
     // build, no physics). `finishClear` is false when the finish line / podium
     // would sit inside a block column; hosts skip such seeds.
-    async courseInfo(forTrackSeed) {
-      if (forTrackSeed !== undefined && (forTrackSeed >>> 0) !== currentTrack) {
-        await this.setCourse(forTrackSeed);
-      }
+    async courseInfo(forTrackSeed, courseGen) {
+      if (!sameCourse(forTrackSeed, courseGen)) await this.setCourse(forTrackSeed, courseGen);
       const info = await page.evaluate(() => (window.marbleAPI.courseInfo ? window.marbleAPI.courseInfo() : null));
-      return { trackSeed: currentTrack, finishClear: !(info && info.finishClear === false) };
+      return { trackSeed: currentTrack, courseGen: currentGen, finishClear: !(info && info.finishClear === false), splitMerge: info ? info.splitMerge || null : null };
     },
 
     // Run one race headlessly. Returns:
-    //   { trackSeed, raceSeed, complete, order: [{ lane, color, timeSec }, ...] }
+    //   { trackSeed, courseGen, raceSeed, complete, order: [{ lane, color, timeSec }, ...] }
     // where `order` is rank 1..5 and `lane` is the color-lane name
     // (RED/BLUE/GREEN/YELLOW/CREAM) the game assigns.
-    async simulate(raceSeed, { forTrackSeed } = {}) {
-      if (forTrackSeed !== undefined && (forTrackSeed >>> 0) !== currentTrack) {
-        await this.setCourse(forTrackSeed);
-      }
+    async simulate(raceSeed, { forTrackSeed, courseGen } = {}) {
+      if (!sameCourse(forTrackSeed, courseGen)) await this.setCourse(forTrackSeed, courseGen);
       const res = await page.evaluate((r) => window.marbleAPI.simulateRace(r), raceSeed >>> 0);
       return {
         trackSeed: res.trackSeed >>> 0,
+        courseGen: currentGen,
         raceSeed: res.raceSeed >>> 0,
         complete: res.complete,
         // Older game builds don't report it — treat as clear.

@@ -69,11 +69,15 @@ function whenApiReady() {
   });
 }
 
-async function ensureCourse(trackSeed) {
+// A course is (trackSeed, courseGen): the generation says which version of
+// the course generator built it, so an old race replays on the course it ran
+// on. Records without one are generation 1.
+const courseKey = (race) => `${race.trackSeed}:${race.courseGen || 1}`;
+async function ensureCourse(race) {
   const a = await whenApiReady();
-  if (builtTrack !== trackSeed) {
-    a.newCourse(trackSeed);
-    builtTrack = trackSeed;
+  if (builtTrack !== courseKey(race)) {
+    a.newCourse(race.trackSeed, race.courseGen || 1);
+    builtTrack = courseKey(race);
   }
   return a;
 }
@@ -95,7 +99,7 @@ async function startReplay(race) {
     el('replayChip').hidden = true;
     playTvStatic(`<div class="ts-live">● LIVE</div><div class="ts-sub">${raceLabel(race)}</div>`);
   }
-  const a = await ensureCourse(race.trackSeed);
+  const a = await ensureCourse(race);
   applyRaceSkins(a, race);
   applyFollow(race);
   // If we're joining a race that already started (a mid-race page load), how far
@@ -109,8 +113,8 @@ async function startReplay(race) {
   // time — hard-reset the course and start cleanly so no race is skipped.
   const ok = a.startRace(race.raceSeed, catchUp);
   if (ok === false) {
-    a.newCourse(race.trackSeed);
-    builtTrack = race.trackSeed;
+    a.newCourse(race.trackSeed, race.courseGen || 1);
+    builtTrack = courseKey(race);
     a.startRace(race.raceSeed, catchUp);
   }
 
@@ -206,7 +210,7 @@ function scheduleStart(race) {
   // on the stage; then the build waits for the actual start (the mid-race
   // catch-up in startRace absorbs the extra build time deterministically).
   if (!replaying) {
-    ensureCourse(race.trackSeed).then((a) => applyRaceSkins(a, race));
+    ensureCourse(race).then((a) => applyRaceSkins(a, race));
     applyFollow(race); // marker on your marble while it waits at the gate
   }
   if (delay <= 0) {
@@ -371,7 +375,7 @@ function renderSeedline(race) {
   const mine = _mySeeds[race.key];
   const included = mine && race.clientSeeds && race.clientSeeds.includes(mine);
   el('seedline').textContent =
-    `${raceLabel(race)} · track seed ${race.trackSeed != null ? race.trackSeed : 'not yet disclosed'}` +
+    `${raceLabel(race)} · track seed ${race.trackSeed != null ? `${race.trackSeed} (course generation ${race.courseGen || 1})` : 'not yet disclosed'}` +
     (race.raceSeed != null
       ? ` · race seed ${race.raceSeed}` +
         (race.publicContribution ? ` · public randomness ${race.publicContribution.slice(0, 12)}… (${race.publicSource || 'n/a'}${race.clientSeeds ? `, ${race.clientSeeds.length} viewer seeds` : ''})` : '') +
@@ -386,8 +390,8 @@ function updatePrintLink() {
   if (!pl) return;
   const cur = currentRace();
   const last = lastDoneRace();
-  const seed = cur && cur.trackSeed != null ? cur.trackSeed : last && last.trackSeed != null ? last.trackSeed : null;
-  pl.href = seed != null ? '/print?seed=' + seed : '/print';
+  const src = cur && cur.trackSeed != null ? cur : last && last.trackSeed != null ? last : null;
+  pl.href = src ? '/print?seed=' + src.trackSeed + '&gen=' + (src.courseGen || 1) : '/print';
 }
 
 // ---- live positions -------------------------------------------------------------
@@ -973,8 +977,8 @@ async function startReplayOf(last) {
   showToast(`▶ Replay · ${raceShort(last)}${req.action === 'play-when-ready' ? ' — loading the 3D track…' : ''}`, null, null);
   const a = await whenApiReady();
   if (!replaying || _replayRace !== last || _replayMode !== '3d') return; // exited, or the stage failed meanwhile
-  a.newCourse(last.trackSeed); // hard reset even on the same track: clean gate start
-  builtTrack = last.trackSeed;
+  a.newCourse(last.trackSeed, last.courseGen || 1); // hard reset even on the same track: clean gate start
+  builtTrack = courseKey(last);
   applyRaceSkins(a, last);
   try {
     if (a.setDisplayNames)
@@ -999,8 +1003,8 @@ function stopReplay(restoreStage) {
     const a = api();
     const cur = currentRace();
     if (a && cur && !cur.result && rendererState === 'ready') {
-      a.newCourse(cur.trackSeed);
-      builtTrack = cur.trackSeed;
+      a.newCourse(cur.trackSeed, cur.courseGen || 1);
+      builtTrack = courseKey(cur);
       applyFollow(cur);
     }
     renderAll();
@@ -1970,7 +1974,7 @@ async function runLocalRace(T, race, aborted) {
   model.standings = window.TournamentCore.standings(T);
   renderAll();
   runCountdown(race);
-  await ensureCourse(race.trackSeed);
+  await ensureCourse(race);
   let order = await computeResult(race);
   // A course is a dud when fewer than a majority of the field finishes
   // (ceil(roster/2), i.e. 3 of 5) OR its finish line / podium would sit
@@ -1983,7 +1987,7 @@ async function runLocalRace(T, race, aborted) {
   for (let attempt = 1; attempt < LOCAL_TRACK_ATTEMPTS && isDud(order); attempt++) {
     race.trackSeed = window.TournamentCore.deriveSeed(T.masterSeed, 0x7a2c, race.roundIdx + 1, race.indexInRound + 1, attempt);
     console.warn('[viewer] dud track for ' + race.key + ' — retrying with candidate ' + attempt);
-    const b = await ensureCourse(race.trackSeed);
+    const b = await ensureCourse(race);
     // Cheap first, like the server: a tunnelled finish needs no physics probe.
     if (attempt < LOCAL_TRACK_ATTEMPTS - 1 && b.courseInfo && b.courseInfo().finishClear === false) {
       order = Object.assign([], { finishClear: false });
@@ -1994,7 +1998,7 @@ async function runLocalRace(T, race, aborted) {
   const a = await whenApiReady();
   applyRaceSkins(a, race);
   if (a.resetForNextRace) a.resetForNextRace(race.raceSeed);
-  else a.newCourse(race.trackSeed);
+  else a.newCourse(race.trackSeed, race.courseGen || 1);
   // The director shows the wide shot between races; a manual camera choice is
   // left alone.
   if (tvMode && a.setCamera) a.setCamera('overview');

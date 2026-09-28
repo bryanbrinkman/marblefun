@@ -261,13 +261,13 @@ class Scheduler {
         // Cheap first: a course whose finish line / podium would sit inside a
         // block column is a dud before any marble rolls (a build, no physics).
         if (!last && this.sim.courseInfo) {
-          const info = await this.sim.courseInfo(candidate);
+          const info = await this.sim.courseInfo(candidate, race.courseGen);
           if (info && info.finishClear === false) {
             console.warn(`[race] ${race.key} track ${candidate} is a dud (finish line inside a block) — trying next candidate`);
             continue;
           }
         }
-        const sim = await this.sim.simulate(probe, { forTrackSeed: candidate });
+        const sim = await this.sim.simulate(probe, { forTrackSeed: candidate, courseGen: race.courseGen });
         const finishClear = sim.finishClear !== false;
         if ((sim.order.length >= minFinishers && finishClear) || last) {
           if (candidate !== race.trackSeed) {
@@ -372,6 +372,7 @@ class Scheduler {
       type: 'race_start',
       raceKey: race.key,
       trackSeed: race.trackSeed,
+      courseGen: race.courseGen || 1,
       raceSeed: race.raceSeed,
       publicContribution,
       publicSource,
@@ -384,7 +385,7 @@ class Scheduler {
 
     let order = null;
     try {
-      const sim = await this.sim.simulate(race.raceSeed, { forTrackSeed: race.trackSeed });
+      const sim = await this.sim.simulate(race.raceSeed, { forTrackSeed: race.trackSeed, courseGen: race.courseGen });
       order = this._toOrder(race, sim);
     } catch (err) {
       console.error('[scheduler] sim failed for', race.key, err.message);
@@ -400,7 +401,7 @@ class Scheduler {
 
   async _computeAndReveal(race, attempt) {
     try {
-      const sim = await this.sim.simulate(race.raceSeed, { forTrackSeed: race.trackSeed });
+      const sim = await this.sim.simulate(race.raceSeed, { forTrackSeed: race.trackSeed, courseGen: race.courseGen });
       this._scheduleReveal(race, this._toOrder(race, sim));
     } catch (err) {
       console.error('[scheduler] sim retry failed for', race.key, err.message);
@@ -471,6 +472,7 @@ class Scheduler {
       result: race.result,
       // Everything needed to re-derive raceSeed and replay the race.
       trackSeed: race.trackSeed,
+      courseGen: race.courseGen || 1,
       raceSeed: race.raceSeed,
       publicContribution: race.publicContribution,
       publicSource: race.publicSource,
@@ -509,6 +511,7 @@ class Scheduler {
     if (status === 'announced' || status === 'starting' || status === 'running' || status === 'done' || done) {
       view.trackSeed = race.trackSeed;
       view.trackAttempt = race.trackAttempt || 0;
+      view.courseGen = race.courseGen || 1;
     }
     if (status === 'running' || status === 'done' || done) {
       view.raceSeed = race.raceSeed;

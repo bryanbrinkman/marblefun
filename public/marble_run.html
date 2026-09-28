@@ -569,7 +569,35 @@ const CONFIG = {
   // Continuous gentle descent: every piece drops by this amount end-to-end,
   // so the entire course slopes downward (not just the ramp pieces).
   pieceDrop: 0.45,          // gentle tilt across each 4-unit straight; corners spiral down too
+
+  // "Split & Merge" set piece (course generation 2+): three straight cells in
+  // a row where a rounded central divider splits the channel into two lanes —
+  // a short straight one over shallow speed bumps and a gently winding one —
+  // that rejoin into a full-width runout. All figures in world units
+  // (cellSize 4, trackWidth 2.02, marble radius 0.22).
+  splitMerge: {
+    chance: 0.35,       // spawn weight: chance a course gets one at all
+    drop: 0.85,         // descent per cell (2.55 over the piece; straights drop 0.45, ramps 1.4)
+    dividerHalf: 0.20,  // half-width of the divider → each lane is 0.81 wide (1.84 marble diameters)
+    windAmp: 0.08,      // winding lane: lateral shift A·(1 − cos 4πu), peaks 0.16, bends ≤ 14°. Tuned so
+                        //     the two routes finish within ~0.15 s of each other from 2–8 u/s entries (the
+                        //     slow lane wins at a crawl, the bumps at speed); more winding costs more
+    bumpH: 0.07,        // speed bumps: cosine humps this tall …
+    bumpHalfW: 0.6,     // … and this wide each side (max slope 0.18 < the 0.21 grade: no pockets)
+    bumpsAt: [0.18, 0.5, 0.82], // bump centres along the middle cell (u = 0 entry … 1 exit)
+    crownH: 0.035,      // approach floor is crested this much at the centreline, peaking at the nose tip …
+    crownHalfW: 0.55,   // … falling to flat this far out: the centreline is an unstable ridge, so a
+                        //     dead-centre marble rolls off the nose instead of balancing on it
+  },
 };
+
+// Course generation. Bumped whenever generatePath's OUTPUT for a given track
+// seed changes (a new piece, a different RNG draw order…). A race carries the
+// generation it was built under (`?gen=` / marbleAPI.newCourse(seed, gen)),
+// so every recorded race replays on exactly the course it ran on; records
+// from before generations existed are generation 1.
+const COURSE_GEN_LATEST = 2;
+const COURSE_GEN_MIN = 1;
 
 // Race state
 const STATE = {
@@ -928,12 +956,17 @@ const SEEDS = (() => {
     const n = Number(v);
     return Number.isFinite(n) ? (n >>> 0) : null;
   };
-  const t = parse('track'), r = parse('race');
+  const t = parse('track'), r = parse('race'), g = parse('gen');
   return {
     track: t ?? randomSeed32(),
     race:  r ?? randomSeed32(),
+    // Course generation for the next build (see COURSE_GEN_LATEST).
+    gen: g !== null ? Math.max(COURSE_GEN_MIN, Math.min(COURSE_GEN_LATEST, g)) : COURSE_GEN_LATEST,
     pinnedTrack: t !== null,
     pinnedRace:  r !== null,
+    // Dev preview only (never set by the tournament host): `?split=force`
+    // places the Split & Merge piece as early as the course allows.
+    forceSplit: p.get('split') === 'force',
   };
 })();
 let _trackRand = makeRng(SEEDS.track);
@@ -1274,6 +1307,80 @@ function wallBoundsAt(shape, localX) {
   }
 }
 
+// ---- Split & Merge profile ------------------------------------------------
+// One function describes the piece for BOTH the physics and the meshes, so
+// what the marble collides with is exactly what is drawn. Cell-local frame:
+// +X = direction of travel, +Z = the marble's right; localX ∈ [-cs/2, cs/2].
+// `part` is 0 (split), 1 (two lanes) or 2 (merge). Returns, unmirrored:
+//   wallL / wallR  outer channel walls (the winding lane bulges wallR outward)
+//   divL / divR    the divider's two faces, or null where there is no divider
+//   bumpLane       -1: the left lane carries the speed bumps
+// With `mirror` the lanes swap sides (the whole profile is reflected in Z).
+function splitProfileAt(part, localX, mirror) {
+  const cs = CONFIG.cellSize;
+  const halfChan = CONFIG.trackWidth / 2;
+  const P = CONFIG.splitMerge;
+  const d0 = P.dividerHalf;
+  const u = (localX + cs / 2) / cs;  // 0 at entry, 1 at exit
+  let w = null;            // divider half-width on the straight (left) side
+  let s = 0;               // winding lane's lateral shift (right side only)
+  if (part === 0) {
+    // Full-width approach, then an elliptical nose (1.0 long, 0.2 wide) that
+    // grows to the divider's width by u = 0.6.
+    const tip = 0.35, full = 0.60;
+    if (u >= tip) w = u >= full ? d0 : d0 * Math.sqrt(Math.max(0, 1 - ((full - u) / (full - tip)) ** 2));
+  } else if (part === 1) {
+    // Straight lane: divider face fixed. Winding lane: two gentle S-bends,
+    // the divider's other face and the outer wall shifting together so the
+    // lane keeps its width; back to straight at both cell boundaries.
+    w = d0;
+    s = P.windAmp * (1 - Math.cos(4 * Math.PI * u));
+  } else {
+    // Divider ends in an elliptical tail from u = 0.10 to 0.35; the rest of
+    // the cell (2.6 units) is full-width runout, straight into the next piece.
+    const keep = 0.10, tail = 0.35;
+    if (u <= tail) w = u <= keep ? d0 : d0 * Math.sqrt(Math.max(0, 1 - ((u - keep) / (tail - keep)) ** 2));
+  }
+  let r = { wallL: -halfChan, wallR: halfChan + s, divL: w === null ? null : -w, divR: w === null ? null : w + s, bumpLane: -1 };
+  if (mirror) r = { wallL: -r.wallR, wallR: -r.wallL, divL: r.divR === null ? null : -r.divR, divR: r.divL === null ? null : -r.divL, bumpLane: 1 };
+  return r;
+}
+// Speed-bump height above the lane floor at localX (middle cell, bump lane
+// only): cosine humps — rounded, shallow, and shallower than the piece's
+// downhill grade so a marble can never come to rest against one.
+function splitBumpAt(localX) {
+  const cs = CONFIG.cellSize;
+  const P = CONFIG.splitMerge;
+  let h = 0;
+  for (const uc of P.bumpsAt) {
+    const d = Math.abs(localX - (uc - 0.5) * cs);
+    if (d < P.bumpHalfW) h += P.bumpH * 0.5 * (1 + Math.cos(Math.PI * d / P.bumpHalfW));
+  }
+  return h;
+}
+// Crown of the approach floor (first cell): a shallow tent ridge along the
+// centreline whose height follows a cosine envelope from u = 0.08 to 0.62,
+// peaking at the nose tip (u = 0.35). Returns the rise at (localX, lateral)
+// and its lateral slope; both the physics floor and the floor mesh use it.
+function splitCrownAt(localX, lateral) {
+  const cs = CONFIG.cellSize;
+  const P = CONFIG.splitMerge;
+  const u = (localX + cs / 2) / cs;
+  const u0 = 0.08, u1 = 0.62;
+  if (u <= u0 || u >= u1) return { h: 0, dlat: 0 };
+  const env = 0.5 * (1 - Math.cos(2 * Math.PI * (u - u0) / (u1 - u0)));
+  const a = Math.abs(lateral);
+  if (a >= P.crownHalfW) return { h: 0, dlat: 0 };
+  const peak = P.crownH * env;
+  return { h: peak * (1 - a / P.crownHalfW), dlat: -(lateral < 0 ? -1 : 1) * peak / P.crownHalfW };
+}
+// Which lane a lateral offset is in, given the profile at that point:
+// -1 left of the divider, +1 right of it, 0 where there is no divider.
+function splitLaneOf(prof, lateral) {
+  if (prof.divL === null) return 0;
+  return lateral < (prof.divL + prof.divR) / 2 ? -1 : 1;
+}
+
 // Set by generatePath(): false when the finish had to be placed without clear
 // table ahead of it (see the finish-piece comment there).
 let _courseFinishClear = true;
@@ -1409,9 +1516,60 @@ function generatePath() {
     plinkoStartStep = 4 + Math.floor(trackRng() * Math.max(1, targetLength * 0.4 - 4));
   }
 
+  // SPLIT & MERGE (course generation 2+): one atomic three-cell piece with a
+  // modest spawn weight. It is rolled up front, then placed at the first step
+  // from its target onward where three straight cells — and the cell after
+  // them, at the piece's real exit height — are free with full vertical
+  // clearance; otherwise it waits for the next step. Generation 1 draws
+  // nothing here, so every course recorded before it is byte-identical.
+  const SM = CONFIG.splitMerge;
+  let splitPending = false;
+  let splitStartStep = -1;
+  if (SEEDS.gen >= 2) {
+    splitPending = trackRng() < SM.chance;
+    if (splitPending) splitStartStep = Math.floor(targetLength * (0.45 + 0.35 * trackRng()));
+    if (SEEDS.forceSplit) { splitPending = true; splitStartStep = 3; } // dev preview only
+  }
+  const tryPlaceSplit = () => {
+    const d = DIRS[dir];
+    const parts = [];
+    let y = curY;
+    for (let k = 0; k < 3; k++) {
+      const cx = gx + d.dx * k, cz = gz + d.dz * k;
+      if (cx < -18 || cx > 22 || cz < -18 || cz > 18) return false;
+      const span = tileSpan(y - SM.drop, y);
+      if (conflicts(cx, cz, span)) return false;
+      parts.push({ cx, cz, span, entryY: y, exitY: y - SM.drop });
+      y -= SM.drop;
+    }
+    // The piece must be able to hand off to a straight at its true exit height.
+    if (!nextFree(gx + d.dx * 2, gz + d.dz * 2, dir, y)) return false;
+    const mirror = trackRng() < 0.5; // which side gets the bumps / the winding lane
+    parts.forEach((p, k) => {
+      cells.push({
+        gx: p.cx, gz: p.cz,
+        type: 'split', splitPart: k, splitMirror: mirror,
+        inDir: dir, outDir: dir,
+        entryY: p.entryY, exitY: p.exitY,
+      });
+      reserve(p.cx, p.cz, p.span);
+    });
+    gx += d.dx * 3;
+    gz += d.dz * 3;
+    curY = y;
+    consecStraight = 2; // the path turns next, as it would after two straights
+    lastWasRamp = false;
+    splitPending = false;
+    return true;
+  };
+
   for (let step = 0; step < targetLength; step++) {
     const isLastFew = step >= targetLength - 2;
     let isPlinkoForced = false;
+
+    if (splitPending && step >= splitStartStep && step < targetLength - 5 && step !== plinkoStartStep && plinkoForceRemaining === 0) {
+      if (tryPlaceSplit()) { step += 2; continue; } // three cells → three steps
+    }
 
     let type;
     if (isLastFew) {
@@ -1926,8 +2084,11 @@ function buildCurveFromPath(cells) {
           arcCenter.z + DMath.sin(a) * radius
         ));
       }
-    } else if (c.type === 'ramp') {
-      // Sample the ramp with a few points along its steep slope
+    } else if (c.type === 'ramp' || c.type === 'split') {
+      // Sample the ramp with a few points along its steep slope. The Split &
+      // Merge cells are sampled the same way: steeper than a straight, and
+      // the extra collinear samples keep the spline on the tilted floor plane
+      // right up to the seams, where the speed bumps and divider live.
       const rampSteps = 4;
       for (let s = 1; s <= rampSteps; s++) {
         const t = s / rampSteps;
@@ -3275,8 +3436,10 @@ function buildChannelPiece(c, baseMat, paintMat, trimMat) {
     innerGroup.position.y = CONFIG.blockHeight / 2;
     outerGroup.rotation.y = dirAngle(c.outDir);
   } else {
-    // straight, start, finish
-    buildStraightChannel(innerGroup, c, baseMat, paintMat);
+    // straight, start, finish — and the Split & Merge cells, which are
+    // straight tiles with a steeper tilt and their own channel builder.
+    if (c.type === 'split') buildSplitChannel(innerGroup, c, baseMat, paintMat);
+    else buildStraightChannel(innerGroup, c, baseMat, paintMat);
     // Tilt around the ENTRY edge of the cell (at local x = -cs/2). This guarantees the
     // entry edge stays HORIZONTAL at entryY, matching the previous piece's flat exit edge.
     const tiltAngle = Math.atan2(drop, cs);
@@ -3546,6 +3709,178 @@ function buildStraightChannel(group, c, baseMat, paintMat) {
   // Orientation is handled by the outer group (dispatcher).
 }
 
+// ---- Split & Merge channel (one of the piece's three cells) ------------------
+// Every surface here is sampled from splitProfileAt / splitBumpAt — the same
+// functions the physics reads — so the drawn floor, walls, divider and bumps
+// ARE the collision geometry. Cell-local frame (+X = travel, +Z = right); the
+// dispatcher tilts the whole group about the entry edge for the descent.
+function buildSplitChannel(group, c, baseMat, paintMat) {
+  const cs = CONFIG.cellSize;
+  const wallH = CONFIG.wallHeight;
+  const halfCS = cs / 2;
+  const wallThick = (cs - CONFIG.trackWidth) / 2;
+  const part = c.splitPart;
+  const mirror = !!c.splitMirror;
+  const prof = (x) => splitProfileAt(part, x, mirror);
+  const FLOOR_T = 0.08; // physics FLOOR_THICKNESS
+  const winding = part === 1;
+  const floorMat = makeTexturedFloorMaterial(0xd6b683, { roughness: 0.92 });
+
+  // Floor: one slab where the channel is straight; strips that follow the
+  // widened winding lane through the middle cell.
+  if (part === 0) {
+    // The crowned approach: strips along the cell, each a tent-shaped
+    // cross-section (flat at the walls, ridged at the centreline) at the
+    // crown height of its midpoint — the same function the physics floor
+    // reads. Shape drawn in (−z, y), extruded along the cell, turned so the
+    // extrusion runs along +X.
+    const n = 16, segLen = cs / n;
+    const halfChan = CONFIG.trackWidth / 2;
+    const L = CONFIG.splitMerge.crownHalfW;
+    for (let s = 0; s < n; s++) {
+      const xLo = -halfCS + s * segLen;
+      const peak = splitCrownAt(xLo + segLen / 2, 0).h;
+      const sh = new THREE.Shape();
+      sh.moveTo(-halfChan, 0);
+      sh.lineTo(-halfChan, FLOOR_T);
+      sh.lineTo(-L, FLOOR_T);
+      sh.lineTo(0, FLOOR_T + peak);
+      sh.lineTo(L, FLOOR_T);
+      sh.lineTo(halfChan, FLOOR_T);
+      sh.lineTo(halfChan, 0);
+      sh.closePath();
+      const strip = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: segLen * 1.02, bevelEnabled: false }), floorMat);
+      strip.rotation.y = Math.PI / 2; // geometry z (extrusion) → local +X; geometry x → local −Z (symmetric)
+      strip.position.set(xLo, 0, 0);
+      strip.receiveShadow = true;
+      group.add(strip);
+    }
+  } else if (!winding) {
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(cs, FLOOR_T, CONFIG.trackWidth), floorMat);
+    floor.position.set(0, FLOOR_T / 2, 0);
+    floor.receiveShadow = true;
+    group.add(floor);
+  } else {
+    const n = 16, segLen = cs / n;
+    for (let s = 0; s < n; s++) {
+      const x = -halfCS + (s + 0.5) * segLen;
+      const p = prof(x);
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(segLen * 1.05, FLOOR_T, p.wallR - p.wallL), floorMat);
+      seg.position.set(x, FLOOR_T / 2, (p.wallL + p.wallR) / 2);
+      seg.receiveShadow = true;
+      group.add(seg);
+    }
+  }
+
+  // Outer walls. A straight wall is the one box every plain tile has; the
+  // winding lane's wall is short segments that follow the profile, thinning
+  // as the lane bulges so the outer face stays on the cell edge.
+  const addWall = (which) => {
+    const sign = which === 'left' ? -1 : 1;
+    const boundAt = (x) => (which === 'left' ? prof(x).wallL : prof(x).wallR);
+    const moves = winding && Math.abs(boundAt(0.25 * cs) - boundAt(-halfCS)) > 1e-6;
+    if (!moves) {
+      const z = boundAt(0);
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(cs, wallH, wallThick), baseMat);
+      wall.position.set(0, wallH / 2, z + sign * wallThick / 2);
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      group.add(wall);
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(cs * 0.98, 0.06, wallThick * 0.85), paintMat);
+      stripe.position.set(0, wallH + 0.03, z + sign * wallThick / 2);
+      group.add(stripe);
+      return;
+    }
+    const n = 16, segLenX = cs / n;
+    for (let s = 0; s < n; s++) {
+      const xLo = -halfCS + s * segLenX, xHi = xLo + segLenX, xMid = (xLo + xHi) / 2;
+      const z0 = boundAt(xLo), z1 = boundAt(xHi), zMid = (z0 + z1) / 2;
+      const thick = halfCS - Math.abs(zMid); // out to the cell edge
+      const dz = z1 - z0;
+      const rotY = Math.atan2(-dz, segLenX);
+      const segLen = Math.sqrt(segLenX * segLenX + dz * dz) * 1.05;
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(segLen, wallH, thick), baseMat);
+      wall.position.set(xMid, wallH / 2, zMid + sign * thick / 2);
+      wall.rotation.y = rotY;
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      group.add(wall);
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.06, thick * 0.85), paintMat);
+      stripe.position.set(xMid, wallH + 0.03, zMid + sign * thick / 2);
+      stripe.rotation.y = rotY;
+      group.add(stripe);
+    }
+  };
+  addWall('left');
+  addWall('right');
+
+  // Divider: its plan outline (rounded nose → faces → rounded tail), sampled
+  // from the profile and extruded to wall height, plus a painted cap like the
+  // wall stripes. A face that continues into the next cell overruns the seam
+  // by a hair so the two halves meet without a gap.
+  {
+    const N = 64;
+    const xs = [];
+    for (let i = 0; i <= N; i++) xs.push(-halfCS + (i / N) * cs);
+    const xsIn = xs.filter((x) => prof(x).divL !== null);
+    if (xsIn.length >= 2) {
+      const ext = 0.03;
+      const samples = xsIn.slice();
+      if (samples[0] === xs[0]) samples[0] = -halfCS - ext;
+      if (samples[samples.length - 1] === xs[N]) samples[samples.length - 1] = halfCS + ext;
+      const outline = (inset) => {
+        const top = samples.map((x) => { const p = prof(x); const mid = (p.divL + p.divR) / 2; return [x, mid + (p.divR - mid) * inset]; });
+        const bot = samples.map((x) => { const p = prof(x); const mid = (p.divL + p.divR) / 2; return [x, mid + (p.divL - mid) * inset]; }).reverse();
+        return top.concat(bot);
+      };
+      // Shape (x, y) with y = −z, extruded along +Z, then rotated so the
+      // extrusion becomes height: point (x, −z, h) → local (x, h, z).
+      const extrude = (pts, depth, mat, y) => {
+        const sh = new THREE.Shape();
+        pts.forEach(([x, z], i) => (i === 0 ? sh.moveTo(x, -z) : sh.lineTo(x, -z)));
+        sh.closePath();
+        const geo = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.position.y = y;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      };
+      extrude(outline(1), wallH, baseMat, 0);
+      extrude(outline(0.7), 0.06, paintMat, wallH);
+    }
+  }
+
+  // Speed bumps across the straight lane of the middle cell: the cosine
+  // profile the physics uses, extruded from divider face to outer wall (a
+  // hair into each so they read as one piece).
+  if (part === 1) {
+    const P = CONFIG.splitMerge;
+    const laneSign = prof(0).bumpLane;
+    for (const uc of P.bumpsAt) {
+      const xc = (uc - 0.5) * cs;
+      const p = prof(xc);
+      const zIn = laneSign < 0 ? p.divL : p.divR;
+      const zOut = laneSign < 0 ? p.wallL : p.wallR;
+      const zA = Math.min(zIn, zOut) - 0.02, zB = Math.max(zIn, zOut) + 0.02;
+      const sh = new THREE.Shape();
+      const hw = P.bumpHalfW, K = 24;
+      sh.moveTo(xc - hw, FLOOR_T - 0.02);
+      for (let i = 0; i <= K; i++) {
+        const x = xc - hw + (2 * hw * i) / K;
+        sh.lineTo(x, FLOOR_T + splitBumpAt(x));
+      }
+      sh.lineTo(xc + hw, FLOOR_T - 0.02);
+      sh.closePath();
+      const bump = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: zB - zA, bevelEnabled: false }), paintMat);
+      bump.position.z = zA; // shape in XY, extruded along +Z from zA
+      bump.castShadow = true;
+      bump.receiveShadow = true;
+      group.add(bump);
+    }
+  }
+}
 
 function buildRampChannel(group, c, baseMat, paintMat) {
   const cs = CONFIG.cellSize;
@@ -5184,7 +5519,7 @@ const BUILD_STEPS = [
     // Reset the track stream so the same SEEDS.track always yields the same
     // course, no matter how many builds happened before this one.
     reseedTrack();
-    console.log(`[determinism] building course with track seed ${SEEDS.track}`);
+    console.log(`[determinism] building course with track seed ${SEEDS.track} (generation ${SEEDS.gen})`);
     clearWorld();
     clearConfetti();
   }},
@@ -5284,6 +5619,38 @@ const BUILD_STEPS = [
         peg._mesh.getWorldPosition(wp);
         allPegs.push({ x: wp.x, y: wp.y, z: wp.z, radius: peg._radius });
       }
+    }
+    // The Split & Merge divider's outline, as world-space segments for the
+    // physics contact test (both faces, nose tip to tail tip, sampled from
+    // the same profile the divider mesh is extruded from; every cell of the
+    // piece refers to the whole piece's outline).
+    for (const c of pathCells) {
+      if (c.type !== 'split' || c.splitPart !== 0) continue;
+      const cs = CONFIG.cellSize;
+      const od = DIRS[c.outDir];
+      const parts = [c, pathCells[c.index + 1], pathCells[c.index + 2]];
+      const toWorld = (cell, lx, lat) => ({ x: cell.gx * cs + od.dx * lx - od.dz * lat, z: cell.gz * cs + od.dz * lx + od.dx * lat });
+      const faces = [];
+      let prevL = null, prevR = null;
+      for (const cell of parts) {
+        const N = 40;
+        const xs = [];
+        for (let i = 0; i <= N; i++) xs.push(-cs / 2 + (i / N) * cs);
+        if (cell.splitPart !== 1) xs.push((0.35 - 0.5) * cs); // the exact tip, so the outline closes at a point
+        xs.sort((a, b) => a - b);
+        for (const x of xs) {
+          const p = splitProfileAt(cell.splitPart, x, cell.splitMirror);
+          if (p.divL === null) { prevL = prevR = null; continue; }
+          const L = toWorld(cell, x, p.divL), R = toWorld(cell, x, p.divR);
+          if (prevL) {
+            faces.push({ ax: prevL.x, az: prevL.z, bx: L.x, bz: L.z });
+            faces.push({ ax: prevR.x, az: prevR.z, bx: R.x, bz: R.z });
+          }
+          prevL = L;
+          prevR = R;
+        }
+      }
+      for (const cell of parts) cell._splitFaces = faces;
     }
 
     // Resolve fan world centers — the fan group's local origin in the channelPiece is
@@ -5696,6 +6063,34 @@ function stepPhysics(dt) {
       }
     }
 
+    // Split & Merge speed bumps: in the bump lane of the middle cell the
+    // floor rises over the humps (the profile the bump meshes are built
+    // from), and the marble feels the hump's slope along the track — held
+    // back on the way up, sped up on the way down — as it feels the tilt of
+    // any tile. The slope is applied once the floor contact is resolved below.
+    // The first cell's crowned approach floor works the same way sideways: the
+    // ridge along the centreline rolls a marble off the nose tip to one side.
+    let _splitBumpSlope = 0;
+    let _splitLatSlope = 0;
+    {
+      const cellS = cellByXZAt(m.pos.x, m.pos.y, m.pos.z);
+      if (cellS && cellS.type === 'split') {
+        const od = DIRS[cellS.outDir];
+        const lx = od.dx * (m.pos.x - cellS.gx * CONFIG.cellSize) + od.dz * (m.pos.z - cellS.gz * CONFIG.cellSize);
+        if (cellS.splitPart === 1) {
+          const prof = splitProfileAt(1, lx, cellS.splitMirror);
+          if (splitLaneOf(prof, lateralOffset) === prof.bumpLane) {
+            floorY += splitBumpAt(lx);
+            _splitBumpSlope = (splitBumpAt(lx + 0.02) - splitBumpAt(lx - 0.02)) / 0.04;
+          }
+        } else if (cellS.splitPart === 0) {
+          const crown = splitCrownAt(lx, lateralOffset);
+          floorY += crown.h;
+          _splitLatSlope = crown.dlat;
+        }
+      }
+    }
+
     // Visual floor top sits 0.08 units above the curve centerline (the floor mesh is
     // 0.08 thick, placed atop the cell's block body which has its top at the
     // curve Y). Without this offset, marbles would rest with their bottom at the
@@ -5741,6 +6136,12 @@ function stepPhysics(dt) {
           maybeClack(m, impactStrength, SURFACES.floor);
         }
       }
+    }
+
+    // Speed-bump and crown slope reactions (see above): only while on the floor.
+    if (m.pos.y <= targetY + 0.01) {
+      if (_splitBumpSlope !== 0) m.vel.addScaledVector(tangent, -CONFIG.gravity * _splitBumpSlope * dt);
+      if (_splitLatSlope !== 0) m.vel.addScaledVector(right, -CONFIG.gravity * _splitLatSlope * dt);
     }
 
     // Step-ramp ledge behavior. Three things happen as the marble crosses the ledge:
@@ -5949,6 +6350,25 @@ function stepPhysics(dt) {
         rightSlope = (bUp.rightZ - bDn.rightZ) / (2 * ds);
       }
 
+      // Split & Merge: the outer walls come from the piece's profile (the
+      // winding lane's wall bulges outward); the divider is handled by a
+      // contact test against its outline, below. Sign note: makeWallNormal's
+      // forward term is written for a right-hand wall, so a left wall passes
+      // the negated slope to get the physically correct normal (the existing
+      // shaped tiles are left exactly as they are).
+      if (cellHere && cellHere.type === 'split') {
+        const ds = 0.05;
+        const od = DIRS[cellHere.outDir];
+        const lx = od.dx * (m.pos.x - cellHere.gx * cs) + od.dz * (m.pos.z - cellHere.gz * cs);
+        const p  = splitProfileAt(cellHere.splitPart, lx, cellHere.splitMirror);
+        const pU = splitProfileAt(cellHere.splitPart, lx + ds, cellHere.splitMirror);
+        const pD = splitProfileAt(cellHere.splitPart, lx - ds, cellHere.splitMirror);
+        leftBound  = p.wallL + CONFIG.marbleRadius;
+        rightBound = p.wallR - CONFIG.marbleRadius;
+        leftSlope  = -(pU.wallL - pD.wallL) / (2 * ds);
+        rightSlope =  (pU.wallR - pD.wallR) / (2 * ds);
+      }
+
       // The channel's forward direction is the curve tangent `tangent`. Its lateral
       // axis is `right`. Build a world-space normal from a (forward, lateral) pair.
       // For the right wall, inward normal in (localX, Z) space is (rightSlope, -1)
@@ -6002,6 +6422,44 @@ function stepPhysics(dt) {
           const tangentialNudge = (raceRng() - 0.5) * 0.5 * impactStrength;
           m.vel.addScaledVector(tangent, tangentialNudge);
           if (impactStrength > 0.2) maybeClack(m, impactStrength, SURFACES.wood);
+        }
+      }
+    }
+
+    // Split & Merge divider — circle-against-outline contact with the same
+    // outline the divider mesh is extruded from (a world-space polyline built
+    // at FRAMING SHOT). The push is along the true contact normal, so the
+    // rounded nose deflects a marble the way a real post does: sideways when
+    // it is off-centre, straight back only when it is dead centre — and which
+    // lane it takes is decided by nothing but where it was and what it hit.
+    {
+      const cellD = cellByXZAt(m.pos.x, m.pos.y, m.pos.z);
+      const faces = cellD && cellD.type === 'split' ? cellD._splitFaces : null;
+      if (faces) {
+        const r = CONFIG.marbleRadius;
+        for (let i = 0; i < faces.length; i++) {
+          const f = faces[i];
+          const abx = f.bx - f.ax, abz = f.bz - f.az;
+          const apx = m.pos.x - f.ax, apz = m.pos.z - f.az;
+          const len2 = abx * abx + abz * abz;
+          let u = len2 > 1e-12 ? (apx * abx + apz * abz) / len2 : 0;
+          u = u < 0 ? 0 : u > 1 ? 1 : u;
+          const dx = m.pos.x - (f.ax + abx * u), dz = m.pos.z - (f.az + abz * u);
+          const d2 = dx * dx + dz * dz;
+          if (d2 >= r * r || d2 < 1e-10) continue;
+          const d = Math.sqrt(d2);
+          const nx = dx / d, nz = dz / d;
+          const push = r - d;
+          m.pos.x += nx * push;
+          m.pos.z += nz * push;
+          const vn = m.vel.x * nx + m.vel.z * nz;
+          if (vn < 0) {
+            const k = 1 + SURFACES.wood.restitution;
+            m.vel.x -= nx * vn * k;
+            m.vel.z -= nz * vn * k;
+            const impactStrength = Math.min(1.0, -vn / 4);
+            if (impactStrength > 0.2) maybeClack(m, impactStrength, SURFACES.wood);
+          }
         }
       }
     }
@@ -7663,7 +8121,7 @@ restartBtn.addEventListener('click', () => {
 //   marbleAPI.getResults()             — finish order + sim times (after a race)
 // Every race is then reproducible by any client via ?track=...&race=...
 window.marbleAPI = {
-  getSeeds: () => ({ track: SEEDS.track, race: SEEDS.race }),
+  getSeeds: () => ({ track: SEEDS.track, race: SEEDS.race, gen: SEEDS.gen }),
   // Camera control for a tournament host. mode: 'overview' | 'action' | 'chase'
   // | 'top'. 'action' is the first tracking (follow) camera. Purely visual —
   // does not affect the deterministic sim.
@@ -7843,12 +8301,72 @@ window.marbleAPI = {
       cells,
     };
   },
-  newCourse(trackSeed) {
+  // Rebuild the course for a track seed. `gen` is the course generation the
+  // race was recorded under (see COURSE_GEN_LATEST); omitted, the current
+  // setting stays (the page default is the latest generation).
+  newCourse(trackSeed, gen) {
     if (trackSeed !== undefined) {
       SEEDS.track = trackSeed >>> 0;
       SEEDS.pinnedTrack = true;   // keep it until explicitly changed
     }
+    if (gen !== undefined && gen !== null && Number.isFinite(Number(gen))) {
+      SEEDS.gen = Math.max(COURSE_GEN_MIN, Math.min(COURSE_GEN_LATEST, Math.round(Number(gen))));
+    }
     restartBtn.click();
+  },
+  courseGenLatest: COURSE_GEN_LATEST,
+  // ---- dev / test harness (not used by the tournament host) ---------------
+  // Drop the marbles onto a cell of the built course, at a fraction `u` along
+  // it (0 entry … 1 exit), a lateral offset (+ = the marble's right) and a
+  // forward speed; the gate opens. Then debugStep(n) advances n fixed steps
+  // and debugMarbles() reports where everyone is — enough to test a piece in
+  // isolation with chosen entry conditions.
+  debugPlace(cellIndex, specs) {
+    const c = pathCells[cellIndex];
+    if (!c) return false;
+    const cs = CONFIG.cellSize;
+    const od = DIRS[c.outDir];
+    prepareRace(SEEDS.race);
+    finishOrder.length = 0;
+    beginRace(); // gate open, physics stream reseeded, sim clock zeroed — a real start
+    marbles.forEach((m, i) => {
+      const s = specs[i];
+      if (!s) { m.finished = true; m.mesh.visible = false; return; }
+      const u = s.u === undefined ? 0.05 : s.u;
+      const lx = (u - 0.5) * cs;
+      const lat = s.lateral || 0;
+      const wx = c.gx * cs + od.dx * lx - od.dz * lat;
+      const wz = c.gz * cs + od.dz * lx + od.dx * lat;
+      const wy = c.entryY + (c.exitY - c.entryY) * u + CONFIG.marbleRadius + 0.08 + 0.01;
+      m.pos.set(wx, wy, wz);
+      m.vel.set(od.dx * (s.speed || 0), 0, od.dz * (s.speed || 0));
+      m.progress = nearestOnTrack(m.pos).t;
+      m._rescueBestProg = m.progress;
+      m._rescueTime = 0;
+      m.finished = false;
+      m.mesh.position.copy(m.pos);
+    });
+    return true;
+  },
+  debugStep(n) {
+    for (let i = 0; i < n; i++) stepPhysics(FIXED_DT);
+    return simTime;
+  },
+  debugMarbles() {
+    const cs = CONFIG.cellSize;
+    return marbles.map((m) => {
+      const c = cellByXZAt(m.pos.x, m.pos.y, m.pos.z);
+      let lx = null, lat = null, lane = null;
+      if (c) {
+        const od = DIRS[c.outDir];
+        lx = od.dx * (m.pos.x - c.gx * cs) + od.dz * (m.pos.z - c.gz * cs);
+        lat = -od.dz * (m.pos.x - c.gx * cs) + od.dx * (m.pos.z - c.gz * cs);
+        if (c.type === 'split') lane = splitLaneOf(splitProfileAt(c.splitPart, lx, c.splitMirror), lat);
+      }
+      return { lane: m.name, x: m.pos.x, y: m.pos.y, z: m.pos.z, speed: m.vel.length(), progress: m.progress, finished: !!m.finished,
+        cell: c ? c.index : null, cellType: c ? c.type : null, part: c && c.type === 'split' ? c.splitPart : null, localX: lx, lateral: lat, route: lane,
+        stall: +(m._rescueTime || 0).toFixed(2), rescued: !!m._debugRescued };
+    });
   },
   // Reset the marbles back to the start gate for the next race WITHOUT
   // rebuilding the course. A tournament reuses one course across many races, so
@@ -7932,6 +8450,7 @@ window.marbleAPI = {
     }
     return {
       trackSeed: SEEDS.track,
+      courseGen: SEEDS.gen,
       raceSeed: SEEDS.race,
       complete: finishOrder.length === marbles.length,
       // False when the finish line / podium would sit inside a block column —
@@ -7945,7 +8464,15 @@ window.marbleAPI = {
   stallStats: () => marbles.map((m) => ({ lane: m.name, stallMax: +(m._stallMax || 0).toFixed(2), finished: !!m.finished, timeSec: m.finishTime })),
   // Facts about the course on screen (for hosts and diagnostics).
   courseInfo() {
-    return { trackSeed: SEEDS.track, cells: pathCells.length, finishClear: _courseFinishClear };
+    const sm = pathCells.find((c) => c.type === 'split' && c.splitPart === 0);
+    return {
+      trackSeed: SEEDS.track,
+      courseGen: SEEDS.gen,
+      cells: pathCells.length,
+      finishClear: _courseFinishClear,
+      // Where the Split & Merge piece sits, if the course has one.
+      splitMerge: sm ? { index: sm.index, dir: sm.outDir, mirror: !!sm.splitMirror, entryY: sm.entryY, exitY: pathCells[sm.index + 2].exitY } : null,
+    };
   },
 };
 

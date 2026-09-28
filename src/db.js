@@ -136,6 +136,9 @@ class DB {
     addCol('races', 'client_seeds', 'TEXT'); // JSON array of 64-hex strings
     addCol('races', 'beacon', 'TEXT'); // JSON {source, round, value, …}
     addCol('races', 'track_attempt', 'INTEGER');
+    // Course generation the race was built under (NULL = 1, from before the
+    // course generator was versioned). Replays pass it to the game.
+    addCol('races', 'course_gen', 'INTEGER');
   }
 
   createTournament({ masterSeed, masterSeedHex = null, commit = null, commitSalt = null, createdAt }) {
@@ -167,8 +170,8 @@ class DB {
       .prepare(
         `INSERT INTO races
           (tournament_id, race_key, round_key, round_idx, index_in_round,
-           track_seed, race_seed, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`
+           track_seed, race_seed, course_gen, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
       )
       .run(
         tournamentId,
@@ -177,7 +180,8 @@ class DB {
         race.roundIdx,
         race.indexInRound,
         race.trackSeed,
-        race.raceSeed == null ? 0 : race.raceSeed // fixed at race_start (markStarted)
+        race.raceSeed == null ? 0 : race.raceSeed, // fixed at race_start (markStarted)
+        race.courseGen == null ? 1 : race.courseGen
       );
     const raceId = Number(info.lastInsertRowid);
     const slotStmt = this.db.prepare(
@@ -382,7 +386,7 @@ class DB {
       )
       .all(...args);
     const pathStmt = this.db.prepare(
-      `SELECT r.race_key, r.round_key, r.round_idx, r.index_in_round, r.track_seed, r.race_seed,
+      `SELECT r.race_key, r.round_key, r.round_idx, r.index_in_round, r.track_seed, r.race_seed, r.course_gen,
               r.public_contribution, r.revealed_at, res.rank, res.time_sec
          FROM results res JOIN races r ON r.id = res.race_id
         WHERE r.tournament_id = ? AND res.marble_id = ?
@@ -403,6 +407,7 @@ class DB {
         roundKey: p.round_key,
         indexInRound: p.index_in_round,
         trackSeed: p.track_seed,
+        courseGen: p.course_gen == null ? 1 : p.course_gen,
         raceSeed: p.race_seed,
         publicContribution: p.public_contribution || null,
         rank: p.rank,
@@ -485,7 +490,7 @@ class DB {
     return this.db
       .prepare(
         `SELECT r.tournament_id, r.race_key, r.round_key, r.index_in_round + 1 AS heat_number,
-                r.track_seed, r.race_seed,
+                r.track_seed, r.race_seed, COALESCE(r.course_gen, 1) AS course_gen,
                 res.rank, res.marble_id, res.marble_name, res.lane, res.time_sec
          FROM results res
          JOIN races r ON r.id = res.race_id
@@ -542,7 +547,7 @@ class DB {
     const races = this.db
       .prepare(
         `SELECT id, tournament_id, race_key, round_key, index_in_round,
-                track_seed, track_attempt, race_seed, scheduled_start, started_at, revealed_at,
+                track_seed, track_attempt, race_seed, course_gen, scheduled_start, started_at, revealed_at,
                 public_contribution, public_source, client_seeds, beacon
            FROM races
           WHERE revealed_at IS NOT NULL
@@ -561,6 +566,7 @@ class DB {
       indexInRound: r.index_in_round,
       trackSeed: r.track_seed,
       trackAttempt: r.track_attempt == null ? 0 : r.track_attempt,
+      courseGen: r.course_gen == null ? 1 : r.course_gen,
       raceSeed: r.race_seed,
       scheduledStart: r.scheduled_start,
       startedAt: r.started_at,

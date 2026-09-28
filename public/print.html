@@ -249,8 +249,15 @@ function clearBuild() {
 }
 
 // Prefill the seed: ?seed= wins, else the live server's current track.
+// The course generation to build under: ?gen= (a printed link from the race
+// page carries the race's own), else the live race's, else the latest — so an
+// old race's course prints exactly as it ran.
+let courseGen = null;
 (async function initSeed() {
-  const q = new URLSearchParams(location.search).get('seed');
+  const qs = new URLSearchParams(location.search);
+  const g = qs.get('gen');
+  if (g !== null && Number.isFinite(Number(g))) courseGen = Math.max(1, Math.round(Number(g)));
+  const q = qs.get('seed');
   if (q) { $('seed').value = q >>> 0; return; }
   const s = await fetchLiveSeed();
   $('seed').value = s !== null ? s : Math.floor(Math.random() * 0xffffffff);
@@ -264,6 +271,7 @@ async function fetchLiveSeed() {
     const races = s.rounds.flatMap((rd) => rd.races || []);
     const cur = s.current && races.find((x) => x.key === s.current.raceKey);
     const pick = cur || races.find((x) => !x.result) || races[races.length - 1];
+    if (pick && pick.courseGen != null && courseGen === null) courseGen = pick.courseGen;
     return pick ? pick.trackSeed >>> 0 : null;
   } catch { return null; }
 }
@@ -294,7 +302,7 @@ $('buildBtn').addEventListener('click', async () => {
   syncState();
   try {
     const a = await whenApiReady();
-    a.newCourse(seed);
+    a.newCourse(seed, courseGen === null ? a.courseGenLatest : courseGen);
     await new Promise((r) => setTimeout(r, 120));
     const d = a.getPrintGeometry();
     if (!d || !Array.isArray(d.cells) || !d.cells.length) throw new Error('the course produced no printable geometry');
