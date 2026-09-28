@@ -3854,7 +3854,8 @@ function buildSplitChannel(group, c, baseMat, paintMat) {
 
   // Speed bumps across the straight lane of the middle cell: the cosine
   // profile the physics uses, extruded from divider face to outer wall (a
-  // hair into each so they read as one piece).
+  // hair into each so they read as one piece). Plain floor wood, so the lane
+  // reads as a wooden channel with humps, not a painted strip.
   if (part === 1) {
     const P = CONFIG.splitMerge;
     const laneSign = prof(0).bumpLane;
@@ -3873,7 +3874,7 @@ function buildSplitChannel(group, c, baseMat, paintMat) {
       }
       sh.lineTo(xc + hw, FLOOR_T - 0.02);
       sh.closePath();
-      const bump = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: zB - zA, bevelEnabled: false }), paintMat);
+      const bump = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: zB - zA, bevelEnabled: false }), floorMat);
       bump.position.z = zA; // shape in XY, extruded along +Z from zA
       bump.castShadow = true;
       bump.receiveShadow = true;
