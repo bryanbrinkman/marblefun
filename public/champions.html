@@ -62,13 +62,15 @@
   .trow .nm { font: 700 1.0625rem var(--serif); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .trow .nm small { color: var(--muted); font-size: 0.8125rem; margin-right: 6px; }
   .trow .tt { font: 700 0.9375rem var(--serif); color: #6d4a00; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .table-rows { display: flex; flex-direction: column; }
+  .table-more { align-self: flex-start; margin-top: 8px; }
 
   /* ---- archive toolbar ---- */
   .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; }
   .search { position: relative; flex: 1 1 260px; max-width: 420px; }
   .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--muted); pointer-events: none; }
   .search input { width: 100%; padding-left: 44px; }
-  .toolbar .tno { width: 150px; }
+  .toolbar .tno { width: 172px; } /* room for the placeholder beside the number spinner */
   .count { font-family: var(--serif); color: var(--muted); margin: 0 0 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 24px; }
   .count b { color: var(--text); font-weight: 700; }
   .count .btn.quiet { min-height: 32px; padding: 2px 10px; font-size: 0.875rem; }
@@ -227,6 +229,13 @@
   }
 
   // ---- reigning champion, all-time numbers, title table --------------------
+  const titleTable = (hof) => (hof && (hof.titleTable || hof.mostTitles)) || [];
+  function lifetimeTitles(hof, id) {
+    if (!hof) return null;
+    if (hof.currentChampion && hof.currentChampion.id === id && Number.isInteger(hof.currentChampion.titles)) return hof.currentChampion.titles;
+    const row = titleTable(hof).find((m) => m.id === id);
+    return row ? row.titles : null;
+  }
   function renderHolder(hof, history) {
     const h = $('holder');
     const cur = hof && hof.currentChampion;
@@ -238,19 +247,22 @@
     }
     const row = history.find((t) => t.tournamentId === cur.tournamentId);
     const color = row && row.final && row.final[0] ? row.final[0].color : null;
-    const titles = (hof.mostTitles.find((m) => m.id === cur.id) || {}).titles || 1;
+    // Lifetime count from the same table the leaderboard and gallery use,
+    // matched by id (so renames don't split it); with no figure, say nothing
+    // rather than "first title".
+    const titles = lifetimeTitles(hof, cur.id);
     h.className = 'holder';
     h.href = '/gallery#' + cur.id;
     h.innerHTML =
       `<span class="ball" style="${ballStyle(cur.id, color)}"></span>` +
       `<span><span class="hk">Reigning champion</span>` +
       `<div class="hn"><small>#${pad(cur.id)}</small>${esc(nameFor(cur.id))}</div>` +
-      `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''} · ${titles === 1 ? 'first title' : `${ordinal(titles)} title`}</div></span>`;
+      `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''}${titles == null ? '' : ` · ${titles === 1 ? 'first title' : `${ordinal(titles)} title`}`}</div></span>`;
   }
   function renderTiles(hof, cov) {
     const t = $('tiles');
     if (!hof) { t.innerHTML = ''; return; }
-    const top = hof.mostTitles[0];
+    const top = titleTable(hof)[0];
     const cut = cov && cov.abandoned ? `${fmtN(cov.abandoned)} cut short` : '';
     const tiles = [
       { b: fmtN(hof.tournamentsCompleted), i: 'Tournaments completed', s: `${fmtN(hof.racesRun)} races run${cut ? ' · ' + cut : ''}` },
@@ -260,18 +272,25 @@
     ];
     t.innerHTML = tiles.map((x) => `<div class="tile"><b class="${x.gold ? 'gold' : ''}">${x.b}</b><i>${x.i}</i><small>${x.s}</small></div>`).join('');
   }
+  const TOP = 5;
+  let _fullTable = false;
   function renderTitles(hof) {
     const wrap = $('titles');
-    const rows = hof ? hof.mostTitles : [];
+    const rows = titleTable(hof);
     if (!rows.length) { wrap.innerHTML = '<div class="empty">The title table fills in as tournaments finish.</div>'; return; }
-    wrap.innerHTML = rows
+    // Every champion is in the markup with its rank and count; the first
+    // five show, the rest open on request (and fold away again).
+    wrap.innerHTML = `<div class="table-rows" id="titleRows">` + rows
       .map((m, i) =>
-        `<a class="trow" href="/gallery#${m.id}"><span class="rk">${i + 1}</span>` +
+        `<a class="trow" href="/gallery#${m.id}"${i >= TOP && !_fullTable ? ' hidden' : ''}><span class="rk">${i + 1}</span>` +
         `<span class="ball" style="${ballStyle(m.id)}"></span>` +
         `<span class="nm"><small>#${pad(m.id)}</small>${esc(nameFor(m.id))}</span>` +
         `<span class="tt">${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
       )
-      .join('');
+      .join('') + `</div>` +
+      (rows.length > TOP ? `<button class="btn quiet table-more" id="titlesMore" type="button" aria-expanded="${_fullTable ? 'true' : 'false'}" aria-controls="titleRows">${_fullTable ? 'Show the top five' : `View full standings (${rows.length} champions)`}</button>` : '');
+    const btn = $('titlesMore');
+    if (btn) btn.addEventListener('click', () => { _fullTable = !_fullTable; renderTitles(hof); $('titlesMore').focus(); });
   }
 
   // ---- the archive -------------------------------------------------------------

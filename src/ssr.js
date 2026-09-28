@@ -141,19 +141,23 @@ function renderChampions(html, { history = [], hof = null, manifest = {}, covera
   } else {
     const row = history.find((t) => t.tournamentId === cur.tournamentId);
     const color = row && row.final && row.final[0] ? row.final[0].color : null;
-    const titles = ((hof.mostTitles || []).find((m) => m.id === cur.id) || {}).titles || 1;
+    // The holder's lifetime count comes with it (it is not always in the top
+    // ten); a table lookup by id is the fallback, and no figure means no
+    // ordinal — never "first title" by default.
+    const table = hof.titleTable || hof.mostTitles || [];
+    const titles = Number.isInteger(cur.titles) ? cur.titles : (table.find((m) => m.id === cur.id) || {}).titles;
     holder =
       `<span class="ball" style="${champBall(cur.id, color, manifest)}"></span>` +
       `<span><span class="hk">Reigning champion</span>` +
       `<div class="hn"><small>#${pad(cur.id)}</small>${esc(nameFor(cur.id))}</div>` +
-      `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''} · ${titles === 1 ? 'first title' : `${ordinal(titles)} title`}</div></span>`;
+      `<div class="hs">Won Tournament ${cur.tournamentId}${row && row.completedAt ? ' · ' + fmtDate(row.completedAt) : ''}${titles == null ? '' : ` · ${titles === 1 ? 'first title' : `${ordinal(titles)} title`}`}</div></span>`;
     html = html.replace('<a class="holder none" id="holder" href="/champions"><!--SSR:HOLDER-->Loading the record books…<!--/SSR:HOLDER--></a>',
       `<a class="holder" id="holder" href="/gallery#${cur.id}">${holder}</a>`);
   }
 
   // Tiles
   if (hof) {
-    const top = (hof.mostTitles || [])[0];
+    const top = (hof.titleTable || hof.mostTitles || [])[0];
     const rep = (hof.repeatChampions || []).length;
     const cut = coverage && coverage.abandoned ? `${fmtN(coverage.abandoned)} cut short` : '';
     const tiles = [
@@ -165,21 +169,26 @@ function renderChampions(html, { history = [], hof = null, manifest = {}, covera
     html = fill(html, 'TILES', tiles.map((x) => `<div class="tile"><b class="${x.gold ? 'gold' : ''}">${x.b}</b><i>${x.i}</i><small>${x.s}</small></div>`).join(''));
   }
 
-  // Title table
-  const rows = hof ? hof.mostTitles || [] : [];
+  // Title table: every champion in the markup, the first five shown, the
+  // rest behind the same disclosure the script drives.
+  const TOP = 5;
+  const rows = hof ? hof.titleTable || hof.mostTitles || [] : [];
   html = fill(
     html,
     'TITLES',
     rows.length
-      ? rows
-          .map(
-            (m, i) =>
-              `<a class="trow" href="/gallery#${m.id}"><span class="rk">${i + 1}</span>` +
-              `<span class="ball" style="${champBall(m.id, null, manifest)}"></span>` +
-              `<span class="nm"><small>#${pad(m.id)}</small>${esc(nameFor(m.id))}</span>` +
-              `<span class="tt">${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
-          )
-          .join('')
+      ? `<div class="table-rows" id="titleRows">` +
+          rows
+            .map(
+              (m, i) =>
+                `<a class="trow" href="/gallery#${m.id}"${i >= TOP ? ' hidden' : ''}><span class="rk">${i + 1}</span>` +
+                `<span class="ball" style="${champBall(m.id, null, manifest)}"></span>` +
+                `<span class="nm"><small>#${pad(m.id)}</small>${esc(nameFor(m.id))}</span>` +
+                `<span class="tt">${m.titles} title${m.titles > 1 ? 's' : ''}</span></a>`
+            )
+            .join('') +
+          `</div>` +
+          (rows.length > TOP ? `<button class="btn quiet table-more" id="titlesMore" type="button" aria-expanded="false" aria-controls="titleRows">View full standings (${rows.length} champions)</button>` : '')
       : '<div class="empty">The title table fills in as tournaments finish.</div>'
   );
 

@@ -58,8 +58,20 @@
   .notes b { color: var(--text); }
   h2 { font: 700 1.125rem var(--serif); margin: 0 0 12px; }
   h2 small { font: 400 0.875rem var(--sans); color: var(--muted); margin-left: 8px; }
-  .opts { display: flex; gap: 6px 16px; flex-wrap: wrap; align-items: center; margin-top: 10px; font-size: 0.875rem; color: var(--muted); }
-  .opts label { font: inherit; text-transform: none; letter-spacing: 0; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; cursor: pointer; }
+  .opts { display: flex; gap: 0 18px; flex-wrap: wrap; align-items: center; margin: 12px 0 0; padding: 4px 0 0; border: 0; border-top: 1px solid var(--line); font-size: 0.875rem; color: var(--text); }
+  .opts legend { font: 600 0.6875rem/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 0; margin-bottom: 2px; }
+  .opts label { font: inherit; text-transform: none; letter-spacing: 0; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+  .opts input { width: 18px; height: 18px; }
+  .opts-help { flex-basis: 100%; margin: 0 0 4px; font-size: 0.8125rem; color: var(--muted); }
+  .row.actions { margin-top: 10px; }
+  .tech { margin-top: 6px; font-size: 0.8125rem; color: var(--muted); }
+  .tech summary { cursor: pointer; min-height: 32px; display: inline-flex; align-items: center; font-weight: 700; }
+  .tech summary::before { content: '▸'; margin-right: 6px; font-size: 0.9em; }
+  .tech[open] summary::before { content: '▾'; }
+  .tech pre { margin: 4px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--field); color: var(--text); font: 0.75rem/1.5 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+  #status[data-level="stale"] { color: #6d4a00; }
+  .export-note { align-self: center; font-size: 0.8125rem; color: var(--muted); }
+  .pv-off .tech { margin-top: 12px; text-align: left; }
   #frameBox { position: fixed; width: 10px; height: 10px; left: -9999px; top: 0; overflow: hidden; }
   #frameBox iframe { width: 900px; height: 700px; border: 0; }
   @media (max-width: 760px) { .card { padding: 14px; } input[type=number].field, select.field { width: 100%; min-width: 0; } .row > div { flex: 1 1 200px; } }
@@ -107,11 +119,21 @@
           <option value="999999">No limit (display model)</option>
         </select>
       </div>
+    </div>
+    <fieldset class="opts" id="pieceOpts">
+      <legend>Piece options</legend>
+      <label><input type="checkbox" id="addSupports" checked /> bake breakaway supports</label>
+      <label><input type="checkbox" id="hollowBlocks" checked /> hollow big blocks</label>
+      <label><input type="checkbox" id="incScenery" /> include table &amp; scenery</label>
+      <p class="opts-help">Piece size, printer and these options apply instantly to the pieces, the preview and every download — no rebuild needed. A different seed needs a rebuild.</p>
+    </fieldset>
+    <div class="row actions">
       <div><button class="btn" id="liveBtn" type="button">📡 Use the live track</button></div>
       <div><button class="btn" id="randomBtn" type="button">🎲 Random track</button></div>
       <div><button class="btn primary" id="buildBtn" type="button">🔨 Build for print</button></div>
     </div>
     <p id="status" role="status" aria-live="polite" data-level="idle"></p>
+    <details class="tech" id="statusTech" hidden><summary>Technical details</summary><pre id="statusDetail"></pre></details>
     <p id="fitWarn" hidden></p>
     <div class="stats" id="stats" hidden>
       <span>Pieces <b id="stModules">–</b></span>
@@ -128,19 +150,14 @@
     <h2>Preview<small id="previewHint">drag to orbit, wheel to zoom; each colour is one course module</small></h2>
     <canvas id="preview"></canvas>
     <div class="pv-off" id="previewOff" hidden role="status">
-      <p><b>3D preview unavailable</b> on this device or browser.</p>
-      <small id="previewWhy"></small>
-      <p>The track was generated all the same — the piece list and downloads below are the real thing.</p>
+      <p id="previewWhy">3D preview is unavailable in this browser. Your pieces are ready to download.</p>
       <button class="btn sm" id="previewRetry" type="button">Try the preview again</button>
+      <details class="tech" id="previewTech" hidden><summary>Technical details</summary><pre id="previewDetail"></pre></details>
     </div>
     <div class="row" style="margin-top:12px" id="exportRow">
       <button class="btn primary" id="dlZip" type="button">⬇ All pieces (.zip)</button>
       <button class="btn" id="dlFull" type="button">⬇ Whole track, one file (.stl)</button>
-    </div>
-    <div class="opts">
-      <label><input type="checkbox" id="addSupports" checked /> bake breakaway supports</label>
-      <label><input type="checkbox" id="hollowBlocks" checked /> hollow big blocks</label>
-      <label><input type="checkbox" id="incScenery" /> include table &amp; scenery</label>
+      <span class="export-note" id="exportNote"></span>
     </div>
   </div>
 
@@ -187,21 +204,42 @@ function whenApiReady() {
 // Geometry, preview and export are tracked apart (public/print-state.js): a
 // dead WebGL context must not read as a failed build, and a failed build must
 // not leave the last build's numbers and downloads on screen.
-const ps = { geometry: 'idle', preview: 'idle', seed: null, pieces: 0, error: '', previewError: '' };
-function setStatus(text, level) { $('status').textContent = text; $('status').dataset.level = level || 'idle'; }
+const ps = { geometry: 'idle', preview: 'idle', seed: null, pieces: 0, error: '', previewError: '', exportError: '', stale: false };
+function setStatus(text, level, detail) {
+  $('status').textContent = text;
+  $('status').dataset.level = level || 'idle';
+  const t = $('statusTech');
+  t.hidden = !detail;
+  $('statusDetail').textContent = detail || '';
+  if (!detail) t.open = false;
+}
 function syncState() {
   const st = PrintState.printStatus(ps);
-  if (st.level !== 'idle') setStatus(st.text, st.level);
+  if (st.level !== 'idle') setStatus(st.text, st.level, st.detail);
   const ready = PrintState.exportReady(ps);
   $('dlZip').disabled = !ready;
   $('dlFull').disabled = !ready;
   for (const b of $('modules').querySelectorAll('button')) b.disabled = !ready;
-  const off = ps.geometry === 'ok' && ps.preview === 'failed';
+  $('exportNote').textContent = ps.geometry === 'ok' ? (ps.stale ? 'Rebuild first — these files would be the old track.' : 'Downloads use the size, printer and options set above.') : '';
+  const pvs = PrintState.previewStatus(ps);
+  const off = !!pvs;
   $('preview').hidden = off;
   $('previewOff').hidden = !off;
   $('previewHint').hidden = off;
-  if (off) $('previewWhy').textContent = ps.previewError ? `(${ps.previewError})` : '';
+  if (off) {
+    $('previewWhy').textContent = pvs.text;
+    $('previewTech').hidden = !pvs.detail;
+    $('previewDetail').textContent = pvs.detail;
+  }
 }
+// The seed is the one setting a build can't absorb on the spot: a different
+// number means the pieces on screen are the old track's.
+function seedChanged() {
+  if (ps.geometry !== 'ok') return;
+  ps.stale = (($('seed').value || 0) >>> 0) !== ps.seed;
+  syncState();
+}
+$('seed').addEventListener('input', seedChanged);
 function clearBuild() {
   data = null; modules = [];
   $('stats').hidden = true; $('fitWarn').hidden = true;
@@ -233,7 +271,7 @@ $('liveBtn').addEventListener('click', async () => {
   setStatus('Fetching the live track seed…', 'loading');
   const s = await fetchLiveSeed();
   if (s === null) setStatus('No live server reachable — enter a seed by hand.', 'error');
-  else { $('seed').value = s; setStatus('Live track seed loaded — hit Build.', 'ok'); }
+  else { $('seed').value = s; seedChanged(); if (!ps.stale) setStatus('Live track seed loaded — hit Build.', 'ok'); }
 });
 
 // One-click roulette: roll a fresh seed and build it straight away, so you
@@ -252,7 +290,7 @@ $('buildBtn').addEventListener('click', async () => {
   // A new build starts from nothing: the previous track's figures and files
   // must never stand in for this one.
   clearBuild();
-  Object.assign(ps, { geometry: 'building', preview: 'idle', seed, pieces: 0, error: '', previewError: '' });
+  Object.assign(ps, { geometry: 'building', preview: 'idle', seed, pieces: 0, error: '', previewError: '', exportError: '', stale: false });
   syncState();
   try {
     const a = await whenApiReady();
@@ -708,7 +746,7 @@ function renderModules() {
     b.className = 'btn sm';
     b.type = 'button';
     b.textContent = '.stl';
-    b.addEventListener('click', () => download(`${m.name}.stl`, stlForParts(m.parts, true)));
+    b.addEventListener('click', () => exportFile(() => download(`${m.name}.stl`, stlForParts(m.parts, true))));
     div.appendChild(b);
     wrap.appendChild(div);
   }
@@ -756,10 +794,23 @@ function download(name, bytes) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
-$('dlFull').addEventListener('click', () => {
-  if (!PrintState.exportReady(ps)) return;
-  download(`marblerun_track_${data.trackSeed}.stl`, stlForParts(modules.flatMap((m) => m.parts), true));
-});
+// Every export reads `modules` — the pieces as currently computed for the
+// selected size, printer and options — and reports its own failure without
+// touching the build.
+function exportFile(fn) {
+  if (!PrintState.exportReady(ps)) return false;
+  try {
+    fn();
+    ps.exportError = '';
+    syncState();
+    return true;
+  } catch (e) {
+    ps.exportError = e && e.message ? e.message : String(e);
+    syncState();
+    return false;
+  }
+}
+$('dlFull').addEventListener('click', () => exportFile(() => download(`marblerun_track_${data.trackSeed}.stl`, stlForParts(modules.flatMap((m) => m.parts), true))));
 
 // Store-only ZIP (no compression) — enough to bundle the piece STLs.
 const CRC_TABLE = (() => {
@@ -816,12 +867,14 @@ function makeZip(files) {
 $('dlZip').addEventListener('click', () => {
   if (!PrintState.exportReady(ps)) return;
   setStatus('Bundling piece STLs…', 'loading');
-  const files = modules.map((m) => ({ name: `${m.name}.stl`, bytes: stlForParts(m.parts, true) }));
-  download(`marblerun_track_${data.trackSeed}_pieces.zip`, makeZip(files));
-  setStatus(`Piece bundle downloaded — ${files.length} STL files.`, 'ok');
+  const ok = exportFile(() => {
+    const files = modules.map((m) => ({ name: `${m.name}.stl`, bytes: stlForParts(m.parts, true) }));
+    download(`marblerun_track_${data.trackSeed}_pieces.zip`, makeZip(files));
+  });
+  if (ok) setStatus(`Piece bundle downloaded — ${modules.length} STL files.`, 'ok');
 });
 // For the export verification harness: the same functions the buttons call.
-window.__print = { stlForParts, makeZip, get modules() { return modules; }, get data() { return data; }, get state() { return ps; } };
+window.__print = { stlForParts, makeZip, exportFile, get modules() { return modules; }, get data() { return data; }, get state() { return ps; } };
 </script>
 </body>
 </html>

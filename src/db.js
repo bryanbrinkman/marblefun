@@ -468,7 +468,12 @@ class DB {
       tournamentsCompleted: champs.length,
       racesRun: this.db.prepare(`SELECT COUNT(*) c FROM races WHERE status='done'`).get().c,
       distinctChampions: titles.size,
-      currentChampion: last ? { id: last.id_m, name: last.name, tournamentId: last.id } : null,
+      // The holder carries its own lifetime count: it is not always among the
+      // top ten, and a reader must never fall back to "first title".
+      currentChampion: last ? { id: last.id_m, name: last.name, tournamentId: last.id, titles: titles.get(last.id_m).titles } : null,
+      // Every champion with its lifetime count (the full leaderboard), and
+      // the long-standing top ten for readers that only want the head of it.
+      titleTable: leaders,
       mostTitles: leaders.slice(0, 10),
       repeatChampions: leaders.filter((l) => l.titles > 1),
       longestStreak: streak && streak.len > 1 ? streak : null,

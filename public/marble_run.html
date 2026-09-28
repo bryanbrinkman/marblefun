@@ -6591,6 +6591,11 @@ function buildFlags() {
     pole.receiveShadow = true;
     pole.userData.cellIdx = ci;
     pole.userData.skipGhost = true;  // skinny pillar — ghosting looks like a glitchy stripe
+    // Flags land on Math.random() cells (pure decoration, never physics), so
+    // they must stay out of the 3D-print export or the same seed would print
+    // a different set of pieces on every visit — and a 1.3 mm pole on a tile
+    // could even push that piece over the printer's height.
+    pole.userData.noPrint = true;
     addToWorld(pole);
 
     // Brass finial
@@ -6602,6 +6607,7 @@ function buildFlags() {
     finial.position.set(center.x + cornerX, tileTopY + poleHeight + 0.06, center.z + cornerZ);
     finial.castShadow = true;
     finial.userData.cellIdx = ci;
+    finial.userData.noPrint = true;
     addToWorld(finial);
 
     // Flag: segmented plane, hoist edge at local x=0 so the flag extends in +x.
@@ -6633,6 +6639,7 @@ function buildFlags() {
     flagMesh.castShadow = true;
     flagMesh.receiveShadow = true;
     flagMesh.userData.cellIdx = ci;
+    flagMesh.userData.noPrint = true;
     addToWorld(flagMesh);
 
     // Per-flag state — slight variation per flag so the synchronized direction shift
@@ -7762,17 +7769,38 @@ window.marbleAPI = {
   // sim changes. Scenery without a cell (table, fence) lands in idx -1 so the
   // print page can leave it out. Skips flat planes (shadows/splashes),
   // transparent materials (glass/ghosts) and sprites — those aren't solids.
+  //
+  // The read is of the course AT REST: pieces still mid construct-up intro
+  // (risen/shrunk for a few seconds after a build) are measured at their
+  // settled transform, a mesh that is momentarily ghosted (see-through for
+  // the camera) is judged by its real material, and a mesh listed both on
+  // its own and inside a listed group is taken once. So the same seed
+  // always yields the same pieces, whenever the print page asks.
   getPrintGeometry() {
     const groups = new Map();
     const v = new THREE.Vector3();
+    const seen = new Set();
+    const parked = [];
+    for (const obj of worldObjects) {
+      obj.traverse((node) => {
+        const it = node.userData && node.userData._intro;
+        if (!it) return;
+        parked.push({ node, y: node.position.y, scale: node.scale.clone() });
+        node.position.y = it.oy;
+        node.scale.copy(it.os);
+      });
+    }
     for (const obj of worldObjects) {
       obj.updateMatrixWorld(true);
       obj.traverse((node) => {
-        if (!node.isMesh || !node.geometry) return;
-        if (node.userData.noPrint) return; // decorative flair (velvet ropes etc.)
+        if (!node.isMesh || !node.geometry || seen.has(node)) return;
+        seen.add(node);
+        if (node.userData.noPrint) return; // decorative flair (velvet ropes, flags etc.)
+        if (node.userData.isMarble) return; // the balls are not track — and they move
         const g = node.geometry;
         if (/Plane/.test(g.type)) return;
-        const mats = Array.isArray(node.material) ? node.material : [node.material];
+        const realMat = node.userData._origMat || node.material;
+        const mats = Array.isArray(realMat) ? realMat : [realMat];
         if (mats.some((m) => m && m.transparent && m.opacity < 0.9)) return;
         const pos = g.attributes && g.attributes.position;
         if (!pos) return;
@@ -7798,6 +7826,9 @@ window.marbleAPI = {
         entry.push({ tris: out, minX, maxX, minY, maxY, minZ, maxZ });
       });
     }
+    // Put the intro back exactly where it was; the next frame carries on.
+    for (const p of parked) { p.node.position.y = p.y; p.node.scale.copy(p.scale); }
+    for (const p of parked) p.node.updateMatrixWorld(true);
     const cells = [];
     for (const [idx, parts] of groups) {
       const cell = idx >= 0 && pathCells[idx] ? pathCells[idx] : null;

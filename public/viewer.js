@@ -418,12 +418,23 @@ function trackTick() {
       if (rendererState === 'failed') hideRaceBoard();
       else renderRaceBoard(onStage, prog);
       renderDrawerLive(onStage, prog);
+      // The stage's own list (no 3D) follows the same progress whatever the
+      // drawer shows — it was only fed through the "This race" tab before.
+      renderStageFallbackLive(prog);
     }
   } else {
     _lastProg = null;
     hideRaceBoard();
   }
   requestAnimationFrame(trackTick);
+}
+let _fallbackLiveAt = 0;
+function renderStageFallbackLive(prog) {
+  if (rendererState !== 'failed' || replaying) return;
+  const now = Date.now();
+  if (now - _fallbackLiveAt < 500) return;
+  _fallbackLiveAt = now;
+  renderStageFallback(prog);
 }
 requestAnimationFrame(trackTick);
 
@@ -1121,6 +1132,10 @@ function tickPreRaceCountdown() {
       }
     }
   }
+  // With no 3D the stage list carries the countdown and phase too; keep it
+  // current between races (live positions arrive from trackTick). Same
+  // ticker, no extra timer; the renderer skips unchanged markup.
+  if (rendererState === 'failed' && !isLiveNow()) renderStageFallback();
   const panel = el('preRace');
   if (!panel) return;
   if (panel.hidden) {
@@ -2262,7 +2277,6 @@ function renderDrawerLive(race, prog) {
   _drawerLiveAt = now;
   const rows = el('drRows');
   if (rows) rows.innerHTML = raceRows(race, prog);
-  renderStageFallback(prog);
 }
 
 function renderBracketPanel() {
@@ -2831,27 +2845,37 @@ function renderStageFallback(prog) {
   const recorded = !!(replaying && _replayRace && _replayMode === 'recorded');
   box.classList.toggle('replaying', recorded);
   el('ssFailed').classList.toggle('replaying', recorded);
+  // Only rewrite the panel when its markup actually changes, so a focused
+  // button inside it (the replay's) keeps focus across the live ticks.
+  const paint = (html) => {
+    if (box._html === html) return false;
+    box._html = html;
+    box.innerHTML = html;
+    return true;
+  };
   if (replaying && _replayRace && _replayMode === 'recorded') {
     const r = _replayRace;
-    box.innerHTML = `<h3 class="dr-h"><b>Replay · ${esc(raceLabel(r))}</b><small>Recorded result</small></h3>` +
+    const changed = paint(`<h3 class="dr-h"><b>Replay · ${esc(raceLabel(r))}</b><small>Recorded result</small></h3>` +
       `<p class="dr-empty">3D animation is unavailable on this device, so here is the recorded finishing order.</p>` +
       `<div class="row-list">${raceRows(r)}</div>` +
-      `<div class="dr-inline ss-replay-acts"><button class="btn sm primary" id="ssReplayRetry">Try 3D again</button><button class="btn sm" id="ssReplayLive">Back to live</button></div>`;
-    el('ssReplayRetry').addEventListener('click', retryRenderer);
-    el('ssReplayLive').addEventListener('click', () => stopReplay(true));
+      `<div class="dr-inline ss-replay-acts"><button class="btn sm primary" id="ssReplayRetry">Try 3D again</button><button class="btn sm" id="ssReplayLive">Back to live</button></div>`);
+    if (changed) {
+      el('ssReplayRetry').addEventListener('click', retryRenderer);
+      el('ssReplayLive').addEventListener('click', () => stopReplay(true));
+    }
     return;
   }
-  if (inDrawer) { if (box.innerHTML) box.innerHTML = ''; return; }
+  if (inDrawer) { paint(''); return; }
   const cur = currentRace();
   const focus = cur && !cur.result ? cur : lastDoneRace();
-  if (!focus) { box.innerHTML = model.rounds.length ? '<p class="dr-empty">The first race will be announced shortly.</p>' : ''; return; }
+  if (!focus) { paint(model.rounds.length ? '<p class="dr-empty">The first race will be announced shortly.</p>' : ''); return; }
   const v = stateView();
   const announced = !!(cur && !cur.result);
   const status = announced ? (isLiveNow() ? 'Live' : v.primary) : 'Finished';
   const nxt = announced ? null : nextDrawnRace();
-  box.innerHTML = `<h3 class="dr-h"><b>${esc(announced ? raceLabel(focus) : `Last result: ${raceShort(focus)}`)}</b><small>${esc(status)}</small></h3>` +
+  paint(`<h3 class="dr-h"><b>${esc(announced ? raceLabel(focus) : `Last result: ${raceShort(focus)}`)}</b><small>${esc(status)}</small></h3>` +
     `<div class="row-list">${raceRows(focus, isLiveNow() ? prog || _lastProg : null)}</div>` +
-    (nxt ? `<p class="dr-empty">Next: ${esc(raceShort(nxt))} · Waiting to start</p>` : '');
+    (nxt ? `<p class="dr-empty">Next: ${esc(raceShort(nxt))} · Waiting to start</p>` : ''));
 }
 {
   if (el('ssRetry')) el('ssRetry').addEventListener('click', retryRenderer);

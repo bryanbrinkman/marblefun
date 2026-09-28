@@ -8,6 +8,7 @@
 
 const assert = require('node:assert');
 const { DB } = require('../src/db');
+const { Tournament } = require('../src/tournament');
 
 let passed = 0;
 function check(name, fn) {
@@ -64,7 +65,7 @@ check('title ordinals are cumulative over the whole table, not the page', () => 
   assert.strictEqual(hof.mostTitles.find((m) => m.id === 2).titles, 5, 'the title table agrees with lifetimeTitles');
   assert.strictEqual(db.marbleCareers().find((c) => c.id === 2).titles, 5, 'so does the gallery career');
   assert.strictEqual(hof.tournamentsCompleted, 7);
-  assert.deepStrictEqual(hof.currentChampion, { id: 2, name: hof.currentChampion.name, tournamentId: 8 }, 'reigning = latest completed, not the running one');
+  assert.deepStrictEqual(hof.currentChampion, { id: 2, name: hof.currentChampion.name, tournamentId: 8, titles: 5 }, 'reigning = latest completed, not the running one, with its lifetime count');
 });
 
 check('coverage counts completed, cut-short and running tournaments from one table', () => {
@@ -83,6 +84,39 @@ check('history filters: cursor, one tournament, by marble, by date', () => {
   assert.deepStrictEqual(db.championHistory({ marbleIds: [9] }).map((r) => [r.tournamentId, r.titleNumber]), [[5, 2], [3, 1]]);
   assert.deepStrictEqual(db.championHistory({ since: T0 + 4 * day, until: T0 + 7 * day }).map((r) => r.tournamentId), [7, 5, 4]);
   assert.deepStrictEqual(db.championHistory(3).map((r) => r.tournamentId), [8, 7, 5], 'a bare number is still the page size');
+});
+
+check('the reigning champion carries its own lifetime count, even outside the top ten; renames never split a marble', () => {
+  // A fresh table: eleven marbles with three titles each push the head of
+  // the leaderboard past ten entries; then #7 — "Bork" at first, renamed
+  // "Bork II" — wins twice and reigns with two titles.
+  const d2 = new DB(':memory:');
+  let when = Date.UTC(2026, 5, 1);
+  const win = (marble, name) => {
+    when += day;
+    const id = d2.createTournament({ masterSeed: 5, createdAt: when - 3600e3 });
+    d2.insertMarbles(id, [{ id: marble, name }]);
+    const roster = [marble, 50, 51, 52, 53].map((m, slot) => ({ slot, marbleId: m, marbleName: m === marble ? name : 'M' + m, lane: 'L' + slot, color: '#fff' }));
+    const raceId = d2.insertRace(id, { key: 'final:0', roundKey: 'final', roundIdx: 2, indexInRound: 0, trackSeed: 7, raceSeed: 9, roster });
+    d2.saveResult(raceId, roster.map((s, i) => ({ ...s, timeSec: 30 + i })), when - 60e3);
+    d2.setChampion(id, marble, when);
+    return id;
+  };
+  for (let round = 0; round < 3; round++) for (let m = 20; m < 31; m++) win(m, 'M' + m);
+  const first = win(7, 'Bork'); // raced under an old name
+  const second = win(7, Tournament.marbleNameFor(7)); // raced under today's name
+  const hof = d2.hallOfFame();
+  assert.strictEqual(hof.mostTitles.length, 10, 'the top ten is still the top ten');
+  assert.ok(!hof.mostTitles.some((m) => m.id === 7), '#7 is not in it');
+  assert.deepStrictEqual(hof.currentChampion, { id: 7, name: hof.currentChampion.name, tournamentId: second, titles: 2 }, 'the holder says 2 titles, not "first"');
+  assert.strictEqual(hof.titleTable.length, 12, 'the full table has every champion');
+  assert.strictEqual(hof.titleTable.find((m) => m.id === 7).titles, 2, 'counted by id across the rename');
+  const rows = d2.championHistory({ marbleIds: [7] });
+  assert.deepStrictEqual(rows.map((r) => [r.tournamentId, r.titleNumber, r.lifetimeTitles]), [[second, 2, 2], [first, 1, 2]], 'the archive ordinals agree with the lifetime count');
+  assert.strictEqual(rows[1].champion.nameAtTheTime, 'Bork', 'the older win keeps the name raced under');
+  assert.strictEqual(rows[0].champion.nameAtTheTime, null, 'the newest win raced under the current name');
+  assert.strictEqual(d2.marbleCareers().find((c) => c.id === 7).titles, 2, 'the gallery career agrees');
+  d2.close();
 });
 
 db.close();

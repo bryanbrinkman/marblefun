@@ -51,7 +51,7 @@ check('champions: history renders holder, tiles, title table, count line, timeli
   const history = [{
     tournamentId: 3, masterSeed: 424242, masterSeedHex: 'ab'.repeat(32), commit: 'c0ffee', createdAt: 1, completedAt: 1700000000000,
     champion: { id: 73, name: 'Molder', nameAtTheTime: 'Frosty Drifter' },
-    titleNumber: 4, lifetimeTitles: 13,
+    titleNumber: 4, lifetimeTitles: 7,
     path: [
       { raceKey: 'heats:5', roundKey: 'heats', indexInRound: 5, rank: 1, timeSec: 41.2 },
       { raceKey: 'semis:1', roundKey: 'semis', indexInRound: 1, rank: 2, timeSec: 37.5 },
@@ -60,17 +60,28 @@ check('champions: history renders holder, tiles, title table, count line, timeli
     final: [{ rank: 1, marbleId: 73, marbleName: 'Molder', lane: 'RED', color: '#d9534f', timeSec: 30.6 }],
     racesRun: 25,
   }];
-  const hof = { tournamentsCompleted: 1194, racesRun: 25, distinctChampions: 1, currentChampion: { id: 73, name: 'Molder', tournamentId: 3 }, mostTitles: [{ id: 73, name: 'Molder', titles: 13, lastTournamentId: 3 }], repeatChampions: [], longestStreak: null };
+  // The holder (#73, 7 titles) sits outside the top ten of a 12-champion table.
+  const table = [...Array.from({ length: 11 }, (_, i) => ({ id: 20 + i, name: 'M' + (20 + i), titles: 13 - i, lastTournamentId: 2 })), { id: 73, name: 'Molder', titles: 7, lastTournamentId: 3 }];
+  const hof = { tournamentsCompleted: 1194, racesRun: 25, distinctChampions: 12, currentChampion: { id: 73, name: 'Molder', tournamentId: 3, titles: 7 }, titleTable: table, mostTitles: table.slice(0, 10), repeatChampions: [], longestStreak: null };
   const coverage = { completed: 1194, abandoned: 9, running: 1, oldestId: 184, newestId: 14 };
   const gaps = [{ tournamentId: 14, status: 'running', createdAt: 1, endedAt: null, racesDone: 2 }, { tournamentId: 5, status: 'abandoned', racesDone: 3 }, { tournamentId: 4, status: 'abandoned', racesDone: 0 }];
   const html = renderChampions(read('champions.html'), { history, hof, coverage, gaps, hasMore: true });
   assert.ok(html.includes('Reigning champion'));
   assert.ok(html.includes('href="/gallery#73"'));
-  assert.ok(html.includes('13th title</div>'), 'the holder names the lifetime count as an ordinal');
+  assert.ok(html.includes('7th title</div>'), 'the holder names its own lifetime count, though it is outside the top ten');
+  const holderHtml = (html.match(/<a class="holder" id="holder"[^>]*>([\s\S]*?)<\/a>/) || [])[1] || '';
+  assert.ok(holderHtml.includes('7th title') && !holderHtml.includes('first title'), 'no "first title" by default');
+  // Count within the rendered table only: the page's inline script source also mentions the class.
+  const rowsHtml = (html.match(/<div class="table-rows" id="titleRows">([\s\S]*?)<\/div>/) || [])[1] || '';
+  assert.strictEqual((rowsHtml.match(/class="trow"/g) || []).length, 12, 'every champion is in the table');
+  assert.strictEqual((rowsHtml.match(/class="trow" href="[^"]+" hidden/g) || []).length, 7, 'the first five show, the rest are folded');
+  assert.ok(html.includes('aria-expanded="false" aria-controls="titleRows">View full standings (12 champions)</button>'), 'an accessible disclosure reveals the rest');
+  assert.ok(html.includes('<span class="rk">12</span>') && html.includes('7 titles</span>'), 'rank and title totals stay in the markup');
   assert.ok(html.includes('Wildcard run'));
   assert.ok(html.includes('HEAT 6') && html.includes('SEMI 2') && html.includes('FINAL'));
   assert.ok(html.includes('13 titles'), 'the title table shows lifetime titles');
-  assert.ok(html.includes('4th title <small>(13 today)</small>'), 'the archive card shows the count as of that tournament, and the lifetime figure beside it');
+  assert.ok(html.includes('13</b><i>Most titles</i>'), 'the most-titles tile reads the full table');
+  assert.ok(html.includes('4th title <small>(7 today)</small>'), 'the archive card shows the count as of that tournament, and the lifetime figure beside it');
   assert.ok(!html.includes('🏆🏆'), 'title counts use a number, never a string of trophies');
   assert.ok(html.includes('<summary>Road to the title</summary>'), 'the road stays collapsed until requested');
   assert.ok(html.includes('<summary>Technical details</summary>') && html.includes('<b>master seed</b> 424242') && html.includes('<b>commitment</b> c0ffee'), 'seeds live in their own technical disclosure');
