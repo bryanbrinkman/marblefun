@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: DNS (A / AAAA / CNAME) for both hosts
         run: |
-          # run: 24
+          # run: 25
           for h in marblerun.fun www.marblerun.fun marblefun.fly.dev; do
             echo "=== $h"
             for t in A AAAA CNAME; do echo "-- $t"; dig +short "$t" "$h" @1.1.1.1 || true; done
@@ -39,7 +39,7 @@ jobs:
             echo "--- marble_run.html markers"; curl -4 -sS --max-time 20 "https://$h/marble_run.html" | grep -c 'html.embed #loadingOverlay\|window.__boot\|stallStats\|segment.s own direction\|PARKED_LIFT\|finial.userData.noPrint\|node.userData.isMarble) return\|function splitProfileAt\|COURSE_GEN_LATEST = 2\|buildSplitChannel' || true
             echo "--- gallery markers"; curl -4 -sS --max-time 20 "https://$h/gallery" | grep -o 'The Lost Marble Collection\|class="case"\|class="plaque"\|class="floor"\|class="box-floor"\|class="box-lip"\|id="viewList"\|class="box-top"\|mix-blend-mode: multiply\|clip-path: polygon\|class="brand-logo"\|id="dShare"\|image-set(\|Champion</span>\|Your pick\|id="listHead"\|class="m-cols"\|No owner credited\|class="site-nav"' | sort | uniq -c
             echo "--- champions markers"; curl -4 -sS --max-time 20 "https://$h/champions" | grep -o 'The Hall of Champions\|class="gap\|class="champ"\|<summary>Technical details</summary>\|title</span>\|completed tournaments\|cut short\|class="site-nav"\|id="titlesMore"\|id="titleRows"\|View full standings' | sort | uniq -c
-            echo "--- print markers"; curl -4 -sS --max-time 20 "https://$h/print" | grep -o 'print-state.js\|id="previewOff"\|class="site-nav"\|data-level="idle"\|id="pieceOpts"\|id="statusTech"\|id="previewTech"\|id="exportNote"\|Settings changed' | sort | uniq -c
+            echo "--- print markers"; curl -4 -sS --max-time 20 "https://$h/print" | grep -o 'print-state.js\|id="previewOff"\|class="site-nav"\|data-level="idle"\|id="pieceOpts"\|id="statusTech"\|id="previewTech"\|id="exportNote"\|Settings changed\|id="modulesCount"\|class="card pieces"' | sort | uniq -c
             echo "--- shared sheet + state module"; for f in site.css print-state.js; do curl -4 -sS -o /dev/null -w "$f %{http_code} %{content_type} %{size_download}\n" --max-time 20 "https://$h/$f"; done
             echo "--- champions API coverage"; curl -4 -sS --max-time 20 "https://$h/api/champions?limit=3" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("coverage", d.get("coverage")); print("gaps", [(g["tournamentId"], g["status"]) for g in d.get("gaps", [])][:12]); print("history", [(h["tournamentId"], h["champion"]["id"], h.get("titleNumber"), h.get("lifetimeTitles")) for h in d.get("history", [])])'
             echo "--- course generation on recent races"; curl -4 -sS --max-time 20 "https://$h/api/history?limit=3" | python3 -c 'import json,sys; d=json.load(sys.stdin); print([(r["raceKey"], r["trackSeed"], r.get("courseGen")) for r in d.get("races", [])])'
