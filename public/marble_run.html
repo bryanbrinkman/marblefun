@@ -7271,6 +7271,18 @@ function updateCamera(dt) {
     return;
   }
 
+  // Once the first winner is home and the podium is up, the finish is one
+  // shot: the slow push-in on the winners below. Every follow camera stands
+  // down here (and setCamMode refuses to re-engage one until the next race),
+  // so the view never jumps to chase each later finisher across the line.
+  if (STATE.podiumShown && podiumGroup && podiumGroup.visible) {
+    if (STATE.actionCam || STATE.chaseCam || STATE.topCam || STATE.reverseCam || STATE.tracksideCam || STATE.closeCam) {
+      STATE.actionCam = STATE.chaseCam = STATE.topCam = STATE.reverseCam = STATE.tracksideCam = STATE.closeCam = false;
+      camera.up.set(0, 1, 0);
+      actionCamBtn.classList.remove('active');
+    }
+  }
+
   // Close Cam (Shift+Z): ultra-tight trailing shot of the followed marble (or
   // the leader) — Marble Blast's framing without the driving. With an ortho
   // camera the "closeness" is all zoom; the camera itself rides high behind
@@ -8943,6 +8955,16 @@ function playGateSound() {
 
 // Switch to a specific camera mode: 'overview', 'action', or 'chase'.
 function setCamMode(mode) {
+  // The finish is the podium's shot (see updateCamera). While it runs, any
+  // request — a follow camera or a cut back to overview — only stands the
+  // follow cameras down; the framing is left where the push-in has taken it,
+  // never snapped back to the saved pre-race wide shot.
+  if (STATE.podiumShown && podiumGroup && podiumGroup.visible) {
+    STATE.actionCam = STATE.chaseCam = STATE.topCam = STATE.reverseCam = STATE.tracksideCam = STATE.closeCam = false;
+    camera.up.set(0, 1, 0);
+    actionCamBtn.classList.remove('active');
+    return;
+  }
   // Save overview state before LEAVING overview, so we can restore later.
   const leavingOverview =
     !STATE.actionCam && !STATE.chaseCam && !STATE.topCam && !STATE.reverseCam &&

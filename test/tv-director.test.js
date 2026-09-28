@@ -31,7 +31,7 @@ check('phases classify the race situation', () => {
   assert.strictEqual(phaseOf(live(), RULES), 'pack');
   assert.strictEqual(phaseOf(live({ prog: P([0.6, 0.4, 0.3, 0.2, 0.1]) }), RULES), 'breakaway');
   assert.strictEqual(phaseOf(live({ prog: P([0.9, 0.5, 0.4, 0.3, 0.2]) }), RULES), 'finish');
-  assert.strictEqual(phaseOf(live({ prog: P([1, 0.5, 0.4, 0.3, 0.2], ['RED']) }), RULES), 'finish');
+  assert.strictEqual(phaseOf(live({ prog: P([1, 0.5, 0.4, 0.3, 0.2], ['RED']) }), RULES), 'results'); // first winner home
   assert.strictEqual(phaseOf(live({ resultAt: 1 }), RULES), 'results');
 });
 
@@ -76,14 +76,22 @@ check('the viewer\'s marble gets a guaranteed chase shot, held for followHoldMs'
   assert.notStrictEqual(later.cut, 'chase');
 });
 
-check('finish approach switches to the finish set; results linger then reset to wide', () => {
+check('finish approach switches to the finish set; the first winner home hands the stage to the podium shot for good', () => {
   const d = new Director();
   d.lastCutAt = -100000;
   assert.strictEqual(d.decide(live({ now: 1000, cam: 'trackside', prog: P([0.9, 0.5, 0.4, 0.3, 0.2]) })).cut, 'action');
-  // Results: linger — no cut before resultsLingerMs.
+  // The first marble crosses: cut to the wide shot at once (the game pushes in
+  // on the podium from it), even though the last cut was a moment ago.
+  const t1 = 1500;
+  assert.strictEqual(d.decide(live({ now: t1, cam: 'action', prog: P([1, 0.95, 0.8, 0.6, 0.4], ['RED']) })).cut, 'overview');
+  // The later finishers cross one by one: nothing cuts away from the podium.
+  for (const [t, fin] of [[t1 + 2000, ['RED', 'BLUE']], [t1 + 6000, ['RED', 'BLUE', 'GREEN']], [t1 + 20000, ['RED', 'BLUE', 'GREEN', 'YELLOW']]]) {
+    assert.strictEqual(d.decide(live({ now: t, cam: 'overview', prog: P([1, 1, 1, 1, 0.7], fin) })).cut, null);
+  }
+  // Even with the result in and the linger long over — still the podium.
   const t0 = 100000;
-  assert.strictEqual(d.decide(live({ now: t0 + 1000, cam: 'action', resultAt: t0 })).cut, null);
-  assert.strictEqual(d.decide(live({ now: t0 + RULES.resultsLingerMs + 10, cam: 'action', resultAt: t0 })).cut, 'overview');
+  assert.strictEqual(d.decide(live({ now: t0 + RULES.resultsLingerMs + 10, cam: 'overview', resultAt: t0 })).cut, null);
+  assert.strictEqual(d.decide(live({ now: t0 + 1000, cam: 'action', resultAt: t0 })).cut, 'overview');
 });
 
 check('between races the stage resets to the wide shot; unsupported shots are skipped', () => {

@@ -26,7 +26,9 @@
 //   pack      — tight racing → action, with trackside / reverse variety
 //   breakaway — one marble clear → ride it, then face it
 //   finish    — the leader is closing on the line → finish-oriented shots
-//   results   — someone's home → linger on the finish, then go wide
+//   results   — the first winner is home → the wide shot, which the game
+//               turns into the slow push-in on the podium; no more cuts, and
+//               never a follow shot chasing the later finishers over the line
 
 (function (root, factory) {
   const api = factory();
@@ -49,7 +51,7 @@
     closeFirstAfterMs: 12000, // …never in the opening seconds of a race
     closeMinPos: 0.12, // …and only once the subject is clear of the gate
     closeMaxPos: 0.78, // …and before the finish shots take over
-    resultsLingerMs: 6500, // hold the finish after the last result, then go wide
+    resultsLingerMs: 6500, // (kept for hosts that read it) results are the wide/podium shot throughout
     idleCutMs: 4000, // between races, wait this long before resetting to wide
     idleShot: 'overview',
     phases: {
@@ -59,7 +61,7 @@
       pack: ['action', 'trackside', 'reverse'],
       breakaway: ['chase', 'reverse', 'action'],
       finish: ['action', 'reverse'],
-      results: ['action'],
+      results: ['overview'],
     },
     // Modes the director must never override — the viewer chose them on purpose.
     handsOff: ['blast', 'split'],
@@ -70,13 +72,13 @@
   function phaseOf(ctx, rules) {
     if (!ctx.live && !ctx.replaying) return 'idle';
     const prog = ctx.prog || [];
-    if (ctx.resultAt || (prog.length && prog.every((p) => p.finished))) return 'results';
+    if (ctx.resultAt || (prog.length && prog.some((p) => p.finished))) return 'results';
     if (typeof ctx.raceElapsedMs === 'number' && ctx.raceElapsedMs < rules.gateHoldMs) return 'gate';
     const act = prog.filter((p) => !p.finished).sort((a, b) => b.pos - a.pos);
     if (!act.length) return prog.length ? 'results' : 'gate';
     const leader = act[0];
     if (leader.pos < rules.earlyUntil) return 'early';
-    if (leader.pos > rules.finishFrom || prog.some((p) => p.finished)) return 'finish';
+    if (leader.pos > rules.finishFrom) return 'finish';
     const gap = act.length > 1 ? leader.pos - act[1].pos : 1;
     return gap > rules.breakawayGap ? 'breakaway' : 'pack';
   }
@@ -119,15 +121,13 @@
         return { cut: null, phase };
       }
 
-      // Results: linger on the finish, then reset to the wide shot.
+      // Results: the moment the first winner is home, hand the stage to the
+      // wide shot — the game frames the podium from it and pushes in slowly —
+      // and leave it there. No shot follows the later finishers to the line.
       if (phase === 'results') {
-        const linger = ctx.resultAt ? now - ctx.resultAt : 0;
-        if (cam !== r.idleShot && ctx.resultAt && linger >= r.resultsLingerMs && since >= r.minShotMs) {
-          return this._cut(r.idleShot, now, phase);
-        }
-        if (cam === r.idleShot && !ctx.resultAt && since >= r.phaseCutMs) {
-          return this._cut(r.phases.results[0], now, phase); // marbles finishing on a wide shot — go in
-        }
+        this.followHoldUntil = 0;
+        this.closeHoldUntil = 0;
+        if (cam !== r.idleShot) return this._cut(r.idleShot, now, phase);
         return { cut: null, phase };
       }
 
