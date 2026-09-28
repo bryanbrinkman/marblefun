@@ -68,6 +68,14 @@
   .tech summary { cursor: pointer; min-height: 32px; display: inline-flex; align-items: center; font-weight: 700; }
   .tech summary::before { content: '▸'; margin-right: 6px; font-size: 0.9em; }
   .tech[open] summary::before { content: '▾'; }
+  /* The pieces list is long: a disclosure, closed until asked for. */
+  .pieces > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; min-height: 32px; }
+  .pieces > summary::-webkit-details-marker { display: none; }
+  .pieces > summary::before { content: '▸'; font-size: 0.9em; color: var(--muted); }
+  .pieces[open] > summary::before { content: '▾'; }
+  .pieces > summary h2 { margin: 0; }
+  .pieces h2 .count { font: 600 0.8125rem var(--sans); color: var(--muted); }
+  .pieces[open] .modules { margin-top: 12px; }
   .tech pre { margin: 4px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--field); color: var(--text); font: 0.75rem/1.5 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
   #status[data-level="stale"] { color: #6d4a00; }
   .export-note { align-self: center; font-size: 0.8125rem; color: var(--muted); }
@@ -161,10 +169,10 @@
     </div>
   </div>
 
-  <div class="card" id="modulesCard" hidden>
-    <h2>Pieces<small>tall modules are split into a/b/c… segments that each fit your printer</small></h2>
+  <details class="card pieces" id="modulesCard" hidden>
+    <summary><h2>Pieces <span class="count" id="modulesCount"></span><small>tall modules are split into a/b/c… segments that each fit your printer</small></h2></summary>
     <div class="modules" id="modules"></div>
-  </div>
+  </details>
 
   <div class="card notes">
     <h2>Print notes</h2>
@@ -743,6 +751,7 @@ function renderPreview() {
 function renderModules() {
   const wrap = $('modules');
   wrap.innerHTML = '';
+  $('modulesCount').textContent = `(${modules.length}${modules.some((m) => m.over) ? ', some too big for the bed' : ''})`;
   for (const m of modules) {
     const div = document.createElement('div');
     div.className = 'mod' + (m.over ? ' over' : '');
