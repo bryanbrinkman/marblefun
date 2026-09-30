@@ -2299,6 +2299,10 @@ function _bakeWorld() {
     (m.isMeshStandardMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial);
   const hidden = []; // meshes whose every part got merged
   for (const obj of worldObjects) {
+    // Marbles move: neither the ball nor anything riding on it (skin model,
+    // gloss shell, lane marker — its children) can be merged into the static
+    // world. Skip the whole subtree; a `return` in traverse() skips one node.
+    if (obj.userData && obj.userData.isMarble) continue;
     obj.updateMatrixWorld(true);
     obj.traverse((n) => {
       if (!n.isMesh || !n.geometry || !n.material || seen.has(n)) return;
@@ -7971,12 +7975,13 @@ window.marbleAPI = {
       });
     }
     for (const obj of worldObjects) {
+      if (obj.userData && obj.userData.isMarble) continue; // a marble and its skin model are not track
       obj.updateMatrixWorld(true);
       obj.traverse((node) => {
         if (!node.isMesh || !node.geometry || seen.has(node)) return;
         seen.add(node);
         if (node.userData.noPrint) return; // decorative flair (velvet ropes, flags etc.)
-        if (node.userData.isMarble) return; // the balls are not track — and they move
+        if (node.userData.isMarble) return; // the balls are not track — and they move (their subtrees are skipped below)
         const g = node.geometry;
         if (/Plane/.test(g.type)) return;
         const realMat = node.userData._origMat || node.material;
@@ -9530,6 +9535,13 @@ function collectGhostCandidates() {
   _ghostCandidates.length = 0;
   _ghostCandidateData.length = 0;
   for (const obj of worldObjects) {
+    // A marble is never an occluder — and neither is anything riding on it:
+    // its skin model's meshes, gloss shell and lane marker are its children,
+    // and a `return` inside traverse() only skips the one node, not the
+    // subtree. Ghosting a skin swapped its textured materials for the plain
+    // ghost clone, so a skinned marble caught in another marble's x-ray
+    // bubble turned white for as long as it stayed there.
+    if (obj.userData && obj.userData.isMarble) continue;
     obj.traverse(child => {
       if (!child.isMesh || !child.material) return;
       if (child.userData && child.userData.isMarble) return;
