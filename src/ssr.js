@@ -306,6 +306,18 @@ function renderHome(html, { snapshot = null, hof = null } = {}) {
   if (hof && hof.currentChampion) lines.push(`<li>Reigning champion: <a href="/gallery#${hof.currentChampion.id}">#${pad(hof.currentChampion.id)} ${esc(hof.currentChampion.name)}</a> (${hof.tournamentsCompleted} tournaments completed).</li>`);
   html = fill(html, 'HOME-NOSCRIPT', `<ul>${lines.join('')}</ul>`);
   html = fill(html, 'HOME', '');
+
+  // The embedded game builds a course the moment it loads. Told nothing, it
+  // picks a random seed, and the viewer then rebuilds the live course over
+  // it — two loading screens, two tracks. So the frame is given the course
+  // the viewer will ask for: the announced or running race's, else the last
+  // finished race's (the stage shows that one between races). The viewer
+  // recognises the course already built (see ensureCourse) and leaves it.
+  const stage = (announced && announced.trackSeed != null ? announced : null) || (lastDone && lastDone.trackSeed != null ? lastDone : null);
+  if (stage) {
+    const gen = stage.courseGen == null ? 1 : stage.courseGen;
+    html = html.replace('src="marble_run.html?embed=1"', `src="marble_run.html?embed=1&amp;track=${Number(stage.trackSeed) >>> 0}&amp;gen=${Number(gen) >>> 0}"`);
+  }
   return html;
 }
 

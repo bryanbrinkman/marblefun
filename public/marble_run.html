@@ -8481,6 +8481,9 @@ window.marbleAPI = {
     return {
       trackSeed: SEEDS.track,
       courseGen: SEEDS.gen,
+      // True while a build is in progress (the staged boot build, or a
+      // rebuild): the course for these seeds is not ready to race on yet.
+      building: !!_constructing || !curve,
       cells: pathCells.length,
       finishClear: _courseFinishClear,
       // Where the Split & Merge piece sits, if the course has one.

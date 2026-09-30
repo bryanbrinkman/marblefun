@@ -73,8 +73,30 @@ function whenApiReady() {
 // the course generator built it, so an old race replays on the course it ran
 // on. Records without one are generation 1.
 const courseKey = (race) => `${race.trackSeed}:${race.courseGen || 1}`;
+// The course the frame is showing right now, by the game's own account. The
+// server boots the frame straight into the live course (its address carries
+// track + gen), so the first request here usually finds it already built.
+function frameCourseKey(a) {
+  try {
+    const s = a.getSeeds && a.getSeeds();
+    if (s && s.track != null) return `${s.track >>> 0}:${s.gen || 1}`;
+  } catch {}
+  return null;
+}
+// True while the frame is still building its course (the staged boot build
+// runs across frames; racing on it before the rails are laid would fail).
+function frameBuilding(a) {
+  try { const i = a.courseInfo && a.courseInfo(); return !!(i && i.building); } catch { return false; }
+}
 async function ensureCourse(race) {
   const a = await whenApiReady();
+  if (builtTrack === null && frameCourseKey(a) === courseKey(race)) {
+    // The frame booted into this very course: let its build finish instead
+    // of tearing it down for an identical synchronous rebuild.
+    const until = Date.now() + 60000;
+    while (frameBuilding(a) && Date.now() < until) await new Promise((r) => setTimeout(r, 100));
+    if (!frameBuilding(a)) builtTrack = courseKey(race);
+  }
   if (builtTrack !== courseKey(race)) {
     a.newCourse(race.trackSeed, race.courseGen || 1);
     builtTrack = courseKey(race);
@@ -2824,7 +2846,11 @@ function retryRenderer() {
   // The old document stays in the frame until the new one loads; blank its
   // API first so the watcher can't mistake it for the retry coming up ready.
   try { const w = gameFrame.contentWindow; if (w) { w.marbleAPI = undefined; w.__boot = null; } } catch {}
-  try { gameFrame.src = 'marble_run.html?embed=1&retry=' + _retryN; } catch {}
+  // Boot the fresh frame straight into the course on stage, like the server does.
+  const cur = currentRace();
+  const src = (cur && !cur.result && cur.trackSeed != null ? cur : null) || lastDoneRace();
+  const course = src && src.trackSeed != null ? `&track=${src.trackSeed >>> 0}&gen=${src.courseGen || 1}` : '';
+  try { gameFrame.src = 'marble_run.html?embed=1&retry=' + _retryN + course; } catch {}
   watchRenderer(true);
 }
 // With no 3D view, the stage shows the current race as a list instead —

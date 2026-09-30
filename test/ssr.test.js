@@ -104,7 +104,7 @@ check('home: race title, progress and a noscript summary; untouched with no snap
   const snapshot = {
     tournament: { id: 9, champion: null },
     current: { raceKey: 'heats:3', phase: 'running' },
-    rounds: [{ key: 'heats', races: [0, 1, 2, 3].map((i) => ({ key: 'heats:' + i, roundKey: 'heats', indexInRound: i, roster, result: i < 3 ? [{}] : null })) }],
+    rounds: [{ key: 'heats', races: [0, 1, 2, 3].map((i) => ({ key: 'heats:' + i, roundKey: 'heats', indexInRound: i, roster, trackSeed: 1000 + i, courseGen: 2, result: i < 3 ? [{}] : null })) }],
     standings: Array.from({ length: 100 }, (_, i) => ({ id: i + 1, status: i < 12 ? 'eliminated' : 'alive' })),
   };
   const html = renderHome(src, { snapshot, hof: null });
@@ -113,6 +113,7 @@ check('home: race title, progress and a noscript summary; untouched with no snap
   assert.ok(html.includes('3 of 25 races run · 88 marbles still in'));
   assert.ok(html.includes('#01 M1'));
   assert.ok(!html.includes('<!--SSR:'), 'no anchors left behind');
+  assert.ok(html.includes('src="marble_run.html?embed=1&amp;track=1003&amp;gen=2"'), 'the game frame boots straight into the running race\'s course');
   // Between races (the current race has its result, the next isn't announced):
   // heading and counter name the same race, the last result stands apart.
   const between = { ...snapshot, current: { raceKey: 'heats:2', phase: 'done' } };
@@ -120,9 +121,12 @@ check('home: race title, progress and a noscript summary; untouched with no snap
   assert.ok(h2.includes('id="raceTitle">Next: Qualifier 4<'), 'between races the heading names the next race');
   assert.ok(h2.includes('id="progressCount">Race 4 of 25<'), 'the counter matches the heading');
   assert.ok(h2.includes('id="rcNote">Last result: Qualifier 3<'), 'the last result is named separately');
+  assert.ok(h2.includes('src="marble_run.html?embed=1&amp;track=1002&amp;gen=2"'), 'between races the frame boots into the last finished race\'s course');
   const fresh = { ...snapshot, current: null, rounds: [{ key: 'heats', races: snapshot.rounds[0].races.map((r) => ({ ...r, result: null })) }] };
   const h3 = renderHome(src, { snapshot: fresh, hof: null });
   assert.ok(h3.includes('id="raceTitle">Next: Qualifier 1<') && h3.includes('id="progressCount">Race 1 of 25<') && h3.includes('id="rcNote"></span>'), 'a fresh tournament: first race named, no last result');
+  const unseeded = { ...fresh, rounds: [{ key: 'heats', races: fresh.rounds[0].races.map((r) => ({ ...r, trackSeed: undefined })) }] };
+  assert.ok(renderHome(src, { snapshot: unseeded, hof: null }).includes('src="marble_run.html?embed=1"'), 'no course to show yet: the frame keeps its plain address');
 });
 
 console.log(`\n${passed} checks passed`);
