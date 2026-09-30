@@ -195,55 +195,6 @@
     text-transform: uppercase;
   }
 
-  /* Marble-blast HUD: small banner with control hints. */
-  #mbHud {
-    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: rgba(58, 40, 23, 0.8);
-    color: #fff8e6;
-    padding: 10px 20px;
-    border-radius: 6px;
-    z-index: 10;
-    pointer-events: none;
-    text-align: center;
-    border: 2px solid rgba(255, 248, 230, 0.2);
-  }
-  #mbHud .mbTitle {
-    font-family: inherit; font-size: 14px; font-weight: bold;
-    letter-spacing: 0.3em; margin-bottom: 4px;
-    color: #ffd76e;
-  }
-  #mbHud .mbHints {
-    font-family: inherit; font-size: 10px;
-    letter-spacing: 0.15em; opacity: 0.85;
-  }
-  #mbHud { pointer-events: none; }
-  #mbHud #mbExit {
-    pointer-events: auto; margin-top: 7px; cursor: pointer;
-    font: bold 11px/1 inherit; letter-spacing: 0.12em;
-    color: #fff8e6; background: rgba(142, 47, 34, 0.85);
-    border: 2px solid rgba(255, 248, 230, 0.35); border-radius: 8px;
-    padding: 8px 16px; min-height: 32px;
-  }
-  /* Touch devices drive with the pad, not the keyboard — hide key hints. */
-  @media (pointer: coarse) { #mbHud .mbHints { display: none; } }
-  #mbTouch {
-    position: fixed; left: 0; right: 0; bottom: 86px; z-index: 11;
-    display: flex !important; align-items: flex-end; justify-content: space-between;
-    padding: 0 26px calc(env(safe-area-inset-bottom, 0px));
-    pointer-events: none;
-  }
-  #mbTouch[hidden] { display: none !important; }
-  #mbTouch .mbPad { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-  #mbTouch .mbPadRow { display: flex; gap: 6px; }
-  #mbTouch button {
-    pointer-events: auto; width: 54px; height: 54px; border-radius: 14px;
-    font: bold 16px/1 inherit; color: #fff8e6; cursor: pointer;
-    background: rgba(58, 40, 23, 0.75); border: 2px solid rgba(255, 248, 230, 0.3);
-    touch-action: none; -webkit-user-select: none; user-select: none;
-  }
-  #mbTouch button:active { background: rgba(109, 184, 62, 0.8); }
-  #mbTouch #mbJump { width: 88px; height: 64px; border-radius: 18px; font-size: 13px; letter-spacing: 0.1em; }
-
   /* Loading overlay — full-screen cover during the initial course build. The
      marble loader: an outer conic-gradient ring fills clockwise with progress
      (driven by the --p custom property, 0-100), and the inner circle is styled
@@ -482,26 +433,6 @@
   <div class="splitLabel" style="bottom: 12px; right: 12px;">TOP</div>
 </div>
 
-<!-- Marble-blast HUD: shown ONLY while marble blast is active. Keyboard hints
-     on fine pointers; the touch pad below covers coarse pointers. -->
-<div id="mbHud" style="display:none;">
-  <div class="mbTitle">MARBLE BLAST</div>
-  <div class="mbHints">WASD / ARROWS MOVE · SPACE JUMP · ESC OR M EXIT</div>
-  <button id="mbExit" aria-label="Exit Marble Blast">✕ EXIT</button>
-</div>
-<!-- Touch driving pad: shown in blast mode on touch devices only. -->
-<div id="mbTouch" hidden>
-  <div class="mbPad">
-    <button data-mbk="w" aria-label="Forward">▲</button>
-    <div class="mbPadRow">
-      <button data-mbk="a" aria-label="Left">◀</button>
-      <button data-mbk="s" aria-label="Back">▼</button>
-      <button data-mbk="d" aria-label="Right">▶</button>
-    </div>
-  </div>
-  <button id="mbJump" data-mbk="space" aria-label="Jump">JUMP</button>
-</div>
-
 <!-- Loading overlay — covers the screen while the course builds at boot. The
      loader is a glossy marble with a conic-gradient progress ring around it;
      the percentage sits ON the marble. Fades out when the build completes. -->
@@ -610,7 +541,6 @@ const STATE = {
   topCam: false,
   closeCam: false,
   splitScreen: false,
-  marbleBlast: false,
   trailMode: false, // 'p' easter egg: black void + light-painting marble trails
 };
 
@@ -2298,8 +2228,6 @@ function clearWorld() {
   // Clear any tracked occlusion-ghost refs — the meshes are about to be disposed.
   _ghostedMeshes.clear();
   _ghostCandidatesDirty = true;
-  // Marble-blast collidable cache invalidated too (mesh refs are about to die).
-  _mbCollidableMeshes = null;
   // Collapsing pieces also need to clear — their disposed-by-clearWorld geometry
   // would otherwise cause a render crash when the next updateCollapse tries to
   // touch them. Any still-falling pieces just disappear (they're already on the
@@ -2332,7 +2260,7 @@ function clearWorld() {
 // its transform into the vertices. Draw calls drop by an order of magnitude.
 //
 // The originals stay in the scene, invisible: the physics never reads meshes,
-// but marble-blast's raycasts and the print export walk them, and nothing
+// but the print export walks them, and nothing
 // about the course data changes. Animated pieces (gate, fans, flags, marbles,
 // anything transparent or multi-material) are left alone. The bake is undone
 // before a collapse (pieces must tumble individually), when the world is
@@ -5825,157 +5753,6 @@ function nearestOnTrack(pos, hintT) {
   };
 }
 
-// Marble-blast mode: player-controlled mode where one marble responds to WASD/
-// arrow-key input + spacebar jump. Free physics — no curve projection. The marble
-// has its own gravity, floor collision via downward raycast against actual track
-// geometry, and wall collision via short horizontal raycasts. Player can drive
-// off the track if they jump high enough.
-const _mbInputKeys = { w: false, a: false, s: false, d: false, space: false };
-let _mbPlayerMarble = null;  // designated player marble, picked when M is pressed
-
-// Raycaster reused across physics frames (avoid allocating per-step).
-const _mbRaycaster = new THREE.Raycaster();
-// We want hits on the worldObjects, but we need the FLATTENED mesh list. Build it
-// lazily when marble-blast mode engages.
-let _mbCollidableMeshes = null;
-function _collectMbCollidables() {
-  _mbCollidableMeshes = [];
-  for (const obj of worldObjects) {
-    obj.traverse(node => {
-      if (node.isMesh && node.geometry && node.userData.isMarble !== true) {
-        _mbCollidableMeshes.push(node);
-      }
-    });
-  }
-}
-
-// Scratch vectors for marble-blast physics — reused across frames.
-const _mbDownRayOrigin = new THREE.Vector3();
-const _mbHorizDir = new THREE.Vector3();
-const _mbDownDir = new THREE.Vector3(0, -1, 0);
-
-// Step the player marble's physics in free-physics mode. Replaces the curve-based
-// integration entirely — no nearestOnTrack, no lateralOffset clamping. Just real
-// 3D motion with raycast collisions.
-function stepMarbleBlastPhysics(m, dt) {
-  if (!_mbCollidableMeshes) _collectMbCollidables();
-
-  // --- Input: world-space force from key state, basis = camera forward/right ---
-  let fX = 0, fZ = 0;
-  const dx = cameraTarget.x - camera.position.x;
-  const dz = cameraTarget.z - camera.position.z;
-  const dMag = Math.sqrt(dx * dx + dz * dz);
-  if (dMag > 0.001) {
-    const fwdX = dx / dMag;
-    const fwdZ = dz / dMag;
-    // Right vector: rotate forward 90° counter-clockwise in the XZ plane so that
-    // pressing D / Right strafes to SCREEN right. For forward (0,+1) (camera
-    // looking +Z) the right side is (-1,0). The mapping is (fwdX,fwdZ) → (-fwdZ, fwdX).
-    const rightX = -fwdZ;
-    const rightZ = fwdX;
-    if (_mbInputKeys.w) { fX += fwdX; fZ += fwdZ; }
-    if (_mbInputKeys.s) { fX -= fwdX; fZ -= fwdZ; }
-    if (_mbInputKeys.d) { fX += rightX; fZ += rightZ; }
-    if (_mbInputKeys.a) { fX -= rightX; fZ -= rightZ; }
-  }
-  const fMag = Math.sqrt(fX * fX + fZ * fZ);
-  if (fMag > 0.001) {
-    fX /= fMag; fZ /= fMag;
-    const thrust = 35;  // free-physics moves more snappily than curve-constrained
-    m.vel.x += fX * thrust * dt;
-    m.vel.z += fZ * thrust * dt;
-  }
-
-  // --- Gravity ---
-  // Use a slightly LIGHTER gravity than the race gravity (22) so jumps feel arcier
-  // and the marble doesn't slam into the track instantly on the slightest ledge.
-  m.vel.y -= 18 * dt;
-
-  // --- Friction-ish damping on XZ velocity (so marble slows when not thrusting) ---
-  // The race uses 0.992 multiplier per step — keep that here. Without input, marble
-  // gently coasts to a stop on flat surfaces.
-  m.vel.x *= 0.985;
-  m.vel.z *= 0.985;
-
-  // --- Integrate position ---
-  m.pos.addScaledVector(m.vel, dt);
-
-  // --- Floor collision via downward raycast ---
-  // Cast a ray DOWN from the marble's center. If a hit is within `marbleRadius`,
-  // we're touching the ground — clamp y and zero vertical velocity.
-  _mbDownRayOrigin.copy(m.pos);
-  _mbDownRayOrigin.y += 0.5;  // start ray a bit above center so we don't miss
-  _mbRaycaster.set(_mbDownRayOrigin, _mbDownDir);
-  _mbRaycaster.far = 0.5 + CONFIG.marbleRadius + 1.0;  // a bit beyond the marble's bottom
-  const downHits = _mbRaycaster.intersectObjects(_mbCollidableMeshes, false);
-  let grounded = false;
-  if (downHits.length > 0) {
-    const hit = downHits[0];
-    const floorY = hit.point.y;
-    const marbleBottom = m.pos.y - CONFIG.marbleRadius;
-    if (marbleBottom < floorY) {
-      // Push marble up to rest ON the floor
-      m.pos.y = floorY + CONFIG.marbleRadius;
-      if (m.vel.y < 0) m.vel.y = 0;
-      grounded = true;
-    } else if (Math.abs(marbleBottom - floorY) < 0.08) {
-      grounded = true;  // touching but not penetrating
-    }
-  }
-  m._mbGrounded = grounded;
-
-  // --- Wall collision via horizontal raycasts ---
-  // Cast 4 rays horizontally (±X, ±Z) up to marbleRadius + a little. If we hit
-  // something close, push the marble back and zero the velocity component along
-  // the wall normal (so we don't slide into the wall).
-  const wallProbeDist = CONFIG.marbleRadius + 0.15;
-  // Use 8 directions to catch corners better.
-  const probeDirs = [
-    [ 1, 0], [-1, 0], [ 0, 1], [ 0,-1],
-    [ 0.707, 0.707], [-0.707, 0.707], [ 0.707,-0.707], [-0.707,-0.707],
-  ];
-  for (const [px, pz] of probeDirs) {
-    _mbHorizDir.set(px, 0, pz);
-    _mbRaycaster.set(m.pos, _mbHorizDir);
-    _mbRaycaster.far = wallProbeDist;
-    const hits = _mbRaycaster.intersectObjects(_mbCollidableMeshes, false);
-    if (hits.length > 0) {
-      const hit = hits[0];
-      // Push marble back along the inverse direction.
-      const overlap = wallProbeDist - hit.distance;
-      if (overlap > 0) {
-        m.pos.x -= px * overlap;
-        m.pos.z -= pz * overlap;
-        // Zero velocity component along the probe direction (so we stop pushing
-        // into the wall).
-        const vDotN = m.vel.x * px + m.vel.z * pz;
-        if (vDotN > 0) {
-          m.vel.x -= px * vDotN * 1.2;  // bounce slightly (negative restitution)
-          m.vel.z -= pz * vDotN * 1.2;
-        }
-      }
-    }
-  }
-
-  // --- Update progress for camera + leaderboard tracking ---
-  // We still want to know roughly where the marble is along the curve so the
-  // leaderboard percentage updates as the player drives. Use nearestOnTrack but
-  // discard the projection — only steal the .t value.
-  const near = nearestOnTrack(m.pos, m.progress);
-  m.progress = near.t;
-
-  // --- Jump ---
-  if (_mbInputKeys.space) {
-    if (grounded && m.vel.y < 1.0) {
-      m.vel.y = 10;
-    }
-    _mbInputKeys.space = false;
-  }
-
-  // --- Update mesh ---
-  m.mesh.position.copy(m.pos);
-}
-
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 // Scratch vectors reused across stepPhysics calls. Avoids ~3 Vector3 allocations
@@ -6005,15 +5782,6 @@ function stepPhysics(dt) {
   }
   for (const m of marbles) {
     if (m.finished || m.onPodium) continue;
-    // In marble-blast mode, only the player marble moves; other marbles are
-    // frozen in place. The player marble uses a totally separate free-physics
-    // path (raycast collisions, no curve projection) — branch out early.
-    if (STATE.marbleBlast) {
-      if (m !== _mbPlayerMarble) continue;
-      stepMarbleBlastPhysics(m, dt);
-      continue;
-    }
-
     // Parked until the gate opens: held at the canonical spawn transform, no
     // gravity, no jostling. They used to run live physics while waiting —
     // rolling down the sloped start tile into the closed gate, squeezing five
@@ -7217,61 +6985,6 @@ let _podiumCamT = 0; // seconds the finish camera has been on the podium (drives
 let _panToStartZoom = 1.0;
 
 function updateCamera(dt) {
-  // Marble-blast mode: camera trails behind the player marble looking along the
-  // TRACK direction (not the marble's velocity). Using marble velocity would make
-  // the camera spin to follow every flick of input — pressing "left" would move
-  // the marble left briefly, then the camera would rotate to face the new
-  // direction, making "left" feel like "forward" and the controls feel like
-  // rotation. Using the curve tangent keeps screen-left = screen-left always.
-  if (STATE.marbleBlast && _mbPlayerMarble) {
-    const m = _mbPlayerMarble;
-    // Forward = curve tangent at marble's progress, XZ-projected.
-    const tan = curve.getTangentAt(Math.min(0.999, Math.max(0.001, m.progress)));
-    let fwdX = tan.x;
-    let fwdZ = tan.z;
-    const fMag = Math.sqrt(fwdX * fwdX + fwdZ * fwdZ);
-    if (fMag > 0.001) { fwdX /= fMag; fwdZ /= fMag; }
-    else { fwdX = 0; fwdZ = 1; }
-    // Smooth so the camera doesn't snap when the marble crosses sample boundaries.
-    if (chaseFwdX === undefined) { chaseFwdX = fwdX; chaseFwdZ = fwdZ; }
-    const smoothK = 1 - Math.pow(0.01, dt);
-    chaseFwdX += (fwdX - chaseFwdX) * smoothK;
-    chaseFwdZ += (fwdZ - chaseFwdZ) * smoothK;
-    const sMag = Math.sqrt(chaseFwdX * chaseFwdX + chaseFwdZ * chaseFwdZ);
-    if (sMag > 0.001) { chaseFwdX /= sMag; chaseFwdZ /= sMag; }
-
-    // Camera target lerps to the marble. Use a TIGHT lerp for snappy following.
-    const followK = 1 - Math.pow(0.001, dt);
-    cameraTarget.lerp(m.pos, followK);
-
-    camYaw = Math.atan2(-chaseFwdX, -chaseFwdZ) * 180 / Math.PI;
-    // Marble-blast cam zoom — 2x wider than the previous tight close-up (was 0.013,
-    // now 0.026) so the player can see more of what's ahead.
-    const targetZoom = 0.026;
-    zoomFactor += (targetZoom - zoomFactor) * (1 - Math.pow(0.1, dt));
-    updateOrthoCamera();
-
-    const yawR = camYaw * Math.PI / 180;
-    // Pitch raised from 15° to 25° — camera sits higher above the marble for a
-    // better view of the surrounding terrain. Still well below the chase cam's
-    // steep 50° angle, so it reads as third-person-shoulder rather than top-down.
-    const pitchOverride = 25 * Math.PI / 180;
-    const cosP = Math.cos(pitchOverride);
-    const sinP = Math.sin(pitchOverride);
-    const D = camDistance;
-    const ox = cosP * Math.sin(yawR) * D;
-    const oy = sinP * D;
-    const oz = cosP * Math.cos(yawR) * D;
-    camera.position.set(
-      cameraTarget.x + ox,
-      cameraTarget.y + oy,
-      cameraTarget.z + oz
-    );
-    camera.up.set(0, 1, 0);
-    camera.lookAt(cameraTarget);
-    return;
-  }
-
   // Once the first winner is home and the podium is up, the finish is one
   // shot: the slow push-in on the winners below. Every follow camera stands
   // down here (and setCamMode refuses to re-engage one until the next race),
@@ -7285,7 +6998,7 @@ function updateCamera(dt) {
   }
 
   // Close Cam (Shift+Z): ultra-tight trailing shot of the followed marble (or
-  // the leader) — Marble Blast's framing without the driving. With an ortho
+  // the leader) — a driver's-eye framing without the driving. With an ortho
   // camera the "closeness" is all zoom; the camera itself rides high behind
   // along the track direction, so it never clips into geometry.
   if (STATE.closeCam) {
@@ -7304,7 +7017,7 @@ function updateCamera(dt) {
       const followK = 1 - Math.pow(0.001, dt);
       cameraTarget.lerp(m.pos, followK);
       camYaw = Math.atan2(-chaseFwdX, -chaseFwdZ) * 180 / Math.PI;
-      const targetZoom = 0.022; // even tighter than the blast cam's 0.026
+      const targetZoom = 0.022; // tighter than any other follow shot
       zoomFactor += (targetZoom - zoomFactor) * (1 - Math.pow(0.1, dt));
       updateOrthoCamera();
       const yawR = camYaw * Math.PI / 180;
@@ -8196,21 +7909,17 @@ window.marbleAPI = {
     if (!_followLane && _followMarker) _followMarker.visible = false;
   },
   // Which camera the spectator currently has — lets the host viewer's unified
-  // control bar mark the active mode ('overview'|'action'|'chase'|'top'|'split'|'blast').
+  // control bar mark the active mode ('overview'|'action'|'chase'|'top'|'split').
   getCamera() {
     return currentCamMode();
   },
-  // Toggle (or force) the 4-way split view / marble-blast driving mode from the
-  // host viewer's control bar. Cosmetic and input-side only.
+  // Toggle (or force) the 4-way split view from the host viewer's control bar.
+  // Cosmetic only.
   setSplit(on) {
     const want = on === undefined ? !STATE.splitScreen : !!on;
     STATE.splitScreen = want;
     const l = document.getElementById('splitLabels');
     if (l) l.style.display = want ? 'block' : 'none';
-  },
-  setMarbleBlast(on) {
-    const want = on === undefined ? !STATE.marbleBlast : !!on;
-    if (want !== STATE.marbleBlast) toggleMarbleBlast();
   },
   // True while a course build is running or its construct-up intro is still
   // popping pieces into place — hosts can hold their overlays until the show
@@ -9532,22 +9241,6 @@ window.addEventListener('keydown', (e) => {
   // Don't capture when typing in an input/textarea
   if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
 
-  // Escape leaves marble blast (alongside M) and returns the previous camera.
-  if (e.key === 'Escape' && STATE.marbleBlast) {
-    toggleMarbleBlast();
-    return;
-  }
-
-  // Marble-blast input: track WASD and Space as held keys. Movement keys produce
-  // continuous force; space is single-fire per press (consumed by the physics step).
-  if (STATE.marbleBlast) {
-    if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp')    { _mbInputKeys.w = true; e.preventDefault(); return; }
-    if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft')  { _mbInputKeys.a = true; e.preventDefault(); return; }
-    if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown')  { _mbInputKeys.s = true; e.preventDefault(); return; }
-    if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') { _mbInputKeys.d = true; e.preventDefault(); return; }
-    if (e.key === ' ') { _mbInputKeys.space = true; e.preventDefault(); return; }
-  }
-
   if (e.key === 'c' || e.key === 'C') {
     toggleChaseCam();
   } else if (e.key === 'g' || e.key === 'G') {
@@ -9568,10 +9261,6 @@ window.addEventListener('keydown', (e) => {
     // Demolition: every track piece collapses off the table. One-shot — no
     // un-collapse. NEW COURSE rebuilds everything fresh.
     triggerCollapse();
-  } else if (e.key === 'm' || e.key === 'M') {
-    // Toggle marble-blast mode — single-marble player control. Kept out of the
-    // menus on purpose: it's an easter egg.
-    toggleMarbleBlast();
   } else if (e.key === 'p' || e.key === 'P') {
     // Trail mode — hidden easter egg: black void + light-painting marble trails.
     toggleTrailMode();
@@ -9593,18 +9282,6 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Stop holding input keys when released.
-window.addEventListener('keyup', (e) => {
-  if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
-  if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp')    _mbInputKeys.w = false;
-  if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft')  _mbInputKeys.a = false;
-  if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown')  _mbInputKeys.s = false;
-  if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') _mbInputKeys.d = false;
-});
-
-// Enter or exit marble-blast mode. On enter: designate the lowest-progress (or first
-// non-finished) marble as the player marble, hide the others, open the gate so the
-// player can start driving immediately. On exit: restore normal race state.
 // Toggle collision sound effects. Both the S key and the soundBtn button call
 // this. AudioContext requires a user gesture to start, which the keypress or
 // click provides — the lazy-init in _ensureAudio runs on the first clack after
@@ -9639,7 +9316,6 @@ try {
 // Which camera the spectator currently has (also exposed via marbleAPI so the
 // host viewer's control bar can mark the active one).
 function currentCamMode() {
-  if (STATE.marbleBlast) return 'blast';
   if (STATE.splitScreen) return 'split';
   if (STATE.actionCam) return 'action';
   if (STATE.chaseCam) return 'chase';
@@ -9648,76 +9324,6 @@ function currentCamMode() {
   if (STATE.tracksideCam) return 'trackside';
   if (STATE.closeCam) return 'close';
   return 'overview';
-}
-
-let _mbPrevCam = null; // spectator camera to restore after exiting blast
-function toggleMarbleBlast() {
-  if (!STATE.marbleBlast) {
-    // Pick a player marble. Prefer the FIRST non-finished marble in the lineup so
-    // the player gets a consistent starting position. If somehow none are
-    // available (everyone finished), bail.
-    _mbPlayerMarble = null;
-    for (const m of marbles) {
-      if (!m.finished) { _mbPlayerMarble = m; break; }
-    }
-    if (!_mbPlayerMarble) return;
-    _mbPrevCam = currentCamMode();
-    STATE.marbleBlast = true;
-    // Open the gate so the player can immediately drive forward.
-    STATE.gateOpen = true;
-    STATE.raceStarted = true;
-    // Hide non-player marbles for clarity.
-    for (const m of marbles) {
-      if (m !== _mbPlayerMarble) m.mesh.visible = false;
-    }
-    // Reset chase-fwd smoothing so the camera initializes fresh.
-    chaseFwdX = undefined; chaseFwdZ = undefined;
-    // Hide the RACE button (race is effectively "started" for the player).
-    startBtn.classList.add('hidden');
-    // Instructions appear only now — never during normal spectating. Keyboard
-    // hints on fine pointers; the touch pad on coarse ones.
-    const hud = document.getElementById('mbHud');
-    if (hud) hud.style.display = 'block';
-    const pad = document.getElementById('mbTouch');
-    if (pad) pad.hidden = !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-  } else {
-    STATE.marbleBlast = false;
-    _mbPlayerMarble = null;
-    // Restore all marbles visible (whichever ones weren't hidden by the finish flow).
-    for (const m of marbles) {
-      if (!m.finished) m.mesh.visible = true;
-    }
-    // Clear input state so any keys held during exit don't carry over.
-    _mbInputKeys.w = _mbInputKeys.a = _mbInputKeys.s = _mbInputKeys.d = false;
-    _mbInputKeys.space = false;
-    const hud = document.getElementById('mbHud');
-    if (hud) hud.style.display = 'none';
-    const pad = document.getElementById('mbTouch');
-    if (pad) pad.hidden = true;
-    // Give the spectator back the camera they had before driving.
-    if (_mbPrevCam && _mbPrevCam !== 'blast' && _mbPrevCam !== 'split' && typeof setCamMode === 'function') {
-      setCamMode(_mbPrevCam);
-    }
-    _mbPrevCam = null;
-  }
-}
-
-// Blast controls that live outside the keyboard: the HUD exit button and the
-// touch driving pad (pointer events map straight onto the key-state object).
-{
-  const ex = document.getElementById('mbExit');
-  if (ex) ex.addEventListener('click', () => { if (STATE.marbleBlast) toggleMarbleBlast(); });
-  const pad = document.getElementById('mbTouch');
-  if (pad)
-    pad.querySelectorAll('[data-mbk]').forEach((b) => {
-      const k = b.dataset.mbk;
-      const on = (e) => { e.preventDefault(); _mbInputKeys[k] = true; };
-      const off = (e) => { e.preventDefault(); _mbInputKeys[k] = false; };
-      b.addEventListener('pointerdown', on);
-      b.addEventListener('pointerup', off);
-      b.addEventListener('pointercancel', off);
-      b.addEventListener('pointerleave', off);
-    });
 }
 
 // Initial build — runs the staged async build so the loading overlay paints

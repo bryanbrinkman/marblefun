@@ -64,7 +64,7 @@
       results: ['overview'],
     },
     // Modes the director must never override — the viewer chose them on purpose.
-    handsOff: ['blast', 'split'],
+    handsOff: ['split'],
   };
 
   // Work out the race phase from the live progress list.

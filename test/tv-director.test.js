@@ -59,7 +59,7 @@ check('breakaway leads with the chase cam; a manual hands-off mode is never over
   const d = new Director();
   d.lastCutAt = -100000;
   assert.strictEqual(d.decide(live({ now: 1000, cam: 'overview', prog: P([0.6, 0.4, 0.3, 0.2, 0.1]) })).cut, 'chase');
-  assert.strictEqual(d.decide(live({ now: 99999, cam: 'blast' })).cut, null);
+  assert.strictEqual(d.decide(live({ now: 99999, cam: 'split' })).cut, null);
   assert.strictEqual(d.decide(live({ now: 99999, cam: 'split' })).cut, null);
 });
 

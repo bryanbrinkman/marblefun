@@ -2683,7 +2683,7 @@ function syncCamUI() {
   const word = el('camWord');
   if (word) word.textContent = tvMode ? 'Auto' : CAM_WORDS[camChoice] || 'Camera';
   const now = el('cpNow');
-  if (now) now.textContent = tvMode ? `Auto is choosing the shots · now: ${cam}` : cam === 'blast' ? 'Marble Blast (press M to exit)' : '';
+  if (now) now.textContent = tvMode ? `Auto is choosing the shots · now: ${cam}` : '';
   const mc = el('mmCam');
   if (mc) mc.setAttribute('aria-pressed', followCamOn && !tvMode ? 'true' : 'false');
 }
