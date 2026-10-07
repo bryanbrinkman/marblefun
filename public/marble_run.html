@@ -7310,11 +7310,12 @@ function updateCamera(dt) {
     zoomFactor += (targetZoom - zoomFactor) * (1 - Math.pow(0.55, dt));
     // A slow drift around the podium while we're in close — the balls turn in
     // the light instead of sitting as a still frame.
-    if (push > 0) camYaw += 3.5 * dt * eased;
+    if (push > 0 && !_podiumUserYaw) camYaw += 3.5 * dt * eased;
     // Pan camYaw toward the front-of-podium angle. We take the shortest-arc lerp so
     // the camera doesn't sweep the long way around when the wrap-around boundary is
     // straddled (e.g. yaw=170° → -170° should be a 20° turn, not a 340° turn).
-    if (targetCamYaw !== null) {
+    // A viewer who has turned the view themselves keeps their angle.
+    if (targetCamYaw !== null && !_podiumUserYaw) {
       let delta = targetCamYaw - camYaw;
       delta = ((delta % 360) + 540) % 360 - 180;  // normalize to [-180, 180]
       camYaw += delta * (1 - Math.pow(0.55, dt));
@@ -7365,12 +7366,14 @@ let panning = false;
 let dragStartX = 0, dragStartY = 0;
 let dragStartYaw = 0, dragStartPitch = 0;
 let panStartTarget = null;
-// Yaw direction per input: a mouse drag turns the view with the pointer; a
-// finger swipe turns it the other way, as if pushing the track itself round.
-let _dragYawSign = 1;
+// A drag or swipe turns the view the opposite way to the pointer, as if
+// pushing the track itself round.
+const DRAG_YAW_SIGN = -1;
+// Once the viewer turns the view during the finish shot, the podium framing
+// keeps its push-in but stops steering the yaw for the rest of that finish.
+let _podiumUserYaw = false;
 
-function _beginDrag(clientX, clientY, button = 0, touch = false) {
-  _dragYawSign = touch ? -1 : 1;
+function _beginDrag(clientX, clientY, button = 0) {
   if (STATE.actionCam || STATE.chaseCam) return;
   if (button === 2) {
     // Right mouse = pan the scene
@@ -7410,7 +7413,8 @@ function _continueDrag(clientX, clientY) {
   if (!dragging) return;
   const dx = clientX - dragStartX;
   const dy = clientY - dragStartY;
-  camYaw = dragStartYaw + dx * 0.3 * _dragYawSign;
+  camYaw = dragStartYaw + dx * 0.3 * DRAG_YAW_SIGN;
+  if (STATE.podiumShown) _podiumUserYaw = true;
   camPitch = Math.max(15, Math.min(75, dragStartPitch - dy * 0.2));
 }
 let _rightDragMoved = false;
@@ -7444,7 +7448,7 @@ window.addEventListener('touchstart', (e) => {
   // If the touch starts on a UI control, let the click handler do its thing.
   if (e.target.closest('button')) return;
   if (e.touches.length === 1) {
-    _beginDrag(e.touches[0].clientX, e.touches[0].clientY, 0, true);
+    _beginDrag(e.touches[0].clientX, e.touches[0].clientY);
     // Track for double-tap detection — recorded fresh each touchstart, validated
     // at touchend.
     _tapStartX = e.touches[0].clientX;
@@ -7608,6 +7612,7 @@ function updateLeaderboard() {
 function revealPodium() {
   STATE.podiumShown = true;
   _podiumCamT = 0;
+  _podiumUserYaw = false;
   for (const sh of _podiumShadows) if (sh) sh.visible = false;
   for (const rm of _podiumRibbonMats) if (rm) rm.color.set(0x8b2431);
   podiumGroup.visible = true;
