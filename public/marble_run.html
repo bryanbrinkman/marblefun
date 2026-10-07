@@ -7365,8 +7365,12 @@ let panning = false;
 let dragStartX = 0, dragStartY = 0;
 let dragStartYaw = 0, dragStartPitch = 0;
 let panStartTarget = null;
+// Yaw direction per input: a mouse drag turns the view with the pointer; a
+// finger swipe turns it the other way, as if pushing the track itself round.
+let _dragYawSign = 1;
 
-function _beginDrag(clientX, clientY, button = 0) {
+function _beginDrag(clientX, clientY, button = 0, touch = false) {
+  _dragYawSign = touch ? -1 : 1;
   if (STATE.actionCam || STATE.chaseCam) return;
   if (button === 2) {
     // Right mouse = pan the scene
@@ -7406,7 +7410,7 @@ function _continueDrag(clientX, clientY) {
   if (!dragging) return;
   const dx = clientX - dragStartX;
   const dy = clientY - dragStartY;
-  camYaw = dragStartYaw + dx * 0.3;
+  camYaw = dragStartYaw + dx * 0.3 * _dragYawSign;
   camPitch = Math.max(15, Math.min(75, dragStartPitch - dy * 0.2));
 }
 let _rightDragMoved = false;
@@ -7440,7 +7444,7 @@ window.addEventListener('touchstart', (e) => {
   // If the touch starts on a UI control, let the click handler do its thing.
   if (e.target.closest('button')) return;
   if (e.touches.length === 1) {
-    _beginDrag(e.touches[0].clientX, e.touches[0].clientY);
+    _beginDrag(e.touches[0].clientX, e.touches[0].clientY, 0, true);
     // Track for double-tap detection — recorded fresh each touchstart, validated
     // at touchend.
     _tapStartX = e.touches[0].clientX;

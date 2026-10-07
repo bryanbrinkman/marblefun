@@ -140,13 +140,15 @@ async function startReplay(race) {
     a.startRace(race.raceSeed, catchUp);
   }
 
-  // Label the game's in-race leaderboard with the competitor names. The
-  // camera is left alone: auto broadcast cuts itself, and a manual choice
-  // stays whatever the viewer picked.
+  // Label the game's in-race leaderboard with the competitor names. A manual
+  // camera (follow, overview, an angle) is a choice for the race it was made
+  // in — the one on stage or the one counting down — so every new race opens
+  // on the auto broadcast and the director cuts from the gate.
   try {
     if (a.setDisplayNames)
       a.setDisplayNames(Object.fromEntries(race.roster.map((s) => [s.lane, s.marbleName])));
-    if (tvMode && _director) _director.reset();
+    if (!tvMode && _camChoiceRace !== race.key) setCameraChoice('auto', { quiet: true });
+    else if (tvMode && _director) _director.reset();
   } catch {}
 
   // Replay audit: record that this race was started with its broadcast seed,
@@ -2654,6 +2656,7 @@ let _tvTimer = null;
 const _director = window.TvDirector ? new window.TvDirector.Director() : null;
 let followCamOn = false;
 let camChoice = 'auto'; // auto | follow | overview | action | top | split
+let _camChoiceRace = null; // the race a manual camera was chosen for (its key)
 function setTvMode(on) {
   tvMode = !!on;
   try { sessionStorage.setItem('mrTv', tvMode ? '1' : '0'); } catch {}
@@ -2698,6 +2701,7 @@ function tvDirector() {
 function setCameraChoice(choice, opts = {}) {
   camChoice = choice;
   followCamOn = choice === 'follow';
+  _camChoiceRace = choice === 'auto' ? null : (currentRace() || {}).key || null;
   try { sessionStorage.setItem('mrCam', choice); sessionStorage.setItem('mrFollowCam', followCamOn ? '1' : '0'); } catch {}
   const a = api();
   if (choice === 'auto') {
@@ -2776,7 +2780,8 @@ function closeCamPop() {
     });
     pop.querySelectorAll('.cp-mode').forEach((b) => b.addEventListener('click', () => setCameraChoice(b.dataset.mode)));
   }
-  // The director is the DEFAULT; the session remembers a manual choice.
+  // The director is the DEFAULT; a reload keeps a manual choice for the race
+  // it was made in (startReplay hands the next race back to the director).
   let pref = 'auto';
   try { pref = sessionStorage.getItem('mrCam') || (sessionStorage.getItem('mrTv') === '0' ? 'overview' : 'auto'); } catch {}
   whenApiReady().then(() => setCameraChoice(pref === 'follow' && followId == null ? 'auto' : pref, { quiet: true }));
