@@ -296,12 +296,22 @@ body.hero-open .prerace { display: none; }
 .picker-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; font-size: 0.75rem; color: var(--muted); }
 
 /* ---------- in-race standings board (top-left) ---------- */
-.race-board { position: fixed; left: max(12px, var(--safe-l)); top: calc(var(--top-h) + 8px); z-index: 22; pointer-events: none; width: 230px; padding: 8px 8px 6px; border-radius: var(--radius); background: rgba(20, 26, 38, 0.92); border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.race-board { position: fixed; left: max(12px, var(--safe-l)); top: calc(var(--top-h) + 8px); z-index: 22; width: 230px; padding: 8px 8px 6px; border-radius: var(--radius); background: rgba(20, 26, 38, 0.83); border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+/* Folded: a one-line strip of lane dots and numbers in running order. */
+.race-board.collapsed { width: auto; padding: 4px 5px; cursor: pointer; }
+.race-board.collapsed .rb-head, .race-board.collapsed .rb-pos, .race-board.collapsed .rb-name, .race-board.collapsed .rb-fin { display: none; }
+.race-board.collapsed .rb-rows { flex-direction: row; gap: 2px; }
+.race-board.collapsed .rb-row { width: auto; height: 20px; padding: 0 3px; gap: 3px; pointer-events: none; }
+.race-board.collapsed .rb-row .sw { width: 9px; height: 9px; }
+.race-board.collapsed .rb-num { width: auto; font-size: 0.6875rem; }
+.race-board.collapsed .rb-row.mine { box-shadow: inset 0 0 0 1px rgba(255, 207, 92, 0.6); }
 .rb-head { display: flex; flex-direction: column; gap: 1px; padding: 0 4px 6px; font-size: 0.6875rem; font-weight: 800; color: var(--gold); }
 .rb-rule { color: var(--muted); font-weight: 600; }
 .rb-rule:empty { display: none; }
 .rb-rows { display: flex; flex-direction: column; gap: 2px; }
-.rb-row { display: flex; align-items: center; gap: 7px; height: 24px; padding: 0 4px; border-radius: 6px; font-size: 0.8125rem; }
+.rb-row { display: flex; align-items: center; gap: 7px; height: 24px; width: 100%; padding: 0 4px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; font-size: 0.8125rem; text-align: left; cursor: pointer; }
+.rb-row:hover { background: rgba(255, 255, 255, 0.07); }
+.rb-row:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
 .rb-row.lead .rb-pos { color: var(--gold); }
 .rb-row.mine { background: rgba(255, 207, 92, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 207, 92, 0.45); }
 .rb-row.done { color: var(--muted); }

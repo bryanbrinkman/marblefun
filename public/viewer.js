@@ -465,8 +465,17 @@ function renderStageFallbackLive(prog) {
 requestAnimationFrame(trackTick);
 
 // ---- standings board (top-left during a race) ----------------------------------
+// The board opens in full when a race starts, then folds to a one-line strip
+// of lane dots after a few seconds so it stops covering the stage; a tap
+// unfolds it (and it folds again by itself). Each row is a button: tapping a
+// racer makes it your marble and points the camera at it.
 let _boardAt = 0;
 let _boardKey = null;
+let _boardOpenedAt = 0;
+let _boardHoldMs = 0;
+let _boardOrderAt = 0;
+const BOARD_OPEN_MS = 5000; // open at the start of a race
+const BOARD_TAP_MS = 8000; // open because someone tapped it
 function renderRaceBoard(race, prog) {
   const board = el('raceBoard');
   if (!board || !race || !prog) return;
@@ -477,30 +486,87 @@ function renderRaceBoard(race, prog) {
     _boardKey = race.key + (replaying ? ':r' : '');
     el('rbStage').textContent = raceLabel(race) + (replaying ? ' · Replay' : '');
     el('rbRule').textContent = advanceRule(race);
+    _boardOpenedAt = now;
+    _boardHoldMs = BOARD_OPEN_MS;
+    board.classList.remove('collapsed');
   }
   board.hidden = false;
-  const order = liveOrder(prog);
-  el('rbRows').innerHTML = order
-    .map((p, i) => {
-      const s = race.roster.find((x) => x.lane === p.lane);
-      if (!s) return '';
-      const mine = s.marbleId === followId;
-      return (
-        `<div class="rb-row${mine ? ' mine' : ''}${p.finished ? ' done' : ''}${i === 0 ? ' lead' : ''}">` +
-        // Lane colour, not artwork: during a race the marble is identified by
-        // the cone over it in the 3D view — the board matches.
-        `<span class="rb-pos">${i + 1}</span><span class="sw" style="background:${s.color}"></span>` +
-        `<span class="rb-num">${numOf(s.marbleId)}</span><span class="rb-name">${esc(s.marbleName)}${mine ? ' (your pick)' : ''}</span>` +
-        `<span class="rb-fin">${p.finished ? 'Finished' : ''}</span></div>`
-      );
-    })
-    .join('');
+  if (!board.classList.contains('collapsed') && now - _boardOpenedAt > _boardHoldMs) board.classList.add('collapsed');
+  const rows = el('rbRows');
+  // One button per racer for the whole race, patched in place and reordered
+  // as placings change: a row someone is about to tap is never swapped out
+  // from under their finger, and a focused row keeps focus.
+  if (rows.dataset.key !== _boardKey) {
+    rows.dataset.key = _boardKey;
+    _boardOrderAt = 0;
+    rows.innerHTML = race.roster
+      .map(
+        (s) =>
+          // Lane colour, not artwork: during a race the marble is identified by
+          // the cone over it in the 3D view — the board matches.
+          `<button type="button" class="rb-row" data-id="${s.marbleId}" data-lane="${esc(s.lane)}" aria-pressed="false">` +
+          `<span class="rb-pos"></span><span class="sw" style="background:${s.color}"></span>` +
+          `<span class="rb-num">${numOf(s.marbleId)}</span><span class="rb-name"></span><span class="rb-fin"></span></button>`
+      )
+      .join('');
+  }
+  const byLane = {};
+  for (const b of rows.children) byLane[b.dataset.lane] = b;
+  const order = liveOrder(prog).filter((p) => byLane[p.lane]);
+  // Placings can swap every tick in a close race; a row that jumps as a finger
+  // lands on it is a mis-tap. Reorder (and renumber) at most every 700 ms;
+  // finished / your-pick marks update at once.
+  const moved = order.some((p, i) => rows.children[i] !== byLane[p.lane]);
+  const reorder = moved && now - _boardOrderAt >= 700;
+  if (reorder) _boardOrderAt = now;
+  const shown = reorder || !moved ? order : [...rows.children].map((b) => order.find((p) => p.lane === b.dataset.lane)).filter(Boolean);
+  shown.forEach((p, i) => {
+    const s = race.roster.find((x) => x.lane === p.lane);
+    const b = byLane[p.lane];
+    if (!s) return;
+    const mine = s.marbleId === followId;
+    b.classList.toggle('mine', mine);
+    b.classList.toggle('done', !!p.finished);
+    b.classList.toggle('lead', i === 0);
+    b.setAttribute('aria-pressed', mine ? 'true' : 'false');
+    const label = `${ordinal(i + 1)}: #${numOf(s.marbleId)} ${s.marbleName}${mine ? ', your pick' : ''} — follow with the camera`;
+    if (b.getAttribute('aria-label') !== label) b.setAttribute('aria-label', label);
+    const pos = b.firstChild;
+    if (pos.textContent !== String(i + 1)) pos.textContent = i + 1;
+    const name = b.querySelector('.rb-name');
+    const nameText = s.marbleName + (mine ? ' (your pick)' : '');
+    if (name.textContent !== nameText) name.textContent = nameText;
+    const fin = b.lastChild;
+    const finText = p.finished ? 'Finished' : '';
+    if (fin.textContent !== finText) fin.textContent = finText;
+    if (reorder && rows.children[i] !== b) rows.insertBefore(b, rows.children[i] || null);
+  });
 }
 function hideRaceBoard() {
   const board = el('raceBoard');
   if (board && !board.hidden) board.hidden = true;
   _boardKey = null;
 }
+if (el('raceBoard'))
+  el('raceBoard').addEventListener('click', (e) => {
+    const board = el('raceBoard');
+    if (board.classList.contains('collapsed')) {
+      // Folded: any tap unfolds it (and the fold timer restarts).
+      board.classList.remove('collapsed');
+      _boardOpenedAt = Date.now();
+      _boardHoldMs = BOARD_TAP_MS;
+      return;
+    }
+    const row = e.target.closest('.rb-row');
+    if (!row) return;
+    const id = Number(row.dataset.id);
+    if (!Number.isFinite(id)) return;
+    if (id !== followId) setFollow(id, { quiet: true });
+    followCamSet(true, { quiet: true });
+    showToast(`Camera on #${numOf(id)} ${marbleNameOf(id)}`, marbleColor(id), id, 2200);
+    _boardOpenedAt = Date.now();
+    _boardHoldMs = BOARD_TAP_MS;
+  });
 
 // ---- marble careers --------------------------------------------------------
 // Lifetime stats per marble id from /api/careers (server mode only). Fetched
