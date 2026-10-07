@@ -5001,7 +5001,14 @@ function updateLaneMarkers() {
     mk.visible = true;
     const p = m.mesh.position;
     const bob = Math.sin(t + i * 1.3) * 0.03;
-    mk.position.set(p.x, p.y + CONFIG.marbleRadius + 0.08 + (LANE_CONE_H * 0.6) * k + bob, p.z);
+    if (STATE.topCam) {
+      // Seen from straight above, a cone over the marble is a lid on it. Park
+      // it just beyond the marble on the screen-up side (world -Z) instead.
+      const side = CONFIG.marbleRadius + 0.065 * 1.3 * k + 0.04;
+      mk.position.set(p.x, p.y + CONFIG.marbleRadius + bob, p.z - side);
+    } else {
+      mk.position.set(p.x, p.y + CONFIG.marbleRadius + 0.08 + (LANE_CONE_H * 0.6) * k + bob, p.z);
+    }
     mk.scale.setScalar(k);
     mk.rotation.y = t * 0.5; // a slow spin catches the eye without distracting
   }
@@ -5136,7 +5143,10 @@ function updateFollowMarker() {
   const mk = _ensureFollowMarker();
   mk.visible = true;
   const bob = Math.sin(performance.now() / 320) * 0.09;
-  mk.position.set(m.pos.x, m.pos.y + CONFIG.marbleRadius + 0.75 + bob, m.pos.z);
+  // From the overhead camera a chevron above the marble sits right on top of
+  // it; there it hangs on the screen-up side (world -Z), tip toward the marble.
+  if (STATE.topCam) mk.position.set(m.pos.x, m.pos.y + CONFIG.marbleRadius, m.pos.z - (CONFIG.marbleRadius + 0.75 + bob));
+  else mk.position.set(m.pos.x, m.pos.y + CONFIG.marbleRadius + 0.75 + bob, m.pos.z);
 }
 // The marble a follow-style camera should track: the followed lane while it's
 // still racing, otherwise the progress leader (the pre-follow behavior).
