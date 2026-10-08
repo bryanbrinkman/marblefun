@@ -7,6 +7,9 @@
 // browses with.
 
 const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { DB } = require('../src/db');
 const { Tournament } = require('../src/tournament');
 
@@ -84,6 +87,28 @@ check('history filters: cursor, one tournament, by marble, by date', () => {
   assert.deepStrictEqual(db.championHistory({ marbleIds: [9] }).map((r) => [r.tournamentId, r.titleNumber]), [[5, 2], [3, 1]]);
   assert.deepStrictEqual(db.championHistory({ since: T0 + 4 * day, until: T0 + 7 * day }).map((r) => r.tournamentId), [7, 5, 4]);
   assert.deepStrictEqual(db.championHistory(3).map((r) => r.tournamentId), [8, 7, 5], 'a bare number is still the page size');
+});
+
+check('a reset wipes the history and starts again at tournament 1 (and at race 1)', () => {
+  const d3 = new DB(':memory:');
+  for (let i = 0; i < 3; i++) d3.createTournament({ masterSeed: 7 + i, createdAt: 1000 + i });
+  assert.strictEqual(d3.createTournament({ masterSeed: 99, createdAt: 5000 }), 4, 'ids run on while history is kept');
+  d3.resetAllHistory();
+  assert.strictEqual(d3.statsSummary().tournaments, 0, 'history is gone');
+  assert.strictEqual(d3.createTournament({ masterSeed: 1, createdAt: 9000 }), 1, 'the first tournament after a reset is tournament 1');
+  // A database wiped by an older build kept its counter: reopening it starts
+  // the numbering over too.
+  const file = path.join(os.tmpdir(), `marblefun-reset-${process.pid}.db`);
+  const d4 = new DB(file);
+  for (let i = 0; i < 5; i++) d4.createTournament({ masterSeed: i, createdAt: i });
+  d4.db.exec('DELETE FROM marbles; DELETE FROM tournaments;');
+  assert.strictEqual(d4.db.prepare("SELECT seq FROM sqlite_sequence WHERE name='tournaments'").get().seq, 5, 'a plain delete leaves the counter at 5');
+  d4.close();
+  const d5 = new DB(file);
+  assert.strictEqual(d5.createTournament({ masterSeed: 1, createdAt: 1 }), 1, 'reopening an emptied database numbers the next tournament 1');
+  d5.close();
+  for (const suffix of ['', '-wal', '-shm']) fs.rmSync(file + suffix, { force: true });
+  d3.close();
 });
 
 check('the reigning champion carries its own lifetime count, even outside the top ten; renames never split a marble', () => {

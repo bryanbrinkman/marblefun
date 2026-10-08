@@ -111,6 +111,14 @@ class DB {
     this.db.exec('PRAGMA foreign_keys = ON;');
     this.db.exec(SCHEMA);
     this._migrate();
+    // A database whose history has been wiped (by an older build's reset, or
+    // by hand) but whose id counters still run on: start the numbering over
+    // before the first tournament of this process is created.
+    if (this.db.prepare('SELECT COUNT(*) AS n FROM tournaments').get().n === 0) this._restartNumbering();
+  }
+
+  _restartNumbering() {
+    this.db.exec("DELETE FROM sqlite_sequence WHERE name IN ('tournaments', 'races');");
   }
 
   // Additive, backward-compatible schema changes for databases created by
@@ -588,12 +596,17 @@ class DB {
     }));
   }
 
+  // Wipe every record and start the numbering over: the next tournament is
+  // tournament 1 again. (AUTOINCREMENT keeps its counter in sqlite_sequence,
+  // which a plain DELETE leaves alone — without clearing it a "reset" came back
+  // as tournament 1548.)
   resetAllHistory() {
     this.db.exec('BEGIN');
     try {
       for (const table of ['results', 'race_slots', 'races', 'marbles', 'tournaments']) {
         this.db.exec(`DELETE FROM ${table};`);
       }
+      this._restartNumbering();
       this.db.exec('COMMIT');
     } catch (e) {
       this.db.exec('ROLLBACK');
