@@ -1,7 +1,8 @@
 # Manual diagnostics for the public site: DNS, TLS and HTTP for both hosts
 # (marblefun.fly.dev and marblerun.fun) from a GitHub runner, plus the Fly
 # app's own view (IPs, certificates, status, recent logs) using the deploy
-# token. Read-only. Run it from the Actions tab, or bump the `run:` comment
+# token. Read-only apart from one idempotent step that makes sure the www
+# certificate exists. Run it from the Actions tab, or bump the `run:` comment
 # below to re-run on push.
 name: site-check
 on:
@@ -16,7 +17,7 @@ jobs:
     steps:
       - name: DNS (A / AAAA / CNAME) for both hosts
         run: |
-          # run: 26
+          # run: 27
           for h in marblerun.fun www.marblerun.fun marblefun.fly.dev; do
             echo "=== $h"
             for t in A AAAA CNAME; do echo "-- $t"; dig +short "$t" "$h" @1.1.1.1 || true; done
@@ -56,10 +57,13 @@ jobs:
           for h in marblefun.fly.dev marblerun.fun; do
             echo "=== https://$h/ (IPv6)"; curl -6 -sS -o /dev/null -D - --max-time 20 "https://$h/" || echo "curl -6 failed: $?"
           done
-      - name: TLS certificate presented for marblerun.fun
+      - name: TLS certificate presented for marblerun.fun and www
         continue-on-error: true
         run: |
-          echo | openssl s_client -servername marblerun.fun -connect marblerun.fun:443 2>/dev/null | openssl x509 -noout -subject -issuer -dates -ext subjectAltName || echo "no certificate"
+          for h in marblerun.fun www.marblerun.fun; do
+            echo "=== $h"
+            echo | openssl s_client -servername "$h" -connect "$h:443" 2>/dev/null | openssl x509 -noout -subject -issuer -dates -ext subjectAltName || echo "no certificate"
+          done
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Fly app view (IPs, certs, status)
         continue-on-error: true
@@ -70,6 +74,10 @@ jobs:
           echo "=== certs";  flyctl certs list -a marblefun || true
           echo "=== cert check marblerun.fun"; flyctl certs check marblerun.fun -a marblefun || true
           echo "=== cert show marblerun.fun";  flyctl certs show  marblerun.fun -a marblefun || true
+          # www rides a CNAME to marblefun.fly.dev; the only write here — adding
+          # a certificate that already exists is a no-op.
+          echo "=== cert add www.marblerun.fun (no-op once issued)"; flyctl certs add www.marblerun.fun -a marblefun 2>&1 || true
+          echo "=== cert check www.marblerun.fun"; flyctl certs check www.marblerun.fun -a marblefun || true
           echo "=== status"; flyctl status -a marblefun || true
           echo "=== apps on this account"; flyctl apps list 2>&1 || true
       - name: Fly recent logs
