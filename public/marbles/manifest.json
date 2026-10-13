@@ -1,0 +1,401 @@
+{
+  "_comment": "Owner credits for the gallery (/gallery). Keyed by marble number; the server merges this over the artwork it discovers, so only owner/ownerLink are set here. Handles without spaces link to their X profile.",
+  "1": {
+    "owner": "badmonft",
+    "ownerLink": "https://x.com/badmonft"
+  },
+  "2": {
+    "owner": "Rhynotic",
+    "ownerLink": "https://x.com/Rhynotic"
+  },
+  "3": {
+    "owner": "EAWharton",
+    "ownerLink": "https://x.com/EAWharton"
+  },
+  "4": {
+    "owner": "Katielorrie",
+    "ownerLink": "https://x.com/Katielorrie"
+  },
+  "5": {
+    "owner": "SecretariYat",
+    "ownerLink": "https://x.com/SecretariYat"
+  },
+  "6": {
+    "owner": "aldover_eth",
+    "ownerLink": "https://x.com/aldover_eth"
+  },
+  "7": {
+    "owner": "batsoupyum",
+    "ownerLink": "https://x.com/batsoupyum"
+  },
+  "8": {
+    "owner": "HQTANG",
+    "ownerLink": "https://x.com/HQTANG"
+  },
+  "9": {
+    "owner": "pman555",
+    "ownerLink": "https://x.com/pman555"
+  },
+  "10": {
+    "owner": "RaptorNews3",
+    "ownerLink": "https://x.com/RaptorNews3"
+  },
+  "11": {
+    "owner": "ArtOnBlockchain",
+    "ownerLink": "https://x.com/ArtOnBlockchain"
+  },
+  "12": {
+    "owner": "arjboom",
+    "ownerLink": "https://x.com/arjboom"
+  },
+  "13": {
+    "owner": "Shatt_Eth",
+    "ownerLink": "https://x.com/Shatt_Eth"
+  },
+  "14": {
+    "owner": "xPeaceLandBread",
+    "ownerLink": "https://x.com/xPeaceLandBread"
+  },
+  "15": {
+    "owner": "LapsusEth",
+    "ownerLink": "https://x.com/LapsusEth"
+  },
+  "16": {
+    "owner": "Ojedasbodega",
+    "ownerLink": "https://x.com/Ojedasbodega"
+  },
+  "17": {
+    "owner": "KosherCowboyNFT",
+    "ownerLink": "https://x.com/KosherCowboyNFT"
+  },
+  "18": {
+    "owner": "tyguyot",
+    "ownerLink": "https://x.com/tyguyot"
+  },
+  "19": {
+    "owner": "curious_pica",
+    "ownerLink": "https://x.com/curious_pica"
+  },
+  "20": {
+    "owner": "icculus479",
+    "ownerLink": "https://x.com/icculus479"
+  },
+  "21": {
+    "owner": "bryanbrinkman",
+    "ownerLink": "https://x.com/bryanbrinkman"
+  },
+  "22": {
+    "owner": "rcivNFT",
+    "ownerLink": "https://x.com/rcivNFT"
+  },
+  "23": {
+    "owner": "MulletOnX",
+    "ownerLink": "https://x.com/MulletOnX"
+  },
+  "24": {
+    "owner": "yukokosaka",
+    "ownerLink": "https://x.com/yukokosaka"
+  },
+  "25": {
+    "owner": "funghibull",
+    "ownerLink": "https://x.com/funghibull"
+  },
+  "26": {
+    "owner": "Coldie",
+    "ownerLink": "https://x.com/Coldie"
+  },
+  "27": {
+    "owner": "tomsegal",
+    "ownerLink": "https://x.com/tomsegal"
+  },
+  "28": {
+    "owner": "jamo_the_cat",
+    "ownerLink": "https://x.com/jamo_the_cat"
+  },
+  "29": {
+    "owner": "Mo_key_lock",
+    "ownerLink": "https://x.com/Mo_key_lock"
+  },
+  "30": {
+    "owner": "Blondie23LMD007",
+    "ownerLink": "https://x.com/Blondie23LMD007"
+  },
+  "31": {
+    "owner": "MaryPatBing",
+    "ownerLink": "https://x.com/MaryPatBing"
+  },
+  "32": {
+    "owner": "JordanLyall",
+    "ownerLink": "https://x.com/JordanLyall"
+  },
+  "33": {
+    "owner": "WAPSHOP_ETH",
+    "ownerLink": "https://x.com/WAPSHOP_ETH"
+  },
+  "34": {
+    "owner": "0xghostpepper",
+    "ownerLink": "https://x.com/0xghostpepper"
+  },
+  "35": {
+    "owner": "quadzillatd",
+    "ownerLink": "https://x.com/quadzillatd"
+  },
+  "36": {
+    "owner": "nicedayJules",
+    "ownerLink": "https://x.com/nicedayJules"
+  },
+  "37": {
+    "owner": "DeeZe",
+    "ownerLink": "https://x.com/DeeZe"
+  },
+  "38": {
+    "owner": "ericbelair",
+    "ownerLink": "https://x.com/ericbelair"
+  },
+  "39": {
+    "owner": "sudojames",
+    "ownerLink": "https://x.com/sudojames"
+  },
+  "40": {
+    "owner": "ZanzibarVentures"
+  },
+  "41": {
+    "owner": "AndrewRiBT",
+    "ownerLink": "https://x.com/AndrewRiBT"
+  },
+  "42": {
+    "owner": "JonathanLittle",
+    "ownerLink": "https://x.com/JonathanLittle"
+  },
+  "43": {
+    "owner": "originartmuseum",
+    "ownerLink": "https://x.com/originartmuseum"
+  },
+  "44": {
+    "owner": "0xMLow",
+    "ownerLink": "https://x.com/0xMLow"
+  },
+  "45": {
+    "owner": "KREGdao",
+    "ownerLink": "https://x.com/KREGdao"
+  },
+  "46": {
+    "owner": "Johndoe8891",
+    "ownerLink": "https://x.com/Johndoe8891"
+  },
+  "47": {
+    "owner": "redbeardnft",
+    "ownerLink": "https://x.com/redbeardnft"
+  },
+  "48": {
+    "owner": "derekedws",
+    "ownerLink": "https://x.com/derekedws"
+  },
+  "49": {
+    "owner": "DKiblerEspresso",
+    "ownerLink": "https://x.com/DKiblerEspresso"
+  },
+  "50": {
+    "owner": "workAcut",
+    "ownerLink": "https://x.com/workAcut"
+  },
+  "51": {
+    "owner": "andrewjiang",
+    "ownerLink": "https://x.com/andrewjiang"
+  },
+  "52": {
+    "owner": "maxkarlan",
+    "ownerLink": "https://x.com/maxkarlan"
+  },
+  "53": {
+    "owner": "Tschuuuuly",
+    "ownerLink": "https://x.com/Tschuuuuly"
+  },
+  "54": {
+    "owner": "22ARTeth",
+    "ownerLink": "https://x.com/22ARTeth"
+  },
+  "55": {
+    "owner": "jedi6900",
+    "ownerLink": "https://x.com/jedi6900"
+  },
+  "56": {
+    "owner": "OGcrookedwest",
+    "ownerLink": "https://x.com/OGcrookedwest"
+  },
+  "57": {
+    "owner": "eelchico",
+    "ownerLink": "https://x.com/eelchico"
+  },
+  "58": {
+    "owner": "bstagz",
+    "ownerLink": "https://x.com/bstagz"
+  },
+  "59": {
+    "owner": "fartcasso",
+    "ownerLink": "https://x.com/fartcasso"
+  },
+  "60": {
+    "owner": "deekaymotion",
+    "ownerLink": "https://x.com/deekaymotion"
+  },
+  "61": {
+    "owner": "BlueFlame2021",
+    "ownerLink": "https://x.com/BlueFlame2021"
+  },
+  "62": {
+    "owner": "ThecrustiestE",
+    "ownerLink": "https://x.com/ThecrustiestE"
+  },
+  "63": {
+    "owner": "behrooz30046872",
+    "ownerLink": "https://x.com/behrooz30046872"
+  },
+  "64": {
+    "owner": "outerlumen",
+    "ownerLink": "https://x.com/outerlumen"
+  },
+  "65": {
+    "owner": "Ars0nic",
+    "ownerLink": "https://x.com/Ars0nic"
+  },
+  "66": {
+    "owner": "Matt Lawson"
+  },
+  "67": {
+    "owner": "jak_vault",
+    "ownerLink": "https://x.com/jak_vault"
+  },
+  "68": {
+    "owner": "blocknoob_",
+    "ownerLink": "https://x.com/blocknoob_"
+  },
+  "69": {
+    "owner": "boingyboingy03",
+    "ownerLink": "https://x.com/boingyboingy03"
+  },
+  "70": {
+    "owner": "killeracid",
+    "ownerLink": "https://x.com/killeracid"
+  },
+  "71": {
+    "owner": "MattKaneArtist",
+    "ownerLink": "https://x.com/MattKaneArtist"
+  },
+  "72": {
+    "owner": "AN5",
+    "ownerLink": "https://x.com/AN5"
+  },
+  "73": {
+    "owner": "clay_devlin",
+    "ownerLink": "https://x.com/clay_devlin"
+  },
+  "74": {
+    "owner": "MeisterDog",
+    "ownerLink": "https://x.com/MeisterDog"
+  },
+  "75": {
+    "owner": "9digit",
+    "ownerLink": "https://x.com/9digit"
+  },
+  "76": {
+    "owner": "Mr_Meridian",
+    "ownerLink": "https://x.com/Mr_Meridian"
+  },
+  "77": {
+    "owner": "GuyNorcal",
+    "ownerLink": "https://x.com/GuyNorcal"
+  },
+  "78": {
+    "owner": "lifeofc",
+    "ownerLink": "https://x.com/lifeofc"
+  },
+  "79": {
+    "owner": "PinstripedGator",
+    "ownerLink": "https://x.com/PinstripedGator"
+  },
+  "80": {
+    "owner": "Vandy1518",
+    "ownerLink": "https://x.com/Vandy1518"
+  },
+  "81": {
+    "owner": "hawaiianft",
+    "ownerLink": "https://x.com/hawaiianft"
+  },
+  "82": {
+    "owner": "junebananana",
+    "ownerLink": "https://x.com/junebananana"
+  },
+  "83": {
+    "owner": "punk5406",
+    "ownerLink": "https://x.com/punk5406"
+  },
+  "84": {
+    "owner": "process_grey",
+    "ownerLink": "https://x.com/process_grey"
+  },
+  "85": {
+    "owner": "yossihasson",
+    "ownerLink": "https://x.com/yossihasson"
+  },
+  "86": {
+    "owner": "mtnbikey",
+    "ownerLink": "https://x.com/mtnbikey"
+  },
+  "87": {
+    "owner": "gpunknft",
+    "ownerLink": "https://x.com/gpunknft"
+  },
+  "88": {
+    "owner": "MutagenSamurai",
+    "ownerLink": "https://x.com/MutagenSamurai"
+  },
+  "89": {
+    "owner": "zenmonkeys",
+    "ownerLink": "https://x.com/zenmonkeys"
+  },
+  "90": {
+    "owner": "adamtastic",
+    "ownerLink": "https://x.com/adamtastic"
+  },
+  "91": {
+    "owner": "Mick_jpeg",
+    "ownerLink": "https://x.com/Mick_jpeg"
+  },
+  "92": {
+    "owner": "wsavas",
+    "ownerLink": "https://x.com/wsavas"
+  },
+  "93": {
+    "owner": "batzdu",
+    "ownerLink": "https://x.com/batzdu"
+  },
+  "94": {
+    "owner": "MikeDeGilio",
+    "ownerLink": "https://x.com/MikeDeGilio"
+  },
+  "95": {
+    "owner": "sonha1808",
+    "ownerLink": "https://x.com/sonha1808"
+  },
+  "96": {
+    "owner": "TheMatthewA",
+    "ownerLink": "https://x.com/TheMatthewA"
+  },
+  "97": {
+    "owner": "nftparadise",
+    "ownerLink": "https://x.com/nftparadise"
+  },
+  "98": {
+    "owner": "balon_art",
+    "ownerLink": "https://x.com/balon_art"
+  },
+  "99": {
+    "owner": "Mossybrooks",
+    "ownerLink": "https://x.com/Mossybrooks"
+  },
+  "100": {
+    "owner": "RealConnorRK900",
+    "ownerLink": "https://x.com/RealConnorRK900"
+  }
+}
