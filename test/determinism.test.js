@@ -226,6 +226,73 @@ async function main() {
     db.close();
   });
 
+  await test('a wedged simulator stalls the tournament; recover() with a fresh one finishes it', async () => {
+    const db = new DB(':memory:');
+    const t = new Tournament(4242);
+    const tid = db.createTournament({ masterSeed: t.masterSeed, masterSeedHex: t.masterSeedHex, createdAt: 1 });
+    db.insertMarbles(tid, t.marbles);
+    // Hangs forever on its 6th simulate call: probe + race per race, so that
+    // is the third race's result computation — the shape of the live failure.
+    const good = mockSimulator();
+    let calls = 0;
+    const wedging = { async setCourse() {}, async simulate(seed, o) { if (++calls === 6) return new Promise(() => {}); return good.simulate(seed, o); }, async close() {} };
+    const events = [];
+    const fakeBeacon = async () => ({ source: 'test', round: 7, value: 'ee'.repeat(32), fetchedAt: 0 });
+    const scheduler = new Scheduler({
+      tournament: t, db, simulator: wedging, tournamentId: tid,
+      broadcast: (m) => events.push(m),
+      config: { announceLeadMs: 2, interRaceGapMs: 1, watchOverrideMs: 1, simRetryMs: 1, verbose: false, beaconSource: 'test', fetchBeacon: fakeBeacon },
+    });
+    const done = new Promise((resolve) => { const orig = scheduler.broadcast; scheduler.broadcast = (m) => { orig(m); if (m.type === 'tournament_complete') resolve(); }; });
+    scheduler.start();
+    // Let it run into the wedge: two results, then the third race stuck in 'running'.
+    await new Promise((r) => setTimeout(r, 300));
+    const before = scheduler.status();
+    assert.strictEqual(events.filter((e) => e.type === 'race_result').length, 2, 'two races produced results before the wedge');
+    assert.strictEqual(before.phase, 'running', 'the third race is stuck running');
+    assert.strictEqual(before.raceKey, 'heats:2');
+    // The watchdog's move: a fresh simulator, then recover() in place.
+    scheduler.setSimulator(mockSimulator());
+    scheduler.recover();
+    await Promise.race([done, new Promise((_, rej) => setTimeout(() => rej(new Error('tournament did not complete after recover()')), 15000))]);
+    const results = events.filter((e) => e.type === 'race_result');
+    assert.strictEqual(results.length, 25, 'every race has a result');
+    assert.strictEqual(new Set(results.map((e) => e.raceKey)).size, 25, 'each race revealed exactly once (the stale step never fired)');
+    assert.strictEqual(events.filter((e) => e.type === 'race_announced' && e.race.key === 'heats:2').length, 2, 'the stuck race was announced afresh');
+    assert.ok(scheduler.status().complete);
+    scheduler.stop();
+  });
+
+  await test('a simulator that fails repeatedly is retried until it answers (never gives up)', async () => {
+    const db = new DB(':memory:');
+    const t = new Tournament(515);
+    const tid = db.createTournament({ masterSeed: t.masterSeed, masterSeedHex: t.masterSeedHex, createdAt: 1 });
+    db.insertMarbles(tid, t.marbles);
+    const good = mockSimulator();
+    let calls = 0;
+    // The third race's result computation fails eight times (more than the
+    // old give-up limit of five), then works.
+    const flaky = { async setCourse() {}, async simulate(seed, o) { calls++; if (calls >= 6 && calls < 14) throw new Error('renderer gone'); return good.simulate(seed, o); }, async close() {} };
+    const events = [];
+    const fakeBeacon = async () => ({ source: 'test', round: 7, value: 'ee'.repeat(32), fetchedAt: 0 });
+    const origErr = console.error; console.error = () => {};
+    try {
+      const scheduler = new Scheduler({
+        tournament: t, db, simulator: flaky, tournamentId: tid,
+        broadcast: (m) => events.push(m),
+        config: { announceLeadMs: 2, interRaceGapMs: 1, watchOverrideMs: 1, simRetryMs: 1, verbose: false, beaconSource: 'test', fetchBeacon: fakeBeacon },
+      });
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('tournament did not complete in time')), 15000);
+        const orig = scheduler.broadcast;
+        scheduler.broadcast = (m) => { orig(m); if (m.type === 'tournament_complete') { clearTimeout(timeout); resolve(); } };
+        scheduler.start();
+      });
+      assert.strictEqual(events.filter((e) => e.type === 'race_result').length, 25);
+      scheduler.stop();
+    } finally { console.error = origErr; }
+  });
+
   await test('a non-finishing (stuck) marble is recorded as a DNF, still 5 rows', () => {
     const t = new Tournament(9);
     const race = t.rounds[0].races[0];

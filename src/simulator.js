@@ -94,10 +94,30 @@ async function createSimulator({ url, trackSeed, courseGen = 1, headless = true,
   // doesn't say.
   const normGen = (g) => (g == null || !Number.isFinite(Number(g)) ? 1 : Math.max(1, Math.round(Number(g))));
 
+  // Every call into the page is bounded. A wedged renderer (a Chromium tab
+  // that stopped answering, a script stuck in a loop) used to leave
+  // page.evaluate pending forever — and the scheduler awaiting it, so the
+  // tournament froze without a line in the log. A timeout rejects instead,
+  // and marks this simulator as wedged so the host replaces it.
+  let wedged = null; // the error that wedged it, if any
+  const bounded = (promise, ms, what) =>
+    new Promise((resolve, reject) => {
+      const h = setTimeout(() => {
+        wedged = new Error(`${what} timed out after ${ms} ms (simulator page not responding)`);
+        reject(wedged);
+      }, ms);
+      promise.then(
+        (v) => { clearTimeout(h); resolve(v); },
+        (e) => { clearTimeout(h); reject(e); }
+      );
+    });
+  const COURSE_MS = 90000; // a course build
+  const RACE_MS = 180000; // a full headless race (maxSimSeconds of physics, fast-forwarded)
+
   // Build the shared course once.
   let currentTrack = trackSeed >>> 0;
   let currentGen = normGen(courseGen);
-  await page.evaluate(([t, g]) => window.marbleAPI.newCourse(t, g), [currentTrack, currentGen]);
+  await bounded(page.evaluate(([t, g]) => window.marbleAPI.newCourse(t, g), [currentTrack, currentGen]), COURSE_MS, 'first course build');
 
   const sameCourse = (t, g) => t === undefined || ((t >>> 0) === currentTrack && normGen(g) === currentGen);
 
@@ -108,7 +128,13 @@ async function createSimulator({ url, trackSeed, courseGen = 1, headless = true,
     async setCourse(t, gen) {
       currentTrack = t >>> 0;
       currentGen = normGen(gen);
-      await page.evaluate(([tt, g]) => window.marbleAPI.newCourse(tt, g), [currentTrack, currentGen]);
+      await bounded(page.evaluate(([tt, g]) => window.marbleAPI.newCourse(tt, g), [currentTrack, currentGen]), COURSE_MS, `course build (${currentTrack})`);
+    },
+
+    // True once a call has timed out: the page can't be trusted to answer
+    // again, so the host should close() this one and create a fresh simulator.
+    isWedged() {
+      return !!wedged;
     },
 
     // Facts about a candidate course without racing it — cheap (a course
@@ -116,7 +142,7 @@ async function createSimulator({ url, trackSeed, courseGen = 1, headless = true,
     // would sit inside a block column; hosts skip such seeds.
     async courseInfo(forTrackSeed, courseGen) {
       if (!sameCourse(forTrackSeed, courseGen)) await this.setCourse(forTrackSeed, courseGen);
-      const info = await page.evaluate(() => (window.marbleAPI.courseInfo ? window.marbleAPI.courseInfo() : null));
+      const info = await bounded(page.evaluate(() => (window.marbleAPI.courseInfo ? window.marbleAPI.courseInfo() : null)), COURSE_MS, 'courseInfo');
       return { trackSeed: currentTrack, courseGen: currentGen, finishClear: !(info && info.finishClear === false), splitMerge: info ? info.splitMerge || null : null };
     },
 
@@ -126,7 +152,7 @@ async function createSimulator({ url, trackSeed, courseGen = 1, headless = true,
     // (RED/BLUE/GREEN/YELLOW/CREAM) the game assigns.
     async simulate(raceSeed, { forTrackSeed, courseGen } = {}) {
       if (!sameCourse(forTrackSeed, courseGen)) await this.setCourse(forTrackSeed, courseGen);
-      const res = await page.evaluate((r) => window.marbleAPI.simulateRace(r), raceSeed >>> 0);
+      const res = await bounded(page.evaluate((r) => window.marbleAPI.simulateRace(r), raceSeed >>> 0), RACE_MS, `race ${raceSeed >>> 0}`);
       return {
         trackSeed: res.trackSeed >>> 0,
         courseGen: currentGen,
@@ -149,7 +175,8 @@ async function createSimulator({ url, trackSeed, courseGen = 1, headless = true,
     },
 
     async close() {
-      await browser.close();
+      // A wedged browser may not close politely; don't let that hang either.
+      await Promise.race([browser.close(), new Promise((r) => setTimeout(r, 10000))]);
     },
   };
 }

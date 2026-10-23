@@ -53,6 +53,7 @@ const DEFAULTS = {
   fetchBeacon, // injectable (tests)
   maxClientSeeds: 256, // per race; one per IP
   commit: null, // pre-made { commit, salt } (server persists it); else generated
+  simRetryMs: 5000, // wait between retries of a failed result computation
 };
 
 class Scheduler {
@@ -77,6 +78,57 @@ class Scheduler {
     // announced race accepts seeds.
     this._clientSeeds = new Map();
     this._lastBeacon = null; // last successfully fetched pulse (stale fallback)
+    // Liveness: when the pipeline last moved (announce, start, reveal, a round
+    // built). The host's watchdog reads it; recover() bumps it.
+    this.lastProgressAt = this.now();
+    // Recovery epoch: every step re-checks it after an await, so a step left
+    // in flight by a wedged simulator can't act once recover() has moved on.
+    this._epoch = 0;
+  }
+
+  // Where the pipeline is, for /api/health and the host's stall watchdog.
+  status() {
+    return {
+      phase: this.current ? this.current.phase : this.t.isComplete() ? 'complete' : 'idle',
+      raceKey: this.current ? this.current.raceKey : null,
+      sinceProgressMs: this.now() - this.lastProgressAt,
+      paused: this.paused,
+      stopped: this.stopped,
+      complete: this.t.isComplete(),
+    };
+  }
+
+  // Swap in a fresh simulator (the old one wedged).
+  setSimulator(sim) {
+    this.sim = sim;
+  }
+
+  // Get a stuck pipeline moving again without abandoning the tournament:
+  // drop every pending timer and in-flight step, put the race that was
+  // underway back to pending (it never produced a result; it is announced
+  // afresh with a new start time and public contribution), and carry on
+  // from the next race. Finished races are untouched.
+  recover() {
+    if (this.stopped) return;
+    for (const h of this.timers) clearTimeout(h);
+    this.timers.clear();
+    this._epoch++;
+    for (const race of this.t.allRaces()) {
+      if (race.result || !race.status || race.status === 'pending') continue;
+      race.status = 'pending';
+      race.scheduledStart = null;
+      race.startedAt = null;
+      race.raceSeed = undefined;
+      race.publicContribution = undefined;
+      race.publicSource = undefined;
+      race.clientSeeds = undefined;
+      race.beacon = undefined;
+    }
+    this._clientSeeds.clear();
+    this.current = null;
+    this._idle = false;
+    this.lastProgressAt = this.now();
+    this._runNext();
   }
 
   // The master seed and its salt are revealed ONLY once the tournament is over,
@@ -139,6 +191,7 @@ class Scheduler {
   start() {
     this._persistNewRounds();
     this.broadcast(this.snapshot());
+    this.lastProgressAt = this.now();
     this._runNext();
   }
 
@@ -162,6 +215,7 @@ class Scheduler {
       const next = this.t.advance();
       if (next) {
         this._persistNewRounds();
+        this.lastProgressAt = this.now();
         this.broadcast({
           type: 'round_built',
           serverNow: this.now(),
@@ -210,8 +264,9 @@ class Scheduler {
     // Pick the course first: the announced trackSeed must be final (clients
     // pre-build the course during the countdown), and validating a candidate
     // requires simulating — with the PROBE seed, never a real race seed.
+    const epoch = this._epoch;
     this._pickTrack(race).then((ok) => {
-      if (this.stopped) return;
+      if (this.stopped || epoch !== this._epoch) return;
       if (!ok) {
         // Simulator hiccup — try this race again shortly instead of stalling.
         this._t(() => this._announce(race), 15000);
@@ -222,6 +277,7 @@ class Scheduler {
       race.status = 'announced';
       race.scheduledStart = scheduledStart;
       this.current = { raceKey: race.key, phase: 'announced', scheduledStart };
+      this.lastProgressAt = this.now();
       this.db.markAnnounced(race.dbId, scheduledStart, this.now());
       this._clientSeeds.clear(); // only the announced race accepts seeds
       this._clientSeeds.set(race.key, new Map());
@@ -312,6 +368,7 @@ class Scheduler {
 
   async _start(race) {
     if (this.stopped) return;
+    const epoch = this._epoch;
     // Close the window: anything arriving from here on is refused.
     const clientSeeds = this.clientSeedsFor(race.key);
     race.status = 'starting';
@@ -344,7 +401,7 @@ class Scheduler {
     } else {
       publicSource = clientSeeds.length ? 'clients' : 'degraded';
     }
-    if (this.stopped) return;
+    if (this.stopped || epoch !== this._epoch) return;
 
     const pub = publicContributionFor({ beacon, clientSeeds });
     const publicContribution = pub.toString('hex');
@@ -356,6 +413,7 @@ class Scheduler {
     race.status = 'running';
     race.startedAt = this.now();
     this.current = { raceKey: race.key, phase: 'running', scheduledStart: race.scheduledStart };
+    this.lastProgressAt = this.now();
     this.db.markStarted(race.dbId, race.startedAt, {
       raceSeed: race.raceSeed,
       publicContribution,
@@ -390,22 +448,30 @@ class Scheduler {
     } catch (err) {
       console.error('[scheduler] sim failed for', race.key, err.message);
     }
-    if (this.stopped) return;
+    if (this.stopped || epoch !== this._epoch) return;
     if (!order) {
-      // Retry the sim a few times; the race is already running on clients.
+      // Retry the sim; the race is already running on clients.
       this._t(() => this._computeAndReveal(race, 1), 3000);
       return;
     }
     this._scheduleReveal(race, order);
   }
 
+  // Keeps trying for as long as it takes: giving up after a few attempts used
+  // to leave the race without a result and the whole tournament frozen. A
+  // simulator that stays broken is the host watchdog's job (it replaces the
+  // simulator and calls recover()); this just needs to still be here when
+  // the replacement arrives.
   async _computeAndReveal(race, attempt) {
+    const epoch = this._epoch;
     try {
       const sim = await this.sim.simulate(race.raceSeed, { forTrackSeed: race.trackSeed, courseGen: race.courseGen });
+      if (this.stopped || epoch !== this._epoch) return;
       this._scheduleReveal(race, this._toOrder(race, sim));
     } catch (err) {
-      console.error('[scheduler] sim retry failed for', race.key, err.message);
-      if (attempt < 5) this._t(() => this._computeAndReveal(race, attempt + 1), 5000);
+      if (this.stopped || epoch !== this._epoch) return;
+      console.error(`[scheduler] sim retry ${attempt} failed for ${race.key}: ${err.message}`);
+      this._t(() => this._computeAndReveal(race, attempt + 1), Math.min(this.cfg.simRetryMs * Math.min(attempt, 3), 15000));
     }
   }
 
@@ -462,6 +528,7 @@ class Scheduler {
     race.status = 'done';
     this.db.saveResult(race.dbId, order, this.now());
     this.current = { raceKey: race.key, phase: 'revealed', scheduledStart: race.scheduledStart };
+    this.lastProgressAt = this.now();
     const w = race.result[0];
     if (this.cfg.verbose) console.log(`[race] ${race.key} result  winner=${w.marbleName} (${w.lane})`);
 

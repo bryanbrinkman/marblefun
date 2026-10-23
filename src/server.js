@@ -85,6 +85,10 @@ function buildConfig() {
     marbleImgDir: envDir('MARBLE_IMG_DIR', DEFAULT_MARBLE_IMG_DIR),
     marbleGlbDir: envDir('MARBLE_GLB_DIR', DEFAULT_MARBLE_GLB_DIR),
     skinsRefreshMs: envInt('SKINS_REFRESH_MS', 6 * 3600 * 1000),
+    // Stall watchdog: with no pipeline progress for this long (and no pause,
+    // no finished tournament) the simulator is replaced and the scheduler
+    // recovered. Longer than any legitimate quiet spell (a race is ~3 min).
+    stallWatchdogMs: envInt('STALL_WATCHDOG_MS', 10 * 60 * 1000),
   };
   return cfg;
 }
@@ -246,6 +250,7 @@ async function main() {
   let tournament = null;
   let simulator = null;
   let scheduler = null;
+  const watchdog = { relaunches: 0, lastStallAt: null, lastError: null, busy: false };
   let simFailed = false;
   let startTournament = null; // assigned once setup succeeds
 
@@ -457,6 +462,20 @@ async function main() {
       // (GIT_SHA, passed by the deploy workflow), so a deploy can be verified
       // against the repository without guessing from the page.
       return sendJSON(res, 200, { commit: process.env.GIT_SHA || null, startedAt: SERVER_STARTED_AT });
+    }
+    if (url.pathname === '/api/health') {
+      // Is the tournament pipeline alive? Read by the site-check workflow and
+      // handy when someone asks why the races stopped.
+      const st = scheduler ? scheduler.status() : null;
+      const stalled = !!(st && !st.paused && !st.complete && !st.stopped && st.sinceProgressMs > cfg.stallWatchdogMs);
+      return sendJSON(res, stalled ? 503 : 200, {
+        ok: !stalled,
+        startedAt: SERVER_STARTED_AT,
+        tournamentId: scheduler ? scheduler.tournamentId : null,
+        scheduler: st,
+        simulator: { ready: !!simulator, wedged: !!(simulator && simulator.isWedged && simulator.isWedged()) },
+        watchdog: { relaunches: watchdog.relaunches, lastStallAt: watchdog.lastStallAt, lastError: watchdog.lastError, stallAfterMs: cfg.stallWatchdogMs },
+      });
     }
     if (url.pathname === '/api/next') {
       // Convenience for builders: just the upcoming/current race with its
@@ -702,6 +721,55 @@ async function main() {
     setTimeout(thumbPass, 3000);
     const thumbTimer = setInterval(thumbPass, Math.max(60000, cfg.skinsRefreshMs));
     if (thumbTimer.unref) thumbTimer.unref();
+
+    // Stall watchdog. A headless Chromium tab can stop answering (the sim's
+    // page.evaluate never returned, or now times out) and the tournament
+    // freezes on one race for days — the process stays up, the pages still
+    // serve, nothing is logged. Once a minute: if the simulator has wedged,
+    // or the scheduler has made no progress for stallWatchdogMs while it
+    // should be racing, replace the simulator and recover the scheduler in
+    // place (the tournament continues from the race that was underway).
+    const relaunchSimulator = async (why) => {
+      if (watchdog.busy) return;
+      watchdog.busy = true;
+      watchdog.lastStallAt = Date.now();
+      console.error(`[watchdog] ${why} — replacing the simulator and recovering the scheduler`);
+      const old = simulator;
+      simulator = null;
+      try {
+        if (old) await old.close();
+      } catch (e) {
+        console.error('[watchdog] closing the old simulator failed:', e && e.message);
+      }
+      try {
+        simulator = await createSimulator({ url: `${localUrl}/marble_run.html`, trackSeed: 1, headless: cfg.headless });
+        watchdog.relaunches++;
+        watchdog.lastError = null;
+        if (scheduler && !scheduler.stopped) {
+          scheduler.setSimulator(simulator);
+          scheduler.recover();
+        }
+        console.log('[watchdog] simulator replaced; scheduler resumed');
+      } catch (e) {
+        // Try again on the next tick; the pages keep serving meanwhile.
+        watchdog.lastError = (e && e.message) || String(e);
+        console.error('[watchdog] could not start a new simulator:', watchdog.lastError);
+      } finally {
+        watchdog.busy = false;
+      }
+    };
+    const watchdogTick = () => {
+      if (watchdog.busy) return;
+      if (!simulator) return relaunchSimulator('no simulator');
+      if (simulator.isWedged && simulator.isWedged()) return relaunchSimulator('simulator call timed out');
+      if (!scheduler || scheduler.stopped) return;
+      const st = scheduler.status();
+      if (st.paused || st.complete) return;
+      if (st.sinceProgressMs > cfg.stallWatchdogMs)
+        return relaunchSimulator(`no tournament progress for ${Math.round(st.sinceProgressMs / 1000)} s (phase ${st.phase}, race ${st.raceKey || '-'})`);
+    };
+    const watchdogTimer = setInterval(watchdogTick, 60000);
+    if (watchdogTimer.unref) watchdogTimer.unref();
 
     // Endless mode: run a tournament to its champion, hold on the podium for
     // the intermission, then start the next one with a fresh seed — forever.

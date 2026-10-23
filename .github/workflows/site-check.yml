@@ -17,7 +17,7 @@ jobs:
     steps:
       - name: DNS (A / AAAA / CNAME) for both hosts
         run: |
-          # run: 29
+          # run: 30
           for h in marblerun.fun www.marblerun.fun marblefun.fly.dev; do
             echo "=== $h"
             for t in A AAAA CNAME; do echo "-- $t"; dig +short "$t" "$h" @1.1.1.1 || true; done
@@ -43,6 +43,7 @@ jobs:
             echo "--- print markers"; curl -4 -sS --max-time 20 "https://$h/print" | grep -o 'print-state.js\|id="previewOff"\|class="site-nav"\|data-level="idle"\|id="pieceOpts"\|id="statusTech"\|id="previewTech"\|id="exportNote"\|Settings changed\|id="modulesCount"\|class="card pieces"' | sort | uniq -c
             echo "--- shared sheet + state module"; for f in site.css print-state.js; do curl -4 -sS -o /dev/null -w "$f %{http_code} %{content_type} %{size_download}\n" --max-time 20 "https://$h/$f"; done
             echo "--- champions API coverage"; curl -4 -sS --max-time 20 "https://$h/api/champions?limit=3" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("coverage", d.get("coverage")); print("gaps", [(g["tournamentId"], g["status"]) for g in d.get("gaps", [])][:12]); print("history", [(h["tournamentId"], h["champion"]["id"], h.get("titleNumber"), h.get("lifetimeTitles")) for h in d.get("history", [])])'
+            echo "--- health (pipeline liveness)"; curl -4 -sS --max-time 20 "https://$h/api/health" | python3 -c 'import json,sys; d=json.load(sys.stdin); s=d.get("scheduler") or {}; print("ok", d.get("ok"), "| tournament", d.get("tournamentId"), "| phase", s.get("phase"), s.get("raceKey"), "| since progress", round((s.get("sinceProgressMs") or 0)/1000), "s | simulator", d.get("simulator"), "| watchdog", d.get("watchdog"))' || true
             echo "--- course generation on recent races"; curl -4 -sS --max-time 20 "https://$h/api/history?limit=3" | python3 -c 'import json,sys; d=json.load(sys.stdin); print([(r["raceKey"], r["trackSeed"], r.get("courseGen")) for r in d.get("races", [])])'
             echo "--- hall of fame: holder titles vs table"; curl -4 -sS --max-time 20 "https://$h/api/hall-of-fame" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("currentChampion") or {}; t=d.get("titleTable") or []; row=next((r for r in t if r.get("id")==c.get("id")), None); print("holder", c.get("id"), c.get("name"), "titles", c.get("titles"), "| table row", row, "| table", len(t), "most", len(d.get("mostTitles") or []))'
             echo "--- wood texture"; curl -4 -sS -o /dev/null -D - --max-time 20 "https://$h/textures/wood-h.png" | grep -i 'HTTP/\|content-type\|content-length\|cache-control' || true
