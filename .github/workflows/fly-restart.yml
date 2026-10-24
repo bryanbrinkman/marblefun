@@ -1,0 +1,33 @@
+# Restart the Fly machine (a clean VM: memory freed, simulator relaunched,
+# the tournament resumes from the database). Run it from the Actions tab, or
+# bump the `run:` comment below to trigger it on push. Uses the deploy token.
+name: fly-restart
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/fly-restart.yml']
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Restart every machine of the app
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          # run: 1
+          flyctl machines list -a marblefun
+          for id in $(flyctl machines list -a marblefun --json | python3 -c 'import json,sys; print(" ".join(m["id"] for m in json.load(sys.stdin)))'); do
+            echo "=== restarting $id"; flyctl machine restart "$id" -a marblefun --force
+          done
+          sleep 20
+          flyctl status -a marblefun
+      - name: Did it come back?
+        run: |
+          for i in $(seq 1 12); do
+            if curl -4 -sS --max-time 15 https://marblefun.fly.dev/api/version; then echo; echo "up after $((i*15)) s"; exit 0; fi
+            sleep 15
+          done
+          echo "still not answering after 3 min"; exit 1
