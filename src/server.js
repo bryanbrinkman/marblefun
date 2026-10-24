@@ -3,6 +3,7 @@
 
 const http = require('node:http');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const { DB } = require('./db');
@@ -10,6 +11,7 @@ const { WSServer } = require('./ws');
 const { Tournament } = require('./tournament');
 const { Scheduler } = require('./scheduler');
 const { createSimulator } = require('./simulator');
+const { createWatchdog } = require('./watchdog');
 const ssr = require('./ssr');
 const { toMasterBuf, makeCommitment, randomMasterSeed } = require('./seeds');
 const { RateLimiter, clientIp } = require('./ratelimit');
@@ -250,7 +252,7 @@ async function main() {
   let tournament = null;
   let simulator = null;
   let scheduler = null;
-  const watchdog = { relaunches: 0, lastStallAt: null, lastError: null, busy: false };
+  let watchdog = null; // the stall watchdog, once the simulator is up
   let simFailed = false;
   let startTournament = null; // assigned once setup succeeds
 
@@ -474,7 +476,10 @@ async function main() {
         tournamentId: scheduler ? scheduler.tournamentId : null,
         scheduler: st,
         simulator: { ready: !!simulator, wedged: !!(simulator && simulator.isWedged && simulator.isWedged()) },
-        watchdog: { relaunches: watchdog.relaunches, lastStallAt: watchdog.lastStallAt, lastError: watchdog.lastError, stallAfterMs: cfg.stallWatchdogMs },
+        watchdog: watchdog ? { ...watchdog.state, stallAfterMs: cfg.stallWatchdogMs } : null,
+        // Memory is what takes this machine down: the process's resident set
+        // and what the VM has left (free + swap-free), in MB.
+        memory: { rssMb: Math.round(process.memoryUsage().rss / 1048576), freeMb: Math.round(os.freemem() / 1048576), totalMb: Math.round(os.totalmem() / 1048576) },
       });
     }
     if (url.pathname === '/api/next') {
@@ -722,53 +727,20 @@ async function main() {
     const thumbTimer = setInterval(thumbPass, Math.max(60000, cfg.skinsRefreshMs));
     if (thumbTimer.unref) thumbTimer.unref();
 
-    // Stall watchdog. A headless Chromium tab can stop answering (the sim's
-    // page.evaluate never returned, or now times out) and the tournament
-    // freezes on one race for days — the process stays up, the pages still
-    // serve, nothing is logged. Once a minute: if the simulator has wedged,
-    // or the scheduler has made no progress for stallWatchdogMs while it
-    // should be racing, replace the simulator and recover the scheduler in
-    // place (the tournament continues from the race that was underway).
-    const relaunchSimulator = async (why) => {
-      if (watchdog.busy) return;
-      watchdog.busy = true;
-      watchdog.lastStallAt = Date.now();
-      console.error(`[watchdog] ${why} — replacing the simulator and recovering the scheduler`);
-      const old = simulator;
-      simulator = null;
-      try {
-        if (old) await old.close();
-      } catch (e) {
-        console.error('[watchdog] closing the old simulator failed:', e && e.message);
-      }
-      try {
-        simulator = await createSimulator({ url: `${localUrl}/marble_run.html`, trackSeed: 1, headless: cfg.headless });
-        watchdog.relaunches++;
-        watchdog.lastError = null;
-        if (scheduler && !scheduler.stopped) {
-          scheduler.setSimulator(simulator);
-          scheduler.recover();
-        }
-        console.log('[watchdog] simulator replaced; scheduler resumed');
-      } catch (e) {
-        // Try again on the next tick; the pages keep serving meanwhile.
-        watchdog.lastError = (e && e.message) || String(e);
-        console.error('[watchdog] could not start a new simulator:', watchdog.lastError);
-      } finally {
-        watchdog.busy = false;
-      }
-    };
-    const watchdogTick = () => {
-      if (watchdog.busy) return;
-      if (!simulator) return relaunchSimulator('no simulator');
-      if (simulator.isWedged && simulator.isWedged()) return relaunchSimulator('simulator call timed out');
-      if (!scheduler || scheduler.stopped) return;
-      const st = scheduler.status();
-      if (st.paused || st.complete) return;
-      if (st.sinceProgressMs > cfg.stallWatchdogMs)
-        return relaunchSimulator(`no tournament progress for ${Math.round(st.sinceProgressMs / 1000)} s (phase ${st.phase}, race ${st.raceKey || '-'})`);
-    };
-    const watchdogTimer = setInterval(watchdogTick, 60000);
+    // Stall watchdog (src/watchdog.js): once a minute, replace a wedged or
+    // stalled simulator and recover the scheduler in place; back off after a
+    // failed launch and exit the process after two in a row so Fly restarts
+    // the machine clean (a browser that can't start means the VM is out of
+    // memory — more attempts only make that worse).
+    watchdog = createWatchdog({
+      stallMs: cfg.stallWatchdogMs,
+      getSimulator: () => simulator,
+      setSimulator: (s) => { simulator = s; },
+      getScheduler: () => scheduler,
+      launch: () => createSimulator({ url: `${localUrl}/marble_run.html`, trackSeed: 1, headless: cfg.headless }),
+      log: (...a) => console.error('[watchdog]', ...a),
+    });
+    const watchdogTimer = setInterval(() => { watchdog.tick().catch((e) => console.error('[watchdog] tick failed:', e && e.message)); }, 60000);
     if (watchdogTimer.unref) watchdogTimer.unref();
 
     // Endless mode: run a tournament to its champion, hold on the podium for

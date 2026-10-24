@@ -99,8 +99,15 @@ function createThumbnailer({ dir, size = 512, render, log = () => {} }) {
 // Page; the same page is reused for every thumbnail.
 function browserRenderer(openPage, { quality = 0.86, timeoutMs = 20000 } = {}) {
   let pagePromise = null;
-  const getPage = () => {
-    if (!pagePromise) pagePromise = openPage();
+  const getPage = async () => {
+    // The page rides on the simulator's browser; when the watchdog replaces
+    // that browser the cached page is dead — open a new one.
+    if (pagePromise) {
+      const p = await pagePromise.catch(() => null);
+      if (p && !(p.isClosed && p.isClosed())) return p;
+      pagePromise = null;
+    }
+    pagePromise = openPage();
     return pagePromise;
   };
   return async (url, size) => {

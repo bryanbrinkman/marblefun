@@ -28,6 +28,11 @@ swap_size_mb = 1024
   auto_start_machines = true
   min_machines_running = 1
 
+# If the server process exits (the stall watchdog does that on purpose when
+# the VM can no longer start a browser), bring the machine straight back.
+[[restart]]
+  policy = "always"
+
 # SQLite lives on a persistent volume so results survive deploys/restarts.
 [[mounts]]
   source = "marble_data"

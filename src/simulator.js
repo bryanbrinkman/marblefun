@@ -175,8 +175,16 @@ async function createSimulator({ url, trackSeed, courseGen = 1, headless = true,
     },
 
     async close() {
-      // A wedged browser may not close politely; don't let that hang either.
-      await Promise.race([browser.close(), new Promise((r) => setTimeout(r, 10000))]);
+      // A wedged browser may not close politely; don't let that hang, and
+      // don't leave its processes behind holding memory — kill them.
+      let closed = false;
+      await Promise.race([browser.close().then(() => { closed = true; }, () => {}), new Promise((r) => setTimeout(r, 10000))]);
+      if (!closed) {
+        try {
+          const proc = browser.process && browser.process();
+          if (proc && !proc.killed) proc.kill('SIGKILL');
+        } catch {}
+      }
     },
   };
 }
