@@ -7,7 +7,8 @@
 // OOM-killed, and — the failure after that — a machine so short of memory
 // that a replacement browser can't even start. Each tick decides one thing:
 // is the simulator healthy and the scheduler moving? If not, replace the
-// simulator and recover the scheduler in place. Replacing is what costs
+// simulator and recover the scheduler in place (or, when the simulator never
+// came up at boot, start the tournament once it does — `onReady`). Replacing is what costs
 // memory, so it backs off after a failed launch, and after a few failures in
 // a row it gives up on this process entirely: exiting lets the platform
 // restart the machine with a clean slate, which is the one recovery that
@@ -66,8 +67,15 @@ function createWatchdog(opts) {
       if (sched && !sched.stopped) {
         sched.setSimulator(sim);
         sched.recover();
+        log('simulator replaced; scheduler resumed');
+      } else if (cfg.onReady) {
+        // No scheduler yet: the simulator never came up at boot, so this is
+        // the first one — the host starts the tournament from it.
+        log('simulator started; starting the tournament');
+        cfg.onReady(sim);
+      } else {
+        log('simulator replaced');
       }
-      log('simulator replaced; scheduler resumed');
     } catch (e) {
       state.launchFailures++;
       state.lastError = (e && e.message) || String(e);

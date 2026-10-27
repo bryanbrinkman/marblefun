@@ -106,5 +106,23 @@ function harness({ launchOk = true, stallMs = 1000 } = {}) {
     assert.strictEqual(h.launches(), 1);
   });
 
+  await check('with no scheduler yet (the boot launch failed), a successful launch calls onReady instead of recover', async () => {
+    const h = harness();
+    h.sim = null;
+    let sched = null;
+    const ready = [];
+    const wd = createWatchdog({
+      stallMs: 1000, launchBackoffMs: 5000, maxLaunchFailures: 2, closeTimeoutMs: 50,
+      now: () => 1, log: () => {}, exit: () => {},
+      getSimulator: () => h.sim, setSimulator: (s) => { h.sim = s; }, getScheduler: () => sched,
+      launch: async () => ({ fresh: true, isWedged: () => false, async close() {} }),
+      onReady: (sim) => { ready.push(sim); sched = { stopped: false, status() { return { phase: 'idle', sinceProgressMs: 0 }; }, setSimulator() {}, recover() { throw new Error('must not recover a scheduler that does not exist'); } }; },
+    });
+    assert.strictEqual(await wd.tick(), 'no simulator');
+    assert.strictEqual(ready.length, 1, 'onReady called once with the new simulator');
+    assert.strictEqual(ready[0], h.sim);
+    assert.strictEqual(await wd.tick(), null, 'now healthy: left alone');
+  });
+
   console.log(`\n${passed} checks passed`);
 })().catch((e) => { console.error('  ❌', e.message); process.exit(1); });

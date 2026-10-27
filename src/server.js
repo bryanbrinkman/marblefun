@@ -91,6 +91,10 @@ function buildConfig() {
     // no finished tournament) the simulator is replaced and the scheduler
     // recovered. Longer than any legitimate quiet spell (a race is ~3 min).
     stallWatchdogMs: envInt('STALL_WATCHDOG_MS', 10 * 60 * 1000),
+    watchdogTickMs: envInt('WATCHDOG_TICK_MS', 60 * 1000),
+    // Test hook: make the boot-time simulator launch fail once, to exercise
+    // the watchdog's recovery of a server that came up without a simulator.
+    simBootFailOnce: process.env.SIM_BOOT_FAIL_ONCE === '1',
   };
   return cfg;
 }
@@ -470,8 +474,11 @@ async function main() {
       // handy when someone asks why the races stopped.
       const st = scheduler ? scheduler.status() : null;
       const stalled = !!(st && !st.paused && !st.complete && !st.stopped && st.sinceProgressMs > cfg.stallWatchdogMs);
-      return sendJSON(res, stalled ? 503 : 200, {
-        ok: !stalled,
+      // The DB is up but the pipeline isn't: the simulator never started (or
+      // is being replaced) and no tournament is running.
+      const missing = !!db && (!simulator || !scheduler);
+      return sendJSON(res, stalled || missing ? 503 : 200, {
+        ok: !stalled && !missing,
         startedAt: SERVER_STARTED_AT,
         tournamentId: scheduler ? scheduler.tournamentId : null,
         scheduler: st,
@@ -704,19 +711,25 @@ async function main() {
   try {
     db = new DB(cfg.dbPath);
 
-    console.log('[server] launching headless simulator…');
-    simulator = await createSimulator({
-      url: `${localUrl}/marble_run.html`,
-      // Any valid seed; every race rebuilds the course for its own trackSeed.
-      trackSeed: 1,
-      headless: cfg.headless,
-    });
-    console.log('[server] simulator ready (course built)');
+    // Any valid seed; every race rebuilds the course for its own trackSeed.
+    // A busy VM at boot (artwork discovery, thumbnails, the course build) can
+    // take a while to get the page ready — allow it two minutes.
+    let bootFailed = false;
+    const launchSimulator = () => {
+      if (cfg.simBootFailOnce && !bootFailed) {
+        bootFailed = true;
+        return Promise.reject(new Error('simulated boot failure (SIM_BOOT_FAIL_ONCE)'));
+      }
+      return createSimulator({ url: `${localUrl}/marble_run.html`, trackSeed: 1, headless: cfg.headless, readyTimeoutMs: 120000 });
+    };
 
     // Thumbnails ride on the simulator's browser. Render whatever the skin
     // discovery has found so far (it may still be listing the folders — keep
     // checking for a while), then re-check with each artwork refresh.
-    thumbRender = browserRenderer(() => simulator.openPage());
+    thumbRender = browserRenderer(() => {
+      if (!simulator) throw new Error('simulator not running');
+      return simulator.openPage();
+    });
     let thumbTries = 0;
     const thumbPass = () => {
       const m = rawManifest();
@@ -732,15 +745,19 @@ async function main() {
     // failed launch and exit the process after two in a row so Fly restarts
     // the machine clean (a browser that can't start means the VM is out of
     // memory — more attempts only make that worse).
+    // It also owns the boot: if the first simulator fails to start, the
+    // tournament is not abandoned for the life of the process — the watchdog
+    // keeps launching, and starts the tournament from the first one that works.
     watchdog = createWatchdog({
       stallMs: cfg.stallWatchdogMs,
       getSimulator: () => simulator,
       setSimulator: (s) => { simulator = s; },
       getScheduler: () => scheduler,
-      launch: () => createSimulator({ url: `${localUrl}/marble_run.html`, trackSeed: 1, headless: cfg.headless }),
+      launch: launchSimulator,
+      onReady: () => { simFailed = false; bootTournament(); },
       log: (...a) => console.error('[watchdog]', ...a),
     });
-    const watchdogTimer = setInterval(() => { watchdog.tick().catch((e) => console.error('[watchdog] tick failed:', e && e.message)); }, 60000);
+    const watchdogTimer = setInterval(() => { watchdog.tick().catch((e) => console.error('[watchdog] tick failed:', e && e.message)); }, cfg.watchdogTickMs);
     if (watchdogTimer.unref) watchdogTimer.unref();
 
     // Endless mode: run a tournament to its champion, hold on the podium for
@@ -793,16 +810,34 @@ async function main() {
     // deploy — gets a fresh random seed. Without this, each deploy replayed the
     // identical 424242 tournament: same bracket, same champion, and the
     // history page filled with duplicate "titles".
-    const priorTournaments = db.statsSummary().tournaments;
-    const firstSeed = priorTournaments > 0 ? randomSeed() : cfg.masterSeed;
-    if (priorTournaments > 0)
-      console.log(`[server] ${priorTournaments} tournament(s) on record — starting a fresh one with a random 256-bit seed`);
-    // Whatever was 'running' when the previous process died was cut short
-    // (a deploy, a restart); record that so the archive can say so rather
-    // than skipping the number.
-    const cut = db.abandonStale(Date.now());
-    if (cut) console.log(`[server] ${cut} unfinished tournament(s) marked as cut short (no champion)`);
-    startTournament(firstSeed);
+    const bootTournament = () => {
+      const priorTournaments = db.statsSummary().tournaments;
+      const firstSeed = priorTournaments > 0 ? randomSeed() : cfg.masterSeed;
+      if (priorTournaments > 0)
+        console.log(`[server] ${priorTournaments} tournament(s) on record — starting a fresh one with a random 256-bit seed`);
+      // Whatever was 'running' when the previous process died was cut short
+      // (a deploy, a restart); record that so the archive can say so rather
+      // than skipping the number.
+      const cut = db.abandonStale(Date.now());
+      if (cut) console.log(`[server] ${cut} unfinished tournament(s) marked as cut short (no champion)`);
+      startTournament(firstSeed);
+    };
+
+    console.log('[server] launching headless simulator…');
+    try {
+      simulator = await launchSimulator();
+      console.log('[server] simulator ready (course built)');
+      bootTournament();
+    } catch (err) {
+      // Not fatal and not final: the watchdog retries the launch every minute
+      // (backing off after failures) and boots the tournament from the first
+      // simulator that comes up. Until then clients run their own tournament.
+      simFailed = true;
+      console.error('[server] simulator failed to start — the watchdog will keep trying:', (err && err.message) || err);
+      try {
+        wss.broadcast({ type: 'no_tournament' });
+      } catch {}
+    }
   } catch (err) {
     simFailed = true;
     console.error('[server] no live tournament (serving page in local-fallback mode):', err && err.stack || err);
