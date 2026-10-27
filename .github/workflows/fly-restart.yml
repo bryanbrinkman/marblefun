@@ -17,7 +17,7 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          # run: 1
+          # run: 2
           flyctl machines list -a marblefun
           for id in $(flyctl machines list -a marblefun --json | python3 -c 'import json,sys; print(" ".join(m["id"] for m in json.load(sys.stdin)))'); do
             echo "=== restarting $id"; flyctl machine restart "$id" -a marblefun --force
