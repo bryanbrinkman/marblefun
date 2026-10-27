@@ -92,6 +92,9 @@ function buildConfig() {
     // recovered. Longer than any legitimate quiet spell (a race is ~3 min).
     stallWatchdogMs: envInt('STALL_WATCHDOG_MS', 10 * 60 * 1000),
     watchdogTickMs: envInt('WATCHDOG_TICK_MS', 60 * 1000),
+    // After a failed simulator launch, wait this long before the next try;
+    // two failures in a row exit the process for a clean machine restart.
+    watchdogLaunchBackoffMs: envInt('WATCHDOG_LAUNCH_BACKOFF_MS', 2 * 60 * 1000),
     // Test hook: make the boot-time simulator launch fail once, to exercise
     // the watchdog's recovery of a server that came up without a simulator.
     simBootFailOnce: process.env.SIM_BOOT_FAIL_ONCE === '1',
@@ -750,11 +753,12 @@ async function main() {
     // keeps launching, and starts the tournament from the first one that works.
     watchdog = createWatchdog({
       stallMs: cfg.stallWatchdogMs,
+      launchBackoffMs: cfg.watchdogLaunchBackoffMs,
       getSimulator: () => simulator,
       setSimulator: (s) => { simulator = s; },
       getScheduler: () => scheduler,
       launch: launchSimulator,
-      onReady: () => { simFailed = false; bootTournament(); },
+      onReady: () => { console.log('[server] simulator ready (course built)'); simFailed = false; bootTournament(); },
       log: (...a) => console.error('[watchdog]', ...a),
     });
     const watchdogTimer = setInterval(() => { watchdog.tick().catch((e) => console.error('[watchdog] tick failed:', e && e.message)); }, cfg.watchdogTickMs);
@@ -823,17 +827,18 @@ async function main() {
       startTournament(firstSeed);
     };
 
+    // The first launch goes through the watchdog too, so its in-flight guard
+    // holds: a timer tick during a slow boot must not start a second browser
+    // beside the first (two Chromiums starting at once on a 1 GB machine is
+    // how a boot launch ends up timing out).
     console.log('[server] launching headless simulator…');
-    try {
-      simulator = await launchSimulator();
-      console.log('[server] simulator ready (course built)');
-      bootTournament();
-    } catch (err) {
-      // Not fatal and not final: the watchdog retries the launch every minute
+    await watchdog.tick();
+    if (!scheduler) {
+      // Not fatal and not final: the watchdog retries on its schedule
       // (backing off after failures) and boots the tournament from the first
       // simulator that comes up. Until then clients run their own tournament.
       simFailed = true;
-      console.error('[server] simulator failed to start — the watchdog will keep trying:', (err && err.message) || err);
+      console.error('[server] simulator failed to start — the watchdog will keep trying:', watchdog.state.lastError);
       try {
         wss.broadcast({ type: 'no_tournament' });
       } catch {}

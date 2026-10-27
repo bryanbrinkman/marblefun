@@ -47,8 +47,8 @@ function createWatchdog(opts) {
   async function relaunch(why) {
     state.busy = true;
     state.lastStallAt = now();
-    log(`${why} — replacing the simulator and recovering the scheduler`);
     const old = getSimulator();
+    log(`${why} — ${old ? 'replacing the simulator and recovering the scheduler' : 'launching a simulator'}`);
     setSimulator(null);
     if (old) {
       try {
