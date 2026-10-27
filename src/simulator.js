@@ -22,6 +22,21 @@ function loadPlaywright() {
   }
 }
 
+// Close a browser, and if it does not go quietly within ten seconds, kill
+// its process so no memory is left behind.
+async function killBrowser(browser) {
+  let closed = false;
+  try {
+    await Promise.race([browser.close().then(() => { closed = true; }, () => {}), new Promise((r) => setTimeout(r, 10000))]);
+  } catch {}
+  if (!closed) {
+    try {
+      const proc = browser.process && browser.process();
+      if (proc && !proc.killed) proc.kill('SIGKILL');
+    } catch {}
+  }
+}
+
 async function createSimulator({ url, trackSeed, courseGen = 1, headless = true, readyTimeoutMs = 30000 }) {
   const { chromium } = loadPlaywright();
   // --no-sandbox / --disable-dev-shm-usage are required to run Chromium as root
@@ -60,9 +75,12 @@ async function createSimulator({ url, trackSeed, courseGen = 1, headless = true,
 
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   try {
+    // Poll on a timer, not on animation frames: a headless tab busy in a long
+    // synchronous build may not paint, and the API is defined by script long
+    // before the first frame.
     await page.waitForFunction(
       () => window.marbleAPI && typeof window.marbleAPI.simulateRace === 'function',
-      { timeout: readyTimeoutMs }
+      { timeout: readyTimeoutMs, polling: 250 }
     );
   } catch (err) {
     // Dump what the page actually did so a headless failure is diagnosable from
@@ -84,7 +102,11 @@ async function createSimulator({ url, trackSeed, courseGen = 1, headless = true,
     console.error('[sim] marbleAPI never became ready. probe:', JSON.stringify(probe));
     console.error('[sim] page errors:', JSON.stringify(consoleErrors));
     console.error('[sim] last page console:', JSON.stringify(consoleLog.slice(-15)));
-    throw err;
+    // Never leave the browser behind: a failed start used to leak a whole
+    // Chromium (hundreds of MB) per attempt, so each retry had less memory
+    // than the last and the machine starved. Close it, kill it if it won't.
+    await killBrowser(browser);
+    throw new Error(`simulator page not ready after ${readyTimeoutMs} ms: ${(err && err.message) || err}`);
   }
 
   // A course is (trackSeed, courseGen): the generation says which version of
@@ -117,7 +139,12 @@ async function createSimulator({ url, trackSeed, courseGen = 1, headless = true,
   // Build the shared course once.
   let currentTrack = trackSeed >>> 0;
   let currentGen = normGen(courseGen);
-  await bounded(page.evaluate(([t, g]) => window.marbleAPI.newCourse(t, g), [currentTrack, currentGen]), COURSE_MS, 'first course build');
+  try {
+    await bounded(page.evaluate(([t, g]) => window.marbleAPI.newCourse(t, g), [currentTrack, currentGen]), COURSE_MS, 'first course build');
+  } catch (err) {
+    await killBrowser(browser);
+    throw err;
+  }
 
   const sameCourse = (t, g) => t === undefined || ((t >>> 0) === currentTrack && normGen(g) === currentGen);
 
@@ -177,14 +204,7 @@ async function createSimulator({ url, trackSeed, courseGen = 1, headless = true,
     async close() {
       // A wedged browser may not close politely; don't let that hang, and
       // don't leave its processes behind holding memory — kill them.
-      let closed = false;
-      await Promise.race([browser.close().then(() => { closed = true; }, () => {}), new Promise((r) => setTimeout(r, 10000))]);
-      if (!closed) {
-        try {
-          const proc = browser.process && browser.process();
-          if (proc && !proc.killed) proc.kill('SIGKILL');
-        } catch {}
-      }
+      await killBrowser(browser);
     },
   };
 }
